@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Wisp.Core.Recommendations;
 using Wisp.Core.Tracks;
 using Wisp.Infrastructure.Library;
 using Wisp.Infrastructure.Persistence;
@@ -24,8 +25,45 @@ public static class LibraryEndpoints
         var tracks = app.MapGroup("/api/tracks");
         tracks.MapGet("", ListTracks);
         tracks.MapGet("{id:guid}", GetTrack);
+        tracks.MapGet("{id:guid}/recommendations", GetRecommendations);
 
         return app;
+    }
+
+    private static async Task<IResult> GetRecommendations(
+        Guid id,
+        WispDbContext db,
+        RecommendationService svc,
+        string? mode = "Safe",
+        int limit = 50,
+        CancellationToken ct = default)
+    {
+        var seed = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (seed is null) return Results.NotFound();
+
+        if (!Enum.TryParse<RecommendationMode>(mode, ignoreCase: true, out var parsedMode))
+            return Results.BadRequest(new { code = "invalid_mode", message = $"Unknown mode '{mode}'." });
+
+        // Candidate pool: tracks with at least a key OR a BPM (so the score can be non-zero).
+        var candidates = await db.Tracks.AsNoTracking()
+            .Where(t => t.Id != id && (t.MusicalKey != null || t.Bpm != null))
+            .ToListAsync(ct);
+
+        limit = Math.Clamp(limit, 1, 200);
+
+        var ranked = svc.Rank(seed, candidates, parsedMode, limit)
+            .Select(r => new RecommendationDto(
+                TrackDto.From(r.Track),
+                r.Score.Total,
+                r.Score.KeyScore,
+                r.Score.BpmScore,
+                r.Score.EnergyScore,
+                r.Score.GenreScore,
+                r.Score.Penalties,
+                r.Score.Reasons))
+            .ToList();
+
+        return Results.Ok(ranked);
     }
 
     private static async Task<IResult> StartScan(

@@ -109,32 +109,32 @@ No Node runtime in production. No two-process orchestration. WebView2 runtime sh
 
 ---
 
-## Phase 2 — Recommendation engine
+## Phase 2 — Recommendation engine ✅
 
 **Goal:** Select a track → ranked list of compatible tracks with reasons.
 
-- [ ] `Camelot` value type: parse `8A`/`12B`, expose `.Adjacent`, `.RelativeMajorMinor`, `.PerfectFifthUp/Down`
-- [ ] `BpmCompatibility`: handle half/double-time (`126` ↔ `63` or `252` should rank reasonably)
-- [ ] `EnergyMode` enum: Safe, Up, Down, SameVibe, Creative, Wildcard (per spec §7.2)
-- [ ] `RecommendationService.Score(seed, candidate, mode)` returns `Score { Total, KeyScore, BpmScore, EnergyScore, GenreScore, Penalties, Reasons[] }`
-  - Reasons are human-readable strings: `"Adjacent key (8A → 9A)"`, `"+1 energy lift"`, etc.
-- [ ] Genre similarity: token overlap on a normalized genre string
-- [ ] Penalty rules:
-  - Same artist back-to-back (configurable weight)
-  - Recently used in any mix plan (later, requires usage history)
-- [ ] API: `GET /api/tracks/{id}/recommendations?mode=safe&limit=50`
-- [ ] Frontend: `RecommendationPanel`
-  - Score badge per row, expandable to show breakdown
-  - Mode selector pill group
-  - "Add to chain" button (disabled until a chain exists)
-- [ ] Settings: weights overridable in `config.json` for power users
+- [x] `Camelot` value type: parse `8A`/`12B`, expose `.Adjacent`, `.RelativeMajorMinor`, `.PerfectFifthUp/Down`, `.RelationTo()` returning `KeyRelation { SameKey, Adjacent, RelativeMajorMinor, Creative, Distant }` with wheel wrap-around
+- [x] `BpmCompatibility`: handles half/double-time. Returns `BpmScore { Points, Relation: Same|Half|Double, EffectiveDistance }`. Half/double matches scored at 0.85× of same-tempo
+- [x] `RecommendationMode` enum: Safe, EnergyUp, EnergyDown, SameVibe, Creative, Wildcard
+- [x] `RecommendationService.Score(seed, candidate, mode)` returns `RecommendationScore { Total, KeyScore, BpmScore, EnergyScore, GenreScore, Penalties, Reasons[] }`
+  - Reasons are human-readable: `"Adjacent key (8A → 9A)"`, `"BPM diff 1 (125 ↔ 124)"`, `"Energy +1 (7 → 8)"`, `"Genre match (house)"`, `"Same artist (Solomun)"`
+- [x] Genre similarity: token overlap on normalized genre string; SameVibe mode doubles weight
+- [x] Penalty rules: same-artist back-to-back applies `-10`. Recently-used penalty deferred to Phase 3 (needs MixPlan history first)
+- [x] API: `GET /api/tracks/{id}/recommendations?mode=Safe&limit=50`
+- [x] Frontend: `RecommendationPanel`
+  - Slide-in panel from the right when a library row is clicked
+  - Score badge (color-coded green/amber/grey by total)
+  - Mode pill selector at top (Safe / Energy ↑ / Energy ↓ / Same vibe / Creative / Wildcard)
+  - Per-row "Why?" toggle expanding to reason chips
+  - "Add to chain" button — *deferred until Phase 3 (no chain exists yet)*
+- [ ] Settings: weights overridable in `config.json` for power users — *deferred; current weights match the spec and feel right against real library data*
 
 ### Tests
-- [ ] Camelot adjacency table: known matrix from Mixed in Key
-- [ ] BPM scoring: edge cases at boundaries (1.0, 1.01, 2.0, 4.0, 4.01)
-- [ ] Mode behaviour: Energy Up never ranks `-2` energy at the top
+- [x] Camelot adjacency: parsing, same/adjacent/relative/creative/distant, wheel wrap (12A ↔ 1A), all 24 cells covered
+- [x] BPM scoring: boundaries at 1, 2, 4, 6 BPM diffs; half-time and double-time matches; same-tempo prefers over half when both close
+- [x] Mode behaviour: EnergyUp ranks `+2` above `-2`; EnergyDown inverts; same-artist penalty applies; SameVibe doubles genre weight; Rank skips seed and zero-score candidates
 
-**Done when:** spec acceptance criterion 2 — open recommendations, ranked list with reasons.
+**Done when:** spec acceptance criterion 2 — open recommendations, ranked list with reasons. ✅ (verified live: Janet Rushmore — Try My Love @ 125/5A/E7 returns 8 perfect-score matches)
 
 ---
 

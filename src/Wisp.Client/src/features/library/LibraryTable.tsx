@@ -6,6 +6,8 @@ import { formatBpm, formatDuration } from './format'
 interface Props {
   tracks: Track[]
   loading: boolean
+  selectedId?: string | null
+  onSelect?: (track: Track) => void
 }
 
 const columns: { key: keyof Track | 'duration'; label: string; width: string; align?: 'right' }[] = [
@@ -22,7 +24,7 @@ const columns: { key: keyof Track | 'duration'; label: string; width: string; al
 
 const ROW_HEIGHT = 36
 
-export function LibraryTable({ tracks, loading }: Props) {
+export function LibraryTable({ tracks, loading, selectedId, onSelect }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
 
   const virt = useVirtualizer({
@@ -55,10 +57,17 @@ export function LibraryTable({ tracks, loading }: Props) {
       <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
         {virt.getVirtualItems().map((vRow) => {
           const t = tracks[vRow.index]
+          const isSelected = selectedId === t.id
           return (
             <div
               key={t.id}
-              className="absolute left-0 right-0 grid border-b border-[var(--color-border)]/40 hover:bg-white/5"
+              role={onSelect ? 'button' : undefined}
+              onClick={() => onSelect?.(t)}
+              className={[
+                'absolute left-0 right-0 grid border-b border-[var(--color-border)]/40',
+                onSelect ? 'cursor-pointer' : '',
+                isSelected ? 'bg-[var(--color-accent)]/15' : 'hover:bg-white/5',
+              ].join(' ')}
               style={{
                 transform: `translateY(${vRow.start}px)`,
                 height: ROW_HEIGHT,

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Wisp.Core.Recommendations;
 using Wisp.Infrastructure.FileSystem;
 using Wisp.Infrastructure.Library;
 using Wisp.Infrastructure.Tagging;
@@ -18,6 +19,8 @@ public static class WispServiceCollectionExtensions
 
         services.AddScoped<LibraryScanner>();
         services.AddHostedService<ScanWorker>();
+
+        services.AddSingleton<RecommendationService>();
 
         return services;
     }

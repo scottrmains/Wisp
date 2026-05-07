@@ -64,3 +64,13 @@ public sealed record TrackQuery(
     string? Sort,
     int Page = 1,
     int Size = 100);
+
+public sealed record RecommendationDto(
+    TrackDto Track,
+    int Total,
+    int KeyScore,
+    int BpmScore,
+    int EnergyScore,
+    int GenreScore,
+    int Penalties,
+    IReadOnlyList<string> Reasons);

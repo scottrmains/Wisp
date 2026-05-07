@@ -66,3 +66,22 @@ export interface TrackQuery {
   page?: number
   size?: number
 }
+
+export type RecommendationMode =
+  | 'Safe'
+  | 'EnergyUp'
+  | 'EnergyDown'
+  | 'SameVibe'
+  | 'Creative'
+  | 'Wildcard'
+
+export interface Recommendation {
+  track: Track
+  total: number
+  keyScore: number
+  bpmScore: number
+  energyScore: number
+  genreScore: number
+  penalties: number
+  reasons: string[]
+}

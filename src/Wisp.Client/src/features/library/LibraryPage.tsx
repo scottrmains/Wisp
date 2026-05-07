@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
-import type { TrackQuery } from '../../api/types'
+import type { Track, TrackQuery } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { LibraryFilters } from './LibraryFilters'
 import { LibraryTable } from './LibraryTable'
+import { RecommendationPanel } from './RecommendationPanel'
 import { ScanToast } from './ScanToast'
 import { useScan } from './useScan'
 
 export function LibraryPage() {
   const [query, setQuery] = useState<TrackQuery>({ page: 1, size: 500 })
+  const [selected, setSelected] = useState<Track | null>(null)
   const scan = useScan()
 
   const tracksQuery = useQuery({
@@ -48,12 +50,22 @@ export function LibraryPage() {
       {total === 0 && !tracksQuery.isLoading ? (
         <EmptyState onPick={pickAndScan} canPick={bridgeAvailable()} />
       ) : (
-        <>
-          <LibraryFilters query={query} onChange={setQuery} total={total} />
-          <div className="min-h-0 flex-1">
-            <LibraryTable tracks={items} loading={tracksQuery.isLoading} />
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <LibraryFilters query={query} onChange={setQuery} total={total} />
+            <div className="min-h-0 flex-1">
+              <LibraryTable
+                tracks={items}
+                loading={tracksQuery.isLoading}
+                selectedId={selected?.id ?? null}
+                onSelect={setSelected}
+              />
+            </div>
           </div>
-        </>
+          {selected && (
+            <RecommendationPanel seed={selected} onClose={() => setSelected(null)} />
+          )}
+        </div>
       )}
 
       <ScanToast

@@ -1,5 +1,13 @@
 import { apiGet, apiPost } from './client'
-import type { ScanJob, ScanProgress, Track, TrackPage, TrackQuery } from './types'
+import type {
+  Recommendation,
+  RecommendationMode,
+  ScanJob,
+  ScanProgress,
+  Track,
+  TrackPage,
+  TrackQuery,
+} from './types'
 
 export const library = {
   startScan: (folderPath: string) => apiPost<ScanJob>('/api/library/scan', { folderPath }),
@@ -9,6 +17,8 @@ export const library = {
 export const tracks = {
   list: (q: TrackQuery = {}) => apiGet<TrackPage>('/api/tracks', q as Record<string, unknown>),
   get: (id: string) => apiGet<Track>(`/api/tracks/${id}`),
+  recommendations: (id: string, mode: RecommendationMode = 'Safe', limit = 50) =>
+    apiGet<Recommendation[]>(`/api/tracks/${id}/recommendations`, { mode, limit }),
 }
 
 /// EventSource wrapper that surfaces typed scan progress events.
