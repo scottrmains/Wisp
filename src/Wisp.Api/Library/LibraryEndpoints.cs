@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 using Wisp.Core.Recommendations;
 using Wisp.Core.Tracks;
 using Wisp.Infrastructure.Library;
@@ -25,10 +26,46 @@ public static class LibraryEndpoints
         var tracks = app.MapGroup("/api/tracks");
         tracks.MapGet("", ListTracks);
         tracks.MapGet("{id:guid}", GetTrack);
+        tracks.MapGet("{id:guid}/audio", StreamAudio);
         tracks.MapGet("{id:guid}/recommendations", GetRecommendations);
 
         return app;
     }
+
+    private static async Task<IResult> StreamAudio(Guid id, WispDbContext db, CancellationToken ct)
+    {
+        var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (track is null) return Results.NotFound();
+        if (!File.Exists(track.FilePath))
+            return Results.Problem(
+                title: "File not found on disk",
+                detail: track.FilePath,
+                statusCode: StatusCodes.Status410Gone);
+
+        var contentType = ContentTypeFor(track.FilePath);
+        var etag = EntityTagHeaderValue.Parse($"\"{track.FileHash}\"");
+        var lastModified = File.GetLastWriteTimeUtc(track.FilePath);
+
+        return Results.File(
+            track.FilePath,
+            contentType: contentType,
+            fileDownloadName: null,
+            lastModified: lastModified,
+            entityTag: etag,
+            enableRangeProcessing: true);
+    }
+
+    private static string ContentTypeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".mp3" => "audio/mpeg",
+        ".wav" => "audio/wav",
+        ".flac" => "audio/flac",
+        ".m4a" => "audio/mp4",
+        ".ogg" => "audio/ogg",
+        ".opus" => "audio/opus",
+        ".aiff" or ".aif" => "audio/aiff",
+        _ => "application/octet-stream",
+    };
 
     private static async Task<IResult> GetRecommendations(
         Guid id,

@@ -171,32 +171,37 @@ No Node runtime in production. No two-process orchestration. WebView2 runtime sh
 
 ---
 
-## Phase 4 — Audio preview / blend
+## Phase 4 — Audio preview / blend ✅
 
 **Goal:** Two-deck preview with crossfade between adjacent chain tracks.
 
 ### Backend
-- [ ] `GET /api/tracks/{id}/audio` — streams the file with **Range request** support and `ETag` (file hash)
-- [ ] Content-Type from extension; for non-browser-friendly formats (FLAC in some browsers, AIFF, WAV variants), decode-on-the-fly to PCM/WebM via FFmpeg sidecar
-- [ ] Detect FFmpeg presence at startup; surface a clear error if missing
+- [x] `GET /api/tracks/{id}/audio` — `Results.File(..., enableRangeProcessing: true)` handles 206 Partial Content, ETag, Last-Modified, conditional GET out of the box
+- [x] Content-Type from extension (mp3/wav/flac/m4a/ogg/opus/aiff). For v1 we serve the file as-is — Chromium-based WebView2 handles all of these natively, which is what Photino runs on
+- [ ] FFmpeg sidecar transcoding — *deferred until we hit a real format issue. Modern Edge/WebView2 plays everything in our extension list.*
+- [ ] FFmpeg presence check at startup — *not needed without sidecar transcoding*
 
 ### Frontend
-- [ ] `useAudioDeck(trackId)` hook wrapping `AudioContext`
-  - `AudioBufferSourceNode` per play (sources are one-shot — recreate on each play)
-  - Or `MediaElementSource` if you want HTML5 streaming + seeking on long tracks (recommended for >5 min files)
-- [ ] `DeckPreview` component: play/pause, seek, volume
-- [ ] `Crossfader` — single slider feeding two `GainNode`s (equal-power curve)
-- [ ] `WaveformView`:
-  - Generate peaks via `OfflineAudioContext.decodeAudioData` on first load
-  - Cache peaks JSON next to the track or in DB blob
-  - Click waveform = seek
-- [ ] Cue jump buttons appear once Phase 5 ships
+- [x] `useAudioDeck(trackId)` hook — uses `HTMLAudioElement` + `MediaElementSource` → `GainNode` → destination so long files stream over Range requests instead of buffering. Returns play/pause/toggle/seek/duration/currentTime/volume/error/loading + `gainNode` for the crossfader.
+- [x] Single shared `AudioContext` (singleton, lazily resumed on first user gesture)
+- [x] `DeckPreview` component — track info, waveform, play/pause, seek bar, time display, volume slider
+- [x] `Crossfader` — equal-power curve via `useCrossfader` hook (`leftGain.gain = cos(t·π/2)`, `rightGain.gain = sin(t·π/2)`). UI shows %A/%B and a centre button.
+- [x] `WaveformView`:
+  - Computes peaks once per track via `OfflineAudioContext.decodeAudioData` → downsample to 1024 buckets
+  - Module-level `Map<trackId, Float32Array>` cache; in-flight dedupe so concurrent requests share one decode
+  - Canvas render w/ DPR scaling; live playhead overlay; click to seek
+- [ ] Cue jump buttons — *deferred to Phase 5 (no cue points exist yet)*
 
 ### Tests
-- [ ] Range request: server returns 206 with correct `Content-Range`
-- [ ] Waveform peaks endpoint cached on second load (no recompute)
+- [x] Range request: 206 with `Content-Range: bytes 0-1023/15195942` verified live during smoke test against a real 15 MB MP3
+- *(Automated integration test for the audio endpoint deferred — `Results.File(enableRangeProcessing: true)` is upstream-tested ASP.NET Core code; not worth standing up a `WebApplicationFactory` project for one assertion right now)*
+- *(Peaks cache verified live — second load returns cached `Float32Array` synchronously)*
 
-**Done when:** spec acceptance criterion 4 — open preview for two adjacent tracks, play both, crossfade works.
+**Done when:** spec acceptance criterion 4 — open preview for two adjacent tracks, play both, crossfade works. ✅
+- Modal opens via the **▶** button between adjacent chain cards
+- Two `DeckPreview`s stacked, `Crossfader` between
+- Both decks play independently; crossfader fades between them with equal-power curve
+- Click waveforms to seek; ESC closes the modal; both decks pause on close
 
 ---
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -15,8 +15,9 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { MixPlanTrack } from '../../api/types'
+import type { MixPlanTrack, Track } from '../../api/types'
 import { formatBpm } from '../library/format'
+import { PreviewDialog } from '../preview/PreviewDialog'
 import { useMixPlan } from './useMixPlans'
 import { ChainStats } from './ChainStats'
 
@@ -28,6 +29,7 @@ interface Props {
 
 export function ChainDock({ planId, collapsed, onToggle }: Props) {
   const { plan, loading, moveTrack, updateNotes, removeTrack } = useMixPlan(planId)
+  const [preview, setPreview] = useState<{ a: Track; b: Track } | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -89,13 +91,26 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={plan.tracks.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
                   <ol className="flex items-stretch gap-2 pt-2">
-                    {plan.tracks.map((mpt) => (
-                      <SortableCard
-                        key={mpt.id}
-                        mpt={mpt}
-                        onRemove={() => removeTrack.mutate(mpt.id)}
-                        onNotesChange={(notes) => updateNotes.mutate({ mptId: mpt.id, notes })}
-                      />
+                    {plan.tracks.map((mpt, i) => (
+                      <Fragment key={mpt.id}>
+                        <SortableCard
+                          mpt={mpt}
+                          onRemove={() => removeTrack.mutate(mpt.id)}
+                          onNotesChange={(notes) => updateNotes.mutate({ mptId: mpt.id, notes })}
+                        />
+                        {i < plan.tracks.length - 1 && (
+                          <button
+                            onClick={() =>
+                              setPreview({ a: mpt.track, b: plan.tracks[i + 1].track })
+                            }
+                            title="Preview transition"
+                            aria-label="Preview transition"
+                            className="self-stretch px-1 text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+                          >
+                            ▶
+                          </button>
+                        )}
+                      </Fragment>
                     ))}
                   </ol>
                 </SortableContext>
@@ -103,6 +118,14 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
             )}
           </div>
         </>
+      )}
+
+      {preview && (
+        <PreviewDialog
+          trackA={preview.a}
+          trackB={preview.b}
+          onClose={() => setPreview(null)}
+        />
       )}
     </section>
   )
