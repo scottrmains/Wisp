@@ -134,3 +134,50 @@ export interface CuePoint {
   isAutoSuggested: boolean
   createdAt: string
 }
+
+export interface TrackSnapshot {
+  filePath: string
+  fileName: string
+  artist: string | null
+  title: string | null
+  version: string | null
+  album: string | null
+  genre: string | null
+}
+
+export type CleanupChangeKind =
+  | 'StripJunk'
+  | 'TitleCase'
+  | 'ExtractVersion'
+  | 'RenameFile'
+  | 'TrimWhitespace'
+
+export interface CleanupChange {
+  kind: CleanupChangeKind
+  field: string
+  description: string
+  before: string
+  after: string
+}
+
+export interface CleanupSuggestion {
+  trackId: string
+  before: TrackSnapshot
+  after: TrackSnapshot
+  changes: CleanupChange[]
+  hasChanges: boolean
+}
+
+export type CleanupAction = 'Cleanup' | 'Undo'
+export type CleanupStatus = 'Applied' | 'RolledBack' | 'Failed'
+
+export interface AuditEntry {
+  id: string
+  trackId: string
+  action: CleanupAction
+  status: CleanupStatus
+  failureReason: string | null
+  filePathBefore: string
+  filePathAfter: string
+  createdAt: string
+}

@@ -1,6 +1,7 @@
 using System.Globalization;
 using TagLib;
 using TagLib.Id3v2;
+using Wisp.Core.Cleanup;
 using File = TagLib.File;
 using Tag = TagLib.Tag;
 
@@ -52,11 +53,24 @@ public class MetadataReader : IMetadataReader
             string? key = NullIfEmpty(tag.InitialKey);
             int? year = tag.Year > 0 ? (int)tag.Year : null;
             int? energy = ReadEnergy(file);
+            string? version = NullIfEmpty(tag.Subtitle);
+
+            // Many DJ tools bake "(Extended Mix)" etc. into the title.
+            // Split it out so Wisp's structured fields stay clean.
+            if (version is null && title is not null)
+            {
+                var (cleaned, extracted) = NameNormalizer.ExtractVersion(title);
+                if (extracted is not null)
+                {
+                    title = cleaned;
+                    version = extracted;
+                }
+            }
 
             var parsed = FilenameParser.Parse(filePath);
             artist ??= parsed.Artist;
             title ??= parsed.Title;
-            string? version = parsed.Version;
+            version ??= parsed.Version;
             year ??= parsed.Year;
 
             var missing = string.IsNullOrEmpty(artist) || string.IsNullOrEmpty(title);

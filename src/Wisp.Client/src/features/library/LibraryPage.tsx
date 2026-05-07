@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
-import type { Track, TrackQuery } from '../../api/types'
+import type { AuditEntry, Track, TrackQuery } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useActivePlan } from '../../state/activePlan'
+import { CleanupModal } from '../cleanup/CleanupModal'
+import { UndoToast } from '../cleanup/UndoToast'
 import { ChainDock } from '../mixchain/ChainDock'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { useMixPlan } from '../mixchain/useMixPlans'
@@ -17,6 +19,8 @@ export function LibraryPage() {
   const [query, setQuery] = useState<TrackQuery>({ page: 1, size: 500 })
   const [selected, setSelected] = useState<Track | null>(null)
   const [chainCollapsed, setChainCollapsed] = useState(false)
+  const [cleanupTarget, setCleanupTarget] = useState<Track | null>(null)
+  const [recentAudit, setRecentAudit] = useState<AuditEntry | null>(null)
   const { activePlanId } = useActivePlan()
   const activePlan = useMixPlan(activePlanId)
   const scan = useScan()
@@ -73,6 +77,7 @@ export function LibraryPage() {
                 selectedId={selected?.id ?? null}
                 onSelect={setSelected}
                 onAddToChain={activePlanId ? addToActivePlan : undefined}
+                onCleanup={setCleanupTarget}
               />
             </div>
           </div>
@@ -100,6 +105,19 @@ export function LibraryPage() {
         active={scan.active}
         onDismiss={scan.dismiss}
       />
+
+      {cleanupTarget && (
+        <CleanupModal
+          trackId={cleanupTarget.id}
+          trackLabel={`${cleanupTarget.artist ?? 'Unknown'} — ${cleanupTarget.title ?? cleanupTarget.fileName}`}
+          onClose={() => setCleanupTarget(null)}
+          onApplied={(audit) => setRecentAudit(audit)}
+        />
+      )}
+
+      {recentAudit && (
+        <UndoToast audit={recentAudit} onDismiss={() => setRecentAudit(null)} />
+      )}
     </div>
   )
 }

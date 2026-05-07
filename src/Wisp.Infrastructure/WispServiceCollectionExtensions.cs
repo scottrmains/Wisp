@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Wisp.Core.Cleanup;
 using Wisp.Core.Recommendations;
+using Wisp.Infrastructure.Cleanup;
 using Wisp.Infrastructure.FileSystem;
 using Wisp.Infrastructure.Library;
 using Wisp.Infrastructure.Tagging;
@@ -21,6 +23,9 @@ public static class WispServiceCollectionExtensions
         services.AddHostedService<ScanWorker>();
 
         services.AddSingleton<RecommendationService>();
+
+        services.AddScoped<CleanupSuggestionService>();
+        services.AddScoped<CleanupApplier>();
 
         return services;
     }

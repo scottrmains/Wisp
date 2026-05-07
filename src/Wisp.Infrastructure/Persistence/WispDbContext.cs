@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Wisp.Core.Cleanup;
 using Wisp.Core.Cues;
 using Wisp.Core.MixPlans;
 using Wisp.Core.Tracks;
@@ -12,6 +13,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<MixPlan> MixPlans => Set<MixPlan>();
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
     public DbSet<CuePoint> CuePoints => Set<CuePoint>();
+    public DbSet<MetadataAuditLog> MetadataAuditLogs => Set<MetadataAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -57,5 +59,13 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
             .WithMany()
             .HasForeignKey(c => c.TrackId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        var audit = b.Entity<MetadataAuditLog>();
+        audit.HasKey(a => a.Id);
+        audit.Property(a => a.Action).HasConversion<string>().HasMaxLength(20);
+        audit.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
+        audit.HasIndex(a => a.TrackId);
+        audit.HasIndex(a => a.CreatedAt);
+        // No FK to Track — keep audit history even if the track row is deleted.
     }
 }

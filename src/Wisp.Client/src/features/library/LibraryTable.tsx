@@ -9,10 +9,12 @@ interface Props {
   selectedId?: string | null
   onSelect?: (track: Track) => void
   onAddToChain?: (trackId: string) => void
+  onCleanup?: (track: Track) => void
 }
 
-const columns: { key: keyof Track | 'duration' | 'add'; label: string; width: string; align?: 'right' }[] = [
+const columns: { key: keyof Track | 'duration' | 'add' | 'flags'; label: string; width: string; align?: 'right' }[] = [
   { key: 'add', label: '', width: '2.5rem' },
+  { key: 'flags', label: '', width: '2.5rem' },
   { key: 'artist', label: 'Artist', width: '14rem' },
   { key: 'title', label: 'Title', width: '18rem' },
   { key: 'version', label: 'Version', width: '10rem' },
@@ -26,7 +28,7 @@ const columns: { key: keyof Track | 'duration' | 'add'; label: string; width: st
 
 const ROW_HEIGHT = 36
 
-export function LibraryTable({ tracks, loading, selectedId, onSelect, onAddToChain }: Props) {
+export function LibraryTable({ tracks, loading, selectedId, onSelect, onAddToChain, onCleanup }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
 
   const virt = useVirtualizer({
@@ -96,6 +98,27 @@ export function LibraryTable({ tracks, loading, selectedId, onSelect, onAddToCha
                   >
                     +
                   </span>
+                )}
+              </div>
+              <div className="flex items-center justify-center">
+                {(t.isDirtyName || t.isMissingMetadata) && onCleanup && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onCleanup(t)
+                    }}
+                    className="text-amber-400 hover:text-amber-300"
+                    title={
+                      t.isDirtyName && t.isMissingMetadata
+                        ? 'Dirty filename and missing metadata — cleanup suggested'
+                        : t.isDirtyName
+                          ? 'Dirty filename — cleanup suggested'
+                          : 'Missing metadata — cleanup suggested'
+                    }
+                    aria-label="Open cleanup preview"
+                  >
+                    ⚠
+                  </button>
                 )}
               </div>
               <Cell value={t.artist} muted={!t.artist} />

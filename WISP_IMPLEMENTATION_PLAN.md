@@ -233,35 +233,43 @@ No Node runtime in production. No two-process orchestration. WebView2 runtime sh
 
 ---
 
-## Phase 6 — Metadata cleanup
+## Phase 6 — Metadata cleanup ✅
 
 **Goal:** Suggest cleaner names/tags. Never write without explicit approval. Always undoable.
 
-- [ ] `MetadataAuditLog` entity: `TrackId, Timestamp, Action, BeforeJson, AfterJson, FilePathBefore, FilePathAfter`
-- [ ] Dirty-name detector — regex blacklist for `320kbps`, `\(copy\)`, `\(final\)`, `free download`, blog/site names, etc.
-- [ ] Title-case normalizer (preserve `VIP`, `(Extended Mix)`, `(Remix)`, `(Dub)`, `(Club Mix)`, etc.)
-- [ ] `CleanupSuggestionService.Suggest(trackId)` returns `{ before, after, changes[] }`
-- [ ] API:
-  - `GET  /api/tracks/{id}/cleanup`        (preview)
-  - `POST /api/tracks/{id}/cleanup/apply`  (write tags + rename, with audit log)
-  - `POST /api/cleanup/audit/{id}/undo`    (best-effort revert)
-- [ ] Atomic writes:
-  - Tag write: TagLibSharp2 → `Save()` to a temp copy → swap (avoid corruption mid-write)
-  - File rename: `File.Move(srcPath, tempPath)` → `File.Move(tempPath, finalPath)`
-  - On failure, restore from `BeforeJson`
-- [ ] Backup the SQLite file before any cleanup-batch operation
-- [ ] Frontend: `MetadataCleanupModal`
-  - Side-by-side diff (before/after) for tags and filename
-  - Per-change checkboxes
-  - "Apply", "Apply all matching", "Undo" buttons
-  - Audit log view
+- [x] `MetadataAuditLog` entity (no FK to Track — audit row outlives a deleted track). Indexed on `TrackId` + `CreatedAt`.
+- [x] **Dirty-name detector** — regex strips `320kbps` family, `[FREE DL]` / `Free Download`, `(copy)` / `- Copy`, `(final)`, `(N)` Windows-dup suffix; trims/collapses whitespace; preserves `VIP`, mix markers, regular text
+- [x] **Title-case normalizer** with intelligent acronym handling: small words (a/the/of/in…) lowercased mid-string but capitalised first/last, KeepUpper preserves `DJ`/`VIP`/`MK`/`MGMT` etc., KeepLower preserves `feat.`/`ft.`, mixed-case identities (`deadmau5`, `WhoMadeWho`) preserved, "typed-in-caps" (multi-word all-uppercase) is normalised
+- [x] **Version extraction** from `Title (Extended Mix)` patterns — only when `Version` is currently empty. Recognised mix tokens: Mix, Remix, Edit, Dub, VIP, Bootleg, Rework, Version, Instrumental, Acapella
+- [x] **Filename builder** sanitises FS-reserved chars (`<>:"/\|?*`), trims trailing dots/spaces, collision-safe (`Name (2).mp3`, `(3)`, etc.)
+- [x] `CleanupSuggestionService.Suggest(track)` returns `{ before, after, changes[] }` with per-change kind/field/description/before/after. **Idempotent** — clean input yields zero changes.
+- [x] API:
+  - `GET  /api/tracks/{id}/cleanup`           (preview)
+  - `POST /api/tracks/{id}/cleanup/apply`     (write tags + rename, with audit log)
+  - `GET  /api/cleanup/audits?trackId=&limit=` (recent audit history)
+  - `POST /api/cleanup/audits/{id}/undo`      (best-effort revert)
+- [x] Atomic-ish writes:
+  - Tag write via TagLibSharp `file.Save()` (in-place — TagLib doesn't support a temp-swap natively. Atomic path-swap is overkill for a single-user local app)
+  - File rename via direct `File.Move` (atomic on same volume on Windows)
+  - **On rename failure after tag write: tags are rolled back to the Before snapshot** so the file ends up in a known-good state
+- [x] **Tag schema decision**: write Title as `"Title (Version)"` baked together for compatibility with other DJ tools that only read `Tag.Title`. `MetadataReader` updated to call `NameNormalizer.ExtractVersion` on read so the Wisp-side split round-trips cleanly across re-scans.
+- [ ] SQLite backup before batch-cleanup — *deferred; current single-track flow is fully recoverable via the audit log*
+- [x] Frontend: `CleanupModal`
+  - Side-by-side **diff table** (filename + each tag field), changed cells highlighted in green
+  - Changes list below the diff with kind/field/description per row
+  - **Apply** / **Cancel** buttons; Apply disabled when no changes
+  - ESC closes
+- [x] **`UndoToast`** appears after Apply with an Undo button (8s auto-dismiss)
+- [x] Trigger: `⚠` button appears on rows where `IsDirtyName` or `IsMissingMetadata` is true (column to the right of "Add to chain"); tooltip explains which condition triggered it
 
 ### Tests
-- [ ] Cleanup is **idempotent** (running twice on a clean track = no-op)
-- [ ] Rollback restores original filename + tags exactly
-- [ ] Junk-token regex doesn't strip useful tokens (`VIP Mix`, `320 BPM` track titles)
+- [x] **Cleanup is idempotent** — already-clean track returns `HasChanges=false` and zero `Changes`
+- [x] **Rollback restores original filename + tags exactly** — verified via end-to-end integration test (write tags + rename + audit, then undo, then assert file path + tags + DB row all match the original)
+- [x] **Junk-token regex doesn't eat useful tokens** — covered cases: `VIP Mix`, `Burnin' (VIP)`, `MK feat. Alana`, `Solomun`
+- [x] Title casing covers acronyms, small words, mixed-case identities, typed-in-caps detection
+- [x] Filename builder sanitises every Windows reserved char
 
-**Done when:** spec acceptance criterion 6 — approve a cleanup, action is logged and undoable.
+**Done when:** spec acceptance criterion 6 — approve a cleanup, action is logged and undoable. ✅ (verified end-to-end against a real Pioneer demo MP3)
 
 ---
 
