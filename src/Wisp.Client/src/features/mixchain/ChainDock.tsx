@@ -82,7 +82,7 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
             {loading && <p className="py-6 text-sm text-[var(--color-muted)]">Loading…</p>}
             {plan && plan.tracks.length === 0 && (
               <p className="py-6 text-sm text-[var(--color-muted)]">
-                Drag tracks from the library, or click the + on a recommendation to add it here.
+                Click the <span className="rounded bg-[var(--color-accent)]/20 px-1.5 py-0.5 font-mono text-[var(--color-accent)]">+</span> next to any library row or recommendation to add it here. Drag cards to reorder once you've added a few.
               </p>
             )}
             {plan && plan.tracks.length > 0 && (

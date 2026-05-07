@@ -12,6 +12,7 @@ interface Props {
 }
 
 const columns: { key: keyof Track | 'duration' | 'add'; label: string; width: string; align?: 'right' }[] = [
+  { key: 'add', label: '', width: '2.5rem' },
   { key: 'artist', label: 'Artist', width: '14rem' },
   { key: 'title', label: 'Title', width: '18rem' },
   { key: 'version', label: 'Version', width: '10rem' },
@@ -21,7 +22,6 @@ const columns: { key: keyof Track | 'duration' | 'add'; label: string; width: st
   { key: 'genre', label: 'Genre', width: '8rem' },
   { key: 'duration', label: 'Duration', width: '5rem', align: 'right' },
   { key: 'fileName', label: 'File', width: '20rem' },
-  { key: 'add', label: '', width: '2.5rem' },
 ]
 
 const ROW_HEIGHT = 36
@@ -76,6 +76,28 @@ export function LibraryTable({ tracks, loading, selectedId, onSelect, onAddToCha
                 gridTemplateColumns: columns.map((c) => c.width).join(' '),
               }}
             >
+              <div className="flex items-center justify-center">
+                {onAddToChain ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onAddToChain(t.id)
+                    }}
+                    className="flex h-6 w-6 items-center justify-center rounded text-base text-[var(--color-muted)] hover:bg-[var(--color-accent)] hover:text-white"
+                    title="Add to active mix plan"
+                    aria-label="Add to active mix plan"
+                  >
+                    +
+                  </button>
+                ) : (
+                  <span
+                    className="text-[var(--color-muted)]/40"
+                    title="Create or select a mix plan to add tracks"
+                  >
+                    +
+                  </span>
+                )}
+              </div>
               <Cell value={t.artist} muted={!t.artist} />
               <Cell value={t.title} muted={!t.title} />
               <Cell value={t.version} muted={!t.version} />
@@ -85,21 +107,6 @@ export function LibraryTable({ tracks, loading, selectedId, onSelect, onAddToCha
               <Cell value={t.genre} muted={!t.genre} />
               <Cell value={formatDuration(t.durationSeconds)} align="right" />
               <Cell value={t.fileName} truncate />
-              <div className="flex items-center justify-center">
-                {onAddToChain && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onAddToChain(t.id)
-                    }}
-                    className="rounded text-[var(--color-muted)] hover:text-white"
-                    title="Add to mix chain"
-                    aria-label="Add to mix chain"
-                  >
-                    +
-                  </button>
-                )}
-              </div>
             </div>
           )
         })}

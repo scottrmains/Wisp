@@ -25,11 +25,12 @@ public static class MixPlanEndpoints
 
     private static async Task<IResult> List(WispDbContext db, CancellationToken ct)
     {
+        // EF can't SQL-translate OrderBy applied after a constructor projection — order first, then project.
         var plans = await db.MixPlans
             .AsNoTracking()
+            .OrderByDescending(p => p.UpdatedAt)
             .Select(p => new MixPlanSummaryDto(
                 p.Id, p.Name, p.Notes, p.Tracks.Count, p.CreatedAt, p.UpdatedAt))
-            .OrderByDescending(p => p.UpdatedAt)
             .ToListAsync(ct);
         return Results.Ok(plans);
     }
