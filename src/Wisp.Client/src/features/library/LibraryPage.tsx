@@ -9,6 +9,7 @@ import { UndoToast } from '../cleanup/UndoToast'
 import { ChainDock } from '../mixchain/ChainDock'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { useMixPlan } from '../mixchain/useMixPlans'
+import { SettingsPanel } from '../settings/SettingsPanel'
 import { LibraryFilters } from './LibraryFilters'
 import { LibraryTable } from './LibraryTable'
 import { RecommendationPanel } from './RecommendationPanel'
@@ -21,6 +22,7 @@ export function LibraryPage() {
   const [chainCollapsed, setChainCollapsed] = useState(false)
   const [cleanupTarget, setCleanupTarget] = useState<Track | null>(null)
   const [recentAudit, setRecentAudit] = useState<AuditEntry | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const { activePlanId } = useActivePlan()
   const activePlan = useMixPlan(activePlanId)
   const scan = useScan()
@@ -60,6 +62,14 @@ export function LibraryPage() {
             title={bridgeAvailable() ? 'Pick a folder and scan' : 'Folder picker only works inside Photino'}
           >
             {scan.active ? 'Scanning…' : 'Scan folder'}
+          </button>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-muted)] hover:text-white"
+            aria-label="Settings"
+            title="Settings"
+          >
+            ⚙
           </button>
         </div>
       </header>
@@ -118,6 +128,8 @@ export function LibraryPage() {
       {recentAudit && (
         <UndoToast audit={recentAudit} onDismiss={() => setRecentAudit(null)} />
       )}
+
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

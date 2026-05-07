@@ -19,6 +19,17 @@ export function PlanSwitcher() {
     await remove.mutateAsync(id)
   }
 
+  /// Trigger a download via a transient anchor — works in both Photino and the browser.
+  const exportPlan = (id: string, format: 'm3u' | 'csv' | 'json') => {
+    const a = document.createElement('a')
+    a.href = `/api/mix-plans/${id}/export?format=${format}`
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setOpen(false)
+  }
+
   return (
     <div className="relative">
       <button
@@ -69,6 +80,20 @@ export function PlanSwitcher() {
                 </div>
               ))}
             </div>
+
+            {active && (
+              <div className="border-t border-[var(--color-border)] p-1">
+                <p className="px-3 pt-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+                  Export “{active.name}”
+                </p>
+                <div className="flex gap-1 p-1">
+                  <ExportButton onClick={() => exportPlan(active.id, 'm3u')}>M3U</ExportButton>
+                  <ExportButton onClick={() => exportPlan(active.id, 'csv')}>CSV</ExportButton>
+                  <ExportButton onClick={() => exportPlan(active.id, 'json')}>JSON</ExportButton>
+                </div>
+              </div>
+            )}
+
             <div className="border-t border-[var(--color-border)] p-1">
               <button
                 onClick={handleCreate}
@@ -81,5 +106,16 @@ export function PlanSwitcher() {
         </>
       )}
     </div>
+  )
+}
+
+function ExportButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:bg-white/5 hover:text-white"
+    >
+      {children}
+    </button>
   )
 }

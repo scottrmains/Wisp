@@ -77,5 +77,7 @@ export function invoke<T = unknown>(method: string, args?: unknown): Promise<T> 
 export const bridge = {
   pickFolder: (initialPath?: string) =>
     invoke<{ path: string | null }>('pickFolder', { initialPath }),
+  openInExplorer: (path: string) => invoke<{ ok: boolean }>('openInExplorer', { path }),
+  openExternal: (url: string) => invoke<{ ok: boolean }>('openExternal', { url }),
   ping: () => invoke<{ pong: string }>('ping'),
 }

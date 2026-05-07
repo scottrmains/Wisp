@@ -20,8 +20,52 @@ public static class MixPlanEndpoints
         g.MapPatch("{id:guid}/tracks/{mptId:guid}", UpdateTrack);
         g.MapDelete("{id:guid}/tracks/{mptId:guid}", RemoveTrack);
 
+        g.MapGet("{id:guid}/export", Export);
+
         return app;
     }
+
+    private static async Task<IResult> Export(
+        Guid id, string? format, WispDbContext db, CancellationToken ct)
+    {
+        var plan = await LoadPlan(db, id, ct);
+        if (plan is null) return Results.NotFound();
+
+        var fmt = (format ?? "m3u").ToLowerInvariant();
+        var safeName = string.Concat(plan.Name.Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
+
+        return fmt switch
+        {
+            "m3u" or "m3u8" => Results.Text(
+                MixPlanExporter.ToM3u(plan),
+                contentType: "audio/x-mpegurl; charset=utf-8",
+                statusCode: 200) is var r1 ? WithDownloadHeader(r1, $"{safeName}.m3u8") : r1,
+            "csv" => WithDownloadHeader(
+                Results.Text(MixPlanExporter.ToCsv(plan), contentType: "text/csv; charset=utf-8"),
+                $"{safeName}.csv"),
+            "json" => WithDownloadHeader(
+                Results.Json(ToDto(plan), Json),
+                $"{safeName}.json"),
+            _ => Results.BadRequest(new { code = "invalid_format", message = $"Unknown format '{format}'." }),
+        };
+    }
+
+    /// Wraps a result so the response carries a Content-Disposition: attachment header.
+    private static IResult WithDownloadHeader(IResult inner, string fileName) =>
+        new DownloadResult(inner, fileName);
+
+    private sealed class DownloadResult(IResult inner, string fileName) : IResult
+    {
+        public async Task ExecuteAsync(HttpContext ctx)
+        {
+            // Set the header BEFORE the inner result starts writing — once response begins, headers are locked.
+            ctx.Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
+            await inner.ExecuteAsync(ctx);
+        }
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions Json =
+        new(System.Text.Json.JsonSerializerDefaults.Web) { WriteIndented = true };
 
     private static async Task<IResult> List(WispDbContext db, CancellationToken ct)
     {

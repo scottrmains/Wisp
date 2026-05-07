@@ -181,3 +181,12 @@ export interface AuditEntry {
   filePathAfter: string
   createdAt: string
 }
+
+export interface SystemInfo {
+  version: string
+  appDataDir: string
+  databasePath: string
+  logsDir: string
+  configPath: string
+  environment: string
+}

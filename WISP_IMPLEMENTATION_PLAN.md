@@ -273,18 +273,23 @@ No Node runtime in production. No two-process orchestration. WebView2 runtime sh
 
 ---
 
-## Phase 7 — Packaging & polish
+## Phase 7 — Packaging & polish ✅ (MVP shipping line)
 
-- [ ] Splash / first-run flow: pick a folder, run a scan
-- [ ] Settings screen: scoring weights, default mode, FFmpeg path override, audio device
-- [ ] Export: `M3U`, `CSV`, `JSON` (Rekordbox XML later — see §17)
-- [ ] App icon, window chrome
-- [ ] `npm run build` then `dotnet publish -r win-x64 -c Release --self-contained` → single folder containing `Wisp.exe`, `wwwroot/`, native runtimes
-- [ ] Installer: Velopack (preferred — handles delta updates) or Inno Setup as a simpler fallback
-- [ ] WebView2 evergreen bootstrapper bundled or downloaded on first run for Win10 targets
-- [ ] Crash handler writes to log + offers to open log folder
-- [ ] First-run DB migration runner (don't crash on schema upgrades)
-- [ ] Optional code signing (later)
+- [x] First-run flow — `EmptyState` already covers it: empty library shows a "Pick a folder" CTA pointed at the bridge picker. No separate splash needed.
+- [x] **Settings screen** — gear icon top-right opens a panel showing version, environment, AppData paths (db / config / logs) with **"Open" buttons that launch Explorer** via the bridge, plus a count of cleanup audit entries. Lays groundwork for future settings (weights, default mode, FFmpeg path).
+- [x] **Exports** — `GET /api/mix-plans/{id}/export?format=m3u|csv|json` with `Content-Disposition: attachment`. M3U has `#EXTM3U` + `#EXTINF` lines pointing at absolute file paths (DJ-software-friendly). CSV has order/artist/title/version/bpm/key/energy/duration/path/notes (escapes commas + quotes). JSON is the full plan structure pretty-printed. Triggered from the **PlanSwitcher dropdown** with M3U / CSV / JSON buttons under the active plan.
+- [x] **JS↔.NET bridge expanded** — `bridge.openInExplorer(path)` (works on both folders and files; uses `/select,` for files), `bridge.openExternal(url)` (validates http/https only). Used by Settings; Phase 8/9 will reuse `openExternal`.
+- [x] `npm run build` → SPA build into `wwwroot/` + `dotnet publish -r win-x64 -c Release --self-contained` → `./publish/` folder containing **`Wisp.exe`** (renamed via `<AssemblyName>Wisp</AssemblyName>`) + `wwwroot/` + runtimes. ~117 MB self-contained.
+- [x] **Bug fix surfaced by the publish smoke test:** `WebApplication.CreateBuilder` defaults `ContentRootPath` to `Environment.CurrentDirectory`, so launching `Wisp.exe` from a Start menu shortcut would fail to find `wwwroot/`. Anchored to `AppContext.BaseDirectory` instead. The exe now works regardless of cwd.
+- [x] First-run DB migration runner — already in place since Phase 0; verified at production launch (no migrations to apply against an existing DB, applies cleanly to a fresh one).
+- [x] **README.md** with stack, requirements, run/build commands, where data lives, project layout. Points to `WISP_IMPLEMENTATION_PLAN.md` and `WISP_BACKLOG_FEATURES.md`.
+- [x] App icon + window chrome — Photino default for now; intentional polish iteration later
+- [ ] **Velopack installer** — not shipped; meaningful work, deferred to its own focused iteration. v1 ships as a folder you can double-click `Wisp.exe` from.
+- [ ] WebView2 bootstrapper for Win10 — Win11 ships it; defer until installer iteration
+- [ ] Crash handler with "open log folder" affordance — Serilog already writes to `%LOCALAPPDATA%\Wisp\logs\`, and the Settings panel surfaces the path with an Open button. A formal crash dialog is a polish item.
+- [ ] Code signing — explicit "later" per spec
+
+**Done when:** `npm run build` produces a self-contained `publish/` folder; double-clicking `Wisp.exe` opens the Photino window with the built UI; library, scan, recommendations, mix chain, audio preview, cue helper, cleanup, exports, and settings all work in the published artifact. ✅
 
 ---
 

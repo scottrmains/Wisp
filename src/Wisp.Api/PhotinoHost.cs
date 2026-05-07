@@ -107,9 +107,44 @@ public static class PhotinoHost
     private static object? Dispatch(PhotinoWindow window, BridgeRequest request) => request.Method switch
     {
         "pickFolder" => PickFolder(window, request.Args),
+        "openInExplorer" => OpenInExplorer(request.Args),
+        "openExternal" => OpenExternal(request.Args),
         "ping" => new { pong = DateTimeOffset.UtcNow },
         _ => throw new InvalidOperationException($"Unknown bridge method '{request.Method}'")
     };
+
+    private static object? OpenInExplorer(JsonElement? args)
+    {
+        var path = args?.TryGetProperty("path", out var p) == true ? p.GetString() : null;
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("path is required");
+
+        if (!Directory.Exists(path) && !File.Exists(path))
+            throw new DirectoryNotFoundException($"Path not found: {path}");
+
+        // explorer.exe handles both folders and files (selects the file when given a file path).
+        // For files we use /select, for folders we open them directly.
+        var psi = File.Exists(path)
+            ? new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true }
+            : new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true };
+
+        System.Diagnostics.Process.Start(psi);
+        return new { ok = true };
+    }
+
+    private static object? OpenExternal(JsonElement? args)
+    {
+        var url = args?.TryGetProperty("url", out var u) == true ? u.GetString() : null;
+        if (string.IsNullOrWhiteSpace(url))
+            throw new ArgumentException("url is required");
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            throw new ArgumentException("Only http/https URLs are allowed.");
+
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        return new { ok = true };
+    }
 
     private static object? PickFolder(PhotinoWindow window, JsonElement? args)
     {

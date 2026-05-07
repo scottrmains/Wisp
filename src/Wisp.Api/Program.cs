@@ -30,7 +30,13 @@ public class Program
 
         try
         {
-            var builder = WebApplication.CreateBuilder(args);
+            // Anchor ContentRoot to the exe directory so wwwroot/ resolves correctly when
+            // the exe is launched from a different cwd (Start menu, shortcut, double-click).
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = AppContext.BaseDirectory,
+            });
 
             builder.Host.UseSerilog((ctx, services, cfg) => cfg
                 .ReadFrom.Configuration(ctx.Configuration)
@@ -88,6 +94,16 @@ public class Program
                 status = "ok",
                 version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
                 time = DateTimeOffset.UtcNow
+            }));
+
+            app.MapGet("/api/system", () => Results.Ok(new
+            {
+                version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+                appDataDir = WispPaths.AppDataDir,
+                databasePath = WispPaths.DatabasePath,
+                logsDir = WispPaths.LogsDir,
+                configPath = WispPaths.ConfigPath,
+                environment = app.Environment.EnvironmentName,
             }));
 
             app.MapLibrary();
