@@ -205,29 +205,31 @@ No Node runtime in production. No two-process orchestration. WebView2 runtime sh
 
 ---
 
-## Phase 5 — Cue helper
+## Phase 5 — Cue helper ✅
 
 **Goal:** Manual cue points + phrase markers from BPM.
 
-- [ ] `CuePoint` entity (spec §10.2) + migration
-- [ ] API:
-  - `GET    /api/tracks/{id}/cues`
-  - `POST   /api/tracks/{id}/cues`
+- [x] `CuePoint` entity (spec §10.2) + migration. Cascade delete from Track. Indexed on (TrackId, TimeSeconds) for ordered fetch.
+- [x] API:
+  - `GET    /api/tracks/{trackId}/cues`
+  - `POST   /api/tracks/{trackId}/cues`
+  - `POST   /api/tracks/{trackId}/cues/phrase-markers` body `{ firstBeatSeconds, stepBeats, replaceExisting }`
   - `PATCH  /api/cues/{id}`
   - `DELETE /api/cues/{id}`
-- [ ] Phrase marker generator: given `firstBeatSec` and `BPM`, emit 16/32/64-beat markers as `IsAutoSuggested = true`
-- [ ] Frontend: `CuePointEditor`
-  - Click waveform → drop a cue at that time
-  - Type dropdown (FirstBeat, Intro, MixIn, Breakdown, Drop, VocalIn, MixOut, Outro, Custom)
-  - "Generate phrase markers" button (disabled until FirstBeat set)
-  - Cue chips visible on `WaveformView` and `DeckPreview` timeline
-- [ ] Cue jump on deck: hotkeys 1–8 jump to first 8 cues
+- [x] Phrase marker generator (`Wisp.Core.Cues.PhraseMarkers.Generate`): step every 16 beats by default, labels 64-beat boundaries with "· phrase". Skips when no/invalid BPM. Configurable step.
+- [x] Frontend: `CuePointEditor` (lives below the waveform inside `DeckPreview`)
+  - Type dropdown + "+ at {currentTime}s" button drops a cue at the deck's current time
+  - "Phrase markers" button — uses `FirstBeat` cue if present, otherwise current time as the seed; replaces existing auto-suggested markers; disabled when track has no BPM
+  - Cue list with click-to-jump, type label, "auto" pill on suggested markers, delete
+  - Cue chips overlaid on `WaveformView` (emerald = manual, amber = auto-suggested), click to jump
+- [x] Cue jump on deck: keys `1`–`8` jump Deck A to its first 8 cues, `Shift`+`1`–`8` jump Deck B. Skipped when typing in inputs/textareas. Hint shown at the bottom of the preview modal.
 
 ### Tests
-- [ ] Phrase math: at 126 BPM, 32-beat marker = 15.238s ± 1 ms
-- [ ] Cue persists across track reload (acceptance §15.5)
+- [x] Phrase math: at 126 BPM, 32-beat marker = 15.238s ± 1ms (verified) and 64-beat = 30.476s
+- [x] Phrase generator: respects `firstBeatSec` offset, custom step, stops before track end, yields nothing on zero/negative BPM, flags 64-beat boundaries with `· phrase`
+- [x] Cue persists across reload — verified live (manual cue + 24 generated phrase markers round-tripped through the API)
 
-**Done when:** spec acceptance criterion 5.
+**Done when:** spec acceptance criterion 5 — add a cue point, reopen the track, the cue point is still saved. ✅
 
 ---
 
@@ -605,6 +607,68 @@ Wisp.Client/src/features/crate-digger/
 
 ---
 
+## Phase 10 — Master Tempo / Sync (post-MVP)
+
+**Goal:** In the preview modal, hit **Sync** on Deck B and have it lock to Deck A's BPM **without** pitch-shifting. The "chipmunk effect" of plain `playbackRate` is what we explicitly do not want.
+
+> **Post-MVP enhancement to Phase 4.** The current Phase 4 deck plays at native speed only. This is the polish that makes the audition step feel professional rather than approximate.
+>
+> **Slot before Phases 8/9** if shipping post-MVP work to a real DJ user — for someone with a stable analysed library, master tempo extends the value of the existing preview far more than discovery features do.
+
+### Why this is its own phase
+The cheap version (`audio.playbackRate = ratio` and live with the pitch shift) is ~30 lines. **Master Tempo** is a fundamentally different beast: real time-stretching needs a phase vocoder or PSOLA implementation. There is no native Web Audio time-stretch — it has to come from a third-party `AudioWorklet` library. That's a real dependency + worklet wiring + non-trivial CPU per deck.
+
+### Library options (pick at start)
+
+| Option | Quality | Bundle | Notes |
+|---|---|---|---|
+| **SoundTouchJS** *(recommended)* | Good for ±10% | ~50 KB | Mature port of SoundTouch, has an AudioWorklet wrapper, purpose-built |
+| Hand-rolled phase vocoder in `AudioWorklet` | Better at extremes, fiddly | ~10 KB | Full control, real implementation work |
+| Tone.js `PitchShift` | Decent | ~150 KB | Heavyweight if Tone isn't otherwise used (we don't use it) |
+
+### Architecture
+
+Replace the current `MediaElementSource → GainNode → destination` chain in `useAudioDeck` with:
+
+```
+audio element
+  → MediaElementSource
+  → SoundTouchNode (AudioWorklet)        ← tempo/pitch independent controls
+  → GainNode                              ← still drives the crossfader
+  → destination
+```
+
+Tempo control exposed (1.0 = native, 1.05 = +5% faster). Pitch locked at 1.0 in **Master Tempo** mode. Both sliding together mimics the old "vinyl pitch fader" feel — surface that as an opt-in **Pitch** mode for users who want it.
+
+### Scope
+
+- [ ] Add SoundTouchJS dependency (or chosen alternative)
+- [ ] Wire `SoundTouchNode` into `useAudioDeck` between source and gain. Keep zero-stretch passthrough when sync is disengaged so the simple preview path still works.
+- [ ] Per-deck tempo control state (default 1.0)
+- [ ] Per-deck mode toggle: **Master Tempo** (default — pitch preserved) vs **Pitch** (vinyl-style)
+- [ ] Tempo slider per deck (±10% with snap-to-zero at centre)
+- [ ] **Sync** button on Deck B: computes `deckA.bpm / deckB.bpm` and applies as Deck B's tempo. Disabled with tooltip if either track has no BPM tag.
+- [ ] **Reset** button per deck (returns to 1.0)
+- [ ] Display effective BPM next to each deck: `128.4 BPM (+1.6%)`
+- [ ] Persist mode preference (`Master Tempo` / `Pitch`) in `WispSettings`
+
+### Risks & guardrails
+- **AudioWorklet first-load race** — `audioWorklet.addModule()` is async and must complete before the first deck constructs its node. Handle the wait inside `ensureAudio()` so callers don't have to think about it.
+- **CPU per deck** — phase-vocoder math is non-trivial. Two decks with both pitched ±5% should still be fine on a laptop, but flag if performance regresses.
+- **Quality at extremes** — beyond ±10–15% the artifacts become audible. Cap the slider at ±10%.
+- **Worklet bundling** — AudioWorklet modules load from a URL, not the main JS chunk. Verify the Vite build emits the worklet to a stable path under `wwwroot/`.
+- **Don't break the simple path** — keep the zero-stretch passthrough for users who don't engage Sync; the worklet shouldn't add latency or CPU when it's a no-op.
+
+### Tests
+- [ ] `useAudioDeck` initialises the worklet without race conditions
+- [ ] Sync ratio math: `deckA.bpm=126`, `deckB.bpm=128` → `deckB.tempo = 0.9844`; effective BPM displays as `126.0`
+- [ ] Master Tempo mode preserves perceived pitch (manual ear-test on a track with sustained tone; optional FFT sanity check)
+- [ ] Disabling Sync restores `tempo = 1.0` cleanly with no clicks/pops
+
+**Done when:** in the preview modal, click **Sync** on Deck B → its beat aligns with Deck A's tempo without pitch change.
+
+---
+
 ## Cross-cutting checklist
 
 - [ ] All destructive endpoints (`apply cleanup`, `delete plan`) require an explicit confirmation header or body flag — no accidental wipes
@@ -623,7 +687,7 @@ Wisp.Client/src/features/crate-digger/
 3. **Weekend 3:** Phase 2 fully + Phase 3 backend
 4. **Weekend 4:** Phase 3 frontend (drag/drop, energy curve)
 
-After that, audio (Phase 4) is the next-biggest leap — budget more time. Cue helper and cleanup are smaller phases by comparison. **Phases 8 (Artist Refresh) and 9 (Crate Digger) are intentionally last** — they're the most exciting features and the ones most likely to derail focus, so don't start until 0–6 ship. They share an `ExternalCatalog` module (Discogs + MusicBrainz clients), so whichever you build first does the catalog plumbing for the other.
+After that, audio (Phase 4) is the next-biggest leap — budget more time. Cue helper and cleanup are smaller phases by comparison. **Phases 8 (Artist Refresh), 9 (Crate Digger), and 10 (Master Tempo) are intentionally post-MVP** — don't start until 0–7 ship. 8 and 9 share an `ExternalCatalog` module (Discogs + MusicBrainz clients) so build whichever first; 10 is independent. **For an existing real DJ user, 10 has the highest payoff** of the three since it directly upgrades the preview/audition step they'll already be using daily.
 
 ---
 

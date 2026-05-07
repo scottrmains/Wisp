@@ -1,5 +1,7 @@
 import type { Track } from '../../api/types'
 import type { AudioDeck } from '../../audio/useAudioDeck'
+import { CuePointEditor } from '../cues/CuePointEditor'
+import { useCues } from '../cues/useCues'
 import { formatDuration } from '../library/format'
 import { WaveformView } from './WaveformView'
 
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function DeckPreview({ label, track, deck }: Props) {
+  const { cues } = useCues(track.id)
   return (
     <section className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
       <header className="mb-2 flex items-baseline justify-between gap-3">
@@ -31,6 +34,7 @@ export function DeckPreview({ label, track, deck }: Props) {
         duration={deck.duration}
         currentTime={deck.currentTime}
         onSeek={deck.seek}
+        cues={cues}
       />
 
       <div className="mt-3 flex items-center gap-3">
@@ -73,6 +77,13 @@ export function DeckPreview({ label, track, deck }: Props) {
           />
         </div>
       </div>
+
+      <CuePointEditor
+        trackId={track.id}
+        hasBpm={track.bpm !== null}
+        currentTime={deck.currentTime}
+        onSeek={deck.seek}
+      />
     </section>
   )
 }

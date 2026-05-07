@@ -113,3 +113,24 @@ export interface MixPlan {
   updatedAt: string
   tracks: MixPlanTrack[]
 }
+
+export type CuePointType =
+  | 'FirstBeat'
+  | 'Intro'
+  | 'MixIn'
+  | 'Breakdown'
+  | 'Drop'
+  | 'VocalIn'
+  | 'MixOut'
+  | 'Outro'
+  | 'Custom'
+
+export interface CuePoint {
+  id: string
+  trackId: string
+  timeSeconds: number
+  label: string
+  type: CuePointType
+  isAutoSuggested: boolean
+  createdAt: string
+}

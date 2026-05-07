@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using Wisp.Api.Cues;
 using Wisp.Api.Library;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
@@ -90,6 +91,7 @@ public class Program
 
             app.MapLibrary();
             app.MapMixPlans();
+            app.MapCues();
 
             app.MapFallbackToFile("index.html");
 

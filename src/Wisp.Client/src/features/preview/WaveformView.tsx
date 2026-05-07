@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCachedPeaks, loadPeaks } from '../../audio/peaks'
+import type { CuePoint } from '../../api/types'
 
 interface Props {
   trackId: string
   duration: number
   currentTime: number
   onSeek: (seconds: number) => void
+  cues?: CuePoint[]
   height?: number
 }
 
 /// Canvas waveform of the track. Click to seek. Live playhead overlay.
-export function WaveformView({ trackId, duration, currentTime, onSeek, height = 72 }: Props) {
+export function WaveformView({ trackId, duration, currentTime, onSeek, cues, height = 72 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(() => getCachedPeaks(trackId) ?? null)
@@ -106,6 +108,26 @@ export function WaveformView({ trackId, duration, currentTime, onSeek, height = 
           style={{ left: `${playheadPct}%` }}
         />
       )}
+      {cues && duration > 0 && cues.map((c) => {
+        const left = (c.timeSeconds / duration) * 100
+        if (left < 0 || left > 100) return null
+        return (
+          <button
+            key={c.id}
+            onClick={(e) => {
+              e.stopPropagation()
+              onSeek(c.timeSeconds)
+            }}
+            title={`${c.label} · ${c.timeSeconds.toFixed(1)}s`}
+            className={[
+              'absolute top-0 bottom-0 w-[3px] -translate-x-1/2 cursor-pointer transition-opacity hover:opacity-100',
+              c.isAutoSuggested ? 'bg-amber-400/40 hover:bg-amber-400' : 'bg-emerald-400/70 hover:bg-emerald-400',
+            ].join(' ')}
+            style={{ left: `${left}%` }}
+            aria-label={c.label}
+          />
+        )
+      })}
     </div>
   )
 }

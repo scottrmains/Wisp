@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Wisp.Core.Cues;
 using Wisp.Core.MixPlans;
 using Wisp.Core.Tracks;
 
@@ -10,6 +11,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<ScanJob> ScanJobs => Set<ScanJob>();
     public DbSet<MixPlan> MixPlans => Set<MixPlan>();
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
+    public DbSet<CuePoint> CuePoints => Set<CuePoint>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -44,6 +46,16 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         mpt.HasOne(t => t.Track)
             .WithMany()
             .HasForeignKey(t => t.TrackId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var cue = b.Entity<CuePoint>();
+        cue.HasKey(c => c.Id);
+        cue.Property(c => c.Type).HasConversion<string>().HasMaxLength(20);
+        cue.Property(c => c.Label).HasMaxLength(120);
+        cue.HasIndex(c => new { c.TrackId, c.TimeSeconds });
+        cue.HasOne(c => c.Track)
+            .WithMany()
+            .HasForeignKey(c => c.TrackId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
