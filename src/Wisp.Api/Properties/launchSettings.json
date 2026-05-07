@@ -1,6 +1,18 @@
 {
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
+    "DevShell": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5125",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Wisp__LaunchPhotino": "true",
+        "Wisp__SpaCommand": "npm run dev",
+        "Wisp__SpaUrl": "http://localhost:5173"
+      }
+    },
     "Dev": {
       "commandName": "Project",
       "dotnetRunMessages": true,

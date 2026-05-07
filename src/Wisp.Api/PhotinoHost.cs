@@ -9,17 +9,32 @@ public static class PhotinoHost
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public static void Run(string url, WispSettingsStore settings)
+    private const int MinWidth = 800;
+    private const int MinHeight = 600;
+    private const int DefaultWidth = 1400;
+    private const int DefaultHeight = 900;
+
+    public static void Run(string url, WispSettingsStore settings, bool devToolsEnabled = false)
     {
         var saved = settings.Current.Window;
+
+        // Defend against corrupt persisted state — if a previous run closed in a
+        // bad state (e.g. content area collapsed to title bar only), do not honour it.
+        var width = Math.Max(saved?.Width ?? DefaultWidth, MinWidth);
+        var height = Math.Max(saved?.Height ?? DefaultHeight, MinHeight);
+
+        Log.Information("Photino: window {Width}x{Height} (saved: {SavedW}x{SavedH})",
+            width, height, saved?.Width, saved?.Height);
 
         var window = new PhotinoWindow()
             .SetTitle("Wisp")
             .SetUseOsDefaultSize(false)
-            .SetSize(saved?.Width ?? 1400, saved?.Height ?? 900)
-            .SetResizable(true);
+            .SetSize(width, height)
+            .SetResizable(true)
+            .SetContextMenuEnabled(devToolsEnabled)
+            .SetDevToolsEnabled(devToolsEnabled);
 
-        if (saved is { X: { } x, Y: { } y })
+        if (saved is { X: { } x, Y: { } y } && IsReasonablePosition(x, y))
             window = window.SetLeft(x).SetTop(y);
         else
             window = window.Center();
@@ -30,21 +45,36 @@ public static class PhotinoHost
             HandleMessage(win, message);
         });
 
+        Log.Information("Photino: loading {Url}", url);
         window.Load(new Uri(url));
         window.WaitForClose();
+        Log.Information("Photino: window closed");
 
         try
         {
-            settings.Update(s => s with
+            var w = window.Width;
+            var h = window.Height;
+
+            if (w >= MinWidth && h >= MinHeight)
             {
-                Window = new WindowState(window.Width, window.Height, window.Left, window.Top)
-            });
+                settings.Update(s => s with
+                {
+                    Window = new WindowState(w, h, window.Left, window.Top)
+                });
+            }
+            else
+            {
+                Log.Warning("Photino: skipping window-state persist (size {W}x{H} below minimum)", w, h);
+            }
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Failed to persist window state");
         }
     }
+
+    private static bool IsReasonablePosition(int x, int y)
+        => x > -10000 && x < 10000 && y > -10000 && y < 10000;
 
     private static void HandleMessage(PhotinoWindow window, string raw)
     {

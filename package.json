@@ -7,7 +7,8 @@
     "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:client\"",
     "build:client": "npm --prefix src/Wisp.Client run build",
     "build": "dotnet publish src/Wisp.Api -c Release -r win-x64 --self-contained -o publish",
-    "shell": "dotnet run --project src/Wisp.Api --launch-profile Shell"
+    "shell": "dotnet run --project src/Wisp.Api --launch-profile Shell",
+    "devshell": "dotnet run --project src/Wisp.Api --launch-profile DevShell"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

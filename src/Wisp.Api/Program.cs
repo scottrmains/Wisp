@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Serilog;
-using Wisp.Api;
+using Wisp.Api.Library;
 using Wisp.Api.Settings;
 using Wisp.Infrastructure;
 using Wisp.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace Wisp.Api;
 public class Program
 {
     [STAThread]
-    public static async Task Main(string[] args)
+    public static int Main(string[] args)
     {
         WispPaths.EnsureCreated();
 
@@ -38,18 +39,24 @@ public class Program
                     retainedFileCountLimit: 14));
 
             builder.Services.AddOpenApi();
+            builder.Services.ConfigureHttpJsonOptions(opts =>
+            {
+                opts.SerializerOptions.Converters.Add(
+                    new System.Text.Json.Serialization.JsonStringEnumConverter());
+            });
 
             builder.Services.AddDbContext<WispDbContext>(opts =>
                 opts.UseSqlite(WispPaths.DatabaseConnectionString));
 
             builder.Services.AddSingleton<WispSettingsStore>();
+            builder.Services.AddWispLibrary();
 
             if (builder.Environment.IsDevelopment())
             {
                 builder.Services.AddCors(options =>
                 {
                     options.AddDefaultPolicy(policy => policy
-                        .WithOrigins("http://localhost:5173")
+                        .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
                         .AllowAnyHeader()
                         .AllowAnyMethod());
                 });
@@ -57,10 +64,11 @@ public class Program
 
             var app = builder.Build();
 
+            // Migrations: synchronous because Main is synchronous (so STA stays on the main thread for Photino).
             using (var scope = app.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
-                await db.Database.MigrateAsync();
+                db.Database.Migrate();
             }
 
             if (app.Environment.IsDevelopment())
@@ -79,37 +87,79 @@ public class Program
                 time = DateTimeOffset.UtcNow
             }));
 
+            app.MapLibrary();
+
             app.MapFallbackToFile("index.html");
 
             var photinoEnabled = app.Configuration.GetValue("Wisp:LaunchPhotino", !app.Environment.IsDevelopment());
 
-            if (photinoEnabled)
+            if (!photinoEnabled)
             {
-                await app.StartAsync();
+                app.Run();
+                return 0;
+            }
 
-                var url = app.Urls.FirstOrDefault(u => u.StartsWith("http://"))
-                          ?? app.Urls.FirstOrDefault()
-                          ?? "http://localhost:5125";
+            // Photino + WebView2 require the main thread to remain STA. `await` in a console
+            // app resumes on a thread-pool (MTA) thread, which silently breaks WebView2 paint.
+            // Fire-and-forget the host, then keep this thread parked in PhotinoWindow.WaitForClose().
+            var hostTask = app.RunAsync();
+
+            try
+            {
+                var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+                lifetime.ApplicationStarted.WaitHandle.WaitOne();
+
+                SpaSidecar? spa = null;
+                var spaCommand = app.Configuration["Wisp:SpaCommand"];
+                var spaUrl = app.Configuration["Wisp:SpaUrl"];
+
+                if (!string.IsNullOrWhiteSpace(spaCommand) && !string.IsNullOrWhiteSpace(spaUrl))
+                {
+                    var spaCwd = Path.GetFullPath(
+                        app.Configuration["Wisp:SpaWorkingDirectory"]
+                            ?? Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Wisp.Client"));
+                    spa = SpaSidecar.StartAsync(spaCommand, spaCwd, spaUrl, TimeSpan.FromSeconds(60))
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                var rawUrl = spaUrl
+                             ?? app.Urls.FirstOrDefault(u => u.StartsWith("http://"))
+                             ?? "http://127.0.0.1:5125";
+
+                // WebView2 prefers loopback IP over the `localhost` hostname.
+                var url = rawUrl.Replace("://localhost", "://127.0.0.1");
 
                 Log.Information("Launching Photino window at {Url}", url);
 
-                PhotinoHost.Run(url, app.Services.GetRequiredService<WispSettingsStore>());
-
-                await app.StopAsync();
+                try
+                {
+                    PhotinoHost.Run(
+                        url,
+                        app.Services.GetRequiredService<WispSettingsStore>(),
+                        devToolsEnabled: app.Environment.IsDevelopment());
+                }
+                finally
+                {
+                    spa?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
             }
-            else
+            finally
             {
-                await app.RunAsync();
+                app.StopAsync().GetAwaiter().GetResult();
+                hostTask.GetAwaiter().GetResult();
             }
+
+            return 0;
         }
         catch (Exception ex)
         {
             Log.Fatal(ex, "Wisp host terminated unexpectedly");
-            throw;
+            return 1;
         }
         finally
         {
-            await Log.CloseAndFlushAsync();
+            Log.CloseAndFlush();
         }
     }
 }
