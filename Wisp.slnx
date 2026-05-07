@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Wisp.Api/Wisp.Api.csproj" />
+    <Project Path="src/Wisp.Core/Wisp.Core.csproj" />
+    <Project Path="src/Wisp.Infrastructure/Wisp.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Wisp.Core.Tests/Wisp.Core.Tests.csproj" />
+    <Project Path="tests/Wisp.Infrastructure.Tests/Wisp.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

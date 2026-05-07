@@ -1,0 +1,49 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.userprefs
+*.usertasks
+*.swp
+
+# Build output
+publish/
+out/
+artifacts/
+
+# EF Core
+*.db
+*.db-shm
+*.db-wal
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# App data (in case the user runs it from the repo dir)
+wwwroot/assets/
+src/Wisp.Api/wwwroot/
+!src/Wisp.Api/wwwroot/.gitkeep
+
+# Test results
+TestResults/
+coverage/
+*.trx

@@ -1,0 +1,15 @@
+{
+  "name": "wisp",
+  "private": true,
+  "scripts": {
+    "dev:api": "dotnet watch run --project src/Wisp.Api --launch-profile Dev --non-interactive",
+    "dev:client": "npm --prefix src/Wisp.Client run dev",
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:client\"",
+    "build:client": "npm --prefix src/Wisp.Client run build",
+    "build": "dotnet publish src/Wisp.Api -c Release -r win-x64 --self-contained -o publish",
+    "shell": "dotnet run --project src/Wisp.Api --launch-profile Shell"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
