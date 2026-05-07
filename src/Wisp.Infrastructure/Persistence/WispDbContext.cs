@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Wisp.Core.MixPlans;
 using Wisp.Core.Tracks;
 
 namespace Wisp.Infrastructure.Persistence;
@@ -7,6 +8,8 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
 {
     public DbSet<Track> Tracks => Set<Track>();
     public DbSet<ScanJob> ScanJobs => Set<ScanJob>();
+    public DbSet<MixPlan> MixPlans => Set<MixPlan>();
+    public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -26,5 +29,21 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         scan.HasKey(s => s.Id);
         scan.Property(s => s.FolderPath).IsRequired();
         scan.Property(s => s.Status).HasConversion<string>().HasMaxLength(20);
+
+        var plan = b.Entity<MixPlan>();
+        plan.HasKey(p => p.Id);
+        plan.Property(p => p.Name).IsRequired().HasMaxLength(200);
+        plan.HasMany(p => p.Tracks)
+            .WithOne()
+            .HasForeignKey(t => t.MixPlanId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var mpt = b.Entity<MixPlanTrack>();
+        mpt.HasKey(t => t.Id);
+        mpt.HasIndex(t => new { t.MixPlanId, t.Order });
+        mpt.HasOne(t => t.Track)
+            .WithMany()
+            .HasForeignKey(t => t.TrackId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

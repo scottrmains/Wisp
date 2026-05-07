@@ -8,9 +8,10 @@ interface Props {
   loading: boolean
   selectedId?: string | null
   onSelect?: (track: Track) => void
+  onAddToChain?: (trackId: string) => void
 }
 
-const columns: { key: keyof Track | 'duration'; label: string; width: string; align?: 'right' }[] = [
+const columns: { key: keyof Track | 'duration' | 'add'; label: string; width: string; align?: 'right' }[] = [
   { key: 'artist', label: 'Artist', width: '14rem' },
   { key: 'title', label: 'Title', width: '18rem' },
   { key: 'version', label: 'Version', width: '10rem' },
@@ -20,11 +21,12 @@ const columns: { key: keyof Track | 'duration'; label: string; width: string; al
   { key: 'genre', label: 'Genre', width: '8rem' },
   { key: 'duration', label: 'Duration', width: '5rem', align: 'right' },
   { key: 'fileName', label: 'File', width: '20rem' },
+  { key: 'add', label: '', width: '2.5rem' },
 ]
 
 const ROW_HEIGHT = 36
 
-export function LibraryTable({ tracks, loading, selectedId, onSelect }: Props) {
+export function LibraryTable({ tracks, loading, selectedId, onSelect, onAddToChain }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
 
   const virt = useVirtualizer({
@@ -83,6 +85,21 @@ export function LibraryTable({ tracks, loading, selectedId, onSelect }: Props) {
               <Cell value={t.genre} muted={!t.genre} />
               <Cell value={formatDuration(t.durationSeconds)} align="right" />
               <Cell value={t.fileName} truncate />
+              <div className="flex items-center justify-center">
+                {onAddToChain && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onAddToChain(t.id)
+                    }}
+                    className="rounded text-[var(--color-muted)] hover:text-white"
+                    title="Add to mix chain"
+                    aria-label="Add to mix chain"
+                  >
+                    +
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}

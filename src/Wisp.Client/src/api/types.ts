@@ -85,3 +85,31 @@ export interface Recommendation {
   penalties: number
   reasons: string[]
 }
+
+export interface MixPlanSummary {
+  id: string
+  name: string
+  notes: string | null
+  trackCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MixPlanTrack {
+  id: string
+  trackId: string
+  order: number
+  cueInSeconds: number | null
+  cueOutSeconds: number | null
+  transitionNotes: string | null
+  track: Track
+}
+
+export interface MixPlan {
+  id: string
+  name: string
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  tracks: MixPlanTrack[]
+}

@@ -7,6 +7,7 @@ import { formatBpm } from './format'
 interface Props {
   seed: Track
   onClose: () => void
+  onAddToChain?: (trackId: string) => void
 }
 
 const MODES: { value: RecommendationMode; label: string }[] = [
@@ -18,7 +19,7 @@ const MODES: { value: RecommendationMode; label: string }[] = [
   { value: 'Wildcard', label: 'Wildcard' },
 ]
 
-export function RecommendationPanel({ seed, onClose }: Props) {
+export function RecommendationPanel({ seed, onClose, onAddToChain }: Props) {
   const [mode, setMode] = useState<RecommendationMode>('Safe')
 
   const recsQuery = useQuery({
@@ -73,13 +74,21 @@ export function RecommendationPanel({ seed, onClose }: Props) {
             No compatible tracks found. Make sure your library has tracks with BPM and key tags.
           </p>
         )}
-        {recsQuery.data?.map((r) => <RecommendationRow key={r.track.id} rec={r} />)}
+        {recsQuery.data?.map((r) => (
+          <RecommendationRow key={r.track.id} rec={r} onAddToChain={onAddToChain} />
+        ))}
       </div>
     </aside>
   )
 }
 
-function RecommendationRow({ rec }: { rec: import('../../api/types').Recommendation }) {
+function RecommendationRow({
+  rec,
+  onAddToChain,
+}: {
+  rec: import('../../api/types').Recommendation
+  onAddToChain?: (trackId: string) => void
+}) {
   const [open, setOpen] = useState(false)
   const t = rec.track
 
@@ -96,6 +105,16 @@ function RecommendationRow({ rec }: { rec: import('../../api/types').Recommendat
             {t.energy !== null && ` · E${t.energy}`}
           </p>
         </div>
+        {onAddToChain && (
+          <button
+            onClick={() => onAddToChain(t.id)}
+            className="text-sm text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+            title="Add to mix chain"
+            aria-label="Add to mix chain"
+          >
+            +
+          </button>
+        )}
         <button
           onClick={() => setOpen((o) => !o)}
           className="text-xs text-[var(--color-muted)] hover:text-white"

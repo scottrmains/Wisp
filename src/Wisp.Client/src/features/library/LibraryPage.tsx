@@ -3,6 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
 import type { Track, TrackQuery } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
+import { useActivePlan } from '../../state/activePlan'
+import { ChainDock } from '../mixchain/ChainDock'
+import { PlanSwitcher } from '../mixchain/PlanSwitcher'
+import { useMixPlan } from '../mixchain/useMixPlans'
 import { LibraryFilters } from './LibraryFilters'
 import { LibraryTable } from './LibraryTable'
 import { RecommendationPanel } from './RecommendationPanel'
@@ -12,7 +16,15 @@ import { useScan } from './useScan'
 export function LibraryPage() {
   const [query, setQuery] = useState<TrackQuery>({ page: 1, size: 500 })
   const [selected, setSelected] = useState<Track | null>(null)
+  const [chainCollapsed, setChainCollapsed] = useState(false)
+  const { activePlanId } = useActivePlan()
+  const activePlan = useMixPlan(activePlanId)
   const scan = useScan()
+
+  const addToActivePlan = (trackId: string) => {
+    if (!activePlanId) return
+    activePlan.addTrack.mutate({ trackId })
+  }
 
   const tracksQuery = useQuery({
     queryKey: ['tracks', query],
@@ -36,6 +48,7 @@ export function LibraryPage() {
           <p className="text-xs text-[var(--color-muted)]">Library</p>
         </div>
         <div className="flex items-center gap-2">
+          <PlanSwitcher />
           <button
             onClick={pickAndScan}
             disabled={!bridgeAvailable() || scan.active}
@@ -59,13 +72,26 @@ export function LibraryPage() {
                 loading={tracksQuery.isLoading}
                 selectedId={selected?.id ?? null}
                 onSelect={setSelected}
+                onAddToChain={activePlanId ? addToActivePlan : undefined}
               />
             </div>
           </div>
           {selected && (
-            <RecommendationPanel seed={selected} onClose={() => setSelected(null)} />
+            <RecommendationPanel
+              seed={selected}
+              onClose={() => setSelected(null)}
+              onAddToChain={activePlanId ? addToActivePlan : undefined}
+            />
           )}
         </div>
+      )}
+
+      {activePlanId && (
+        <ChainDock
+          planId={activePlanId}
+          collapsed={chainCollapsed}
+          onToggle={() => setChainCollapsed((c) => !c)}
+        />
       )}
 
       <ScanToast
