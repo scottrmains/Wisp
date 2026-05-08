@@ -1,6 +1,7 @@
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useCurrentPage, type AppPage } from '../../state/currentPage'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
+import { SoulseekStatusIndicator } from '../soulseek/SoulseekStatusIndicator'
 
 interface Props {
   scanActive: boolean
@@ -40,6 +41,9 @@ export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Soulseek transfer status — only renders when there are active transfers (or
+            recently-completed ones), so the bar stays clean when nothing's happening. */}
+        <SoulseekStatusIndicator />
         <PlanSwitcher />
         <span className="h-6 w-px bg-[var(--color-border)]" aria-hidden />
         <button

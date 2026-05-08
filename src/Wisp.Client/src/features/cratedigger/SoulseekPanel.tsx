@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet } from '../../api/client'
+import { useMutation } from '@tanstack/react-query'
 import { soulseek } from '../../api/soulseek'
 import type { SoulseekSearchHit, SoulseekTransfer } from '../../api/types'
+import { useSoulseekStatus } from '../../state/soulseekStatus'
+import { useSoulseekTransfers } from '../soulseek/useSoulseekTransfers'
 
 interface Props {
   artist: string | null
@@ -18,26 +19,17 @@ export function SoulseekPanel({ artist, title }: Props) {
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [responseCount, setResponseCount] = useState(0)
-  // We only start polling /api/soulseek/downloads after the user actually queues
-  // one — no point hammering slskd otherwise (and no point at all if slskd is down).
-  const [transferPollingActive, setTransferPollingActive] = useState(false)
   const startedAtRef = useRef<number>(0)
-  // Track transfer ids we've already announced as completed, so we only kick off
-  // a single library refetch per downloaded file (not on every poll tick).
-  const completedSeenRef = useRef<Set<string>>(new Set())
-  const qc = useQueryClient()
+
+  // Transfer state + polling are owned by App-level state now so the AppHeader
+  // indicator keeps updating after the user navigates away from this panel.
+  // We just READ the current snapshot here and trigger polling when we queue.
+  const { transfers, slskdConfigured } = useSoulseekTransfers()
+  const ensurePolling = useSoulseekStatus((s) => s.ensurePolling)
 
   const query = (artist && title)
     ? `${artist} ${title}`
     : (title ?? artist ?? '')
-
-  // Soulseek configured? Cheap one-shot — gates every other slskd network call.
-  const status = useQuery({
-    queryKey: ['soulseek-status'],
-    queryFn: () => apiGet<{ isConfigured: boolean }>('/api/settings/soulseek'),
-    staleTime: 60_000,
-  })
-  const slskdConfigured = status.data?.isConfigured ?? false
 
   // Poll the search until complete or until we time out.
   useEffect(() => {
@@ -72,48 +64,8 @@ export function SoulseekPanel({ artist, title }: Props) {
     }
   }, [searchId])
 
-  // Active downloads — only poll when slskd is configured AND we've actually started a transfer.
-  // Stops automatically when nothing is in-flight anymore.
-  const transfers = useQuery({
-    queryKey: ['soulseek-downloads'],
-    queryFn: () => soulseek.listDownloads(),
-    enabled: slskdConfigured && transferPollingActive,
-    refetchInterval: (q) => {
-      const data = q.state.data ?? []
-      const stillActive = data.some((t) => !t.state.includes('Completed'))
-      if (!stillActive) {
-        // Schedule a state flip on next tick so we stop polling cleanly.
-        setTimeout(() => setTransferPollingActive(false), 0)
-        return false
-      }
-      return POLL_INTERVAL_MS
-    },
-    // If slskd is off or refuses, don't keep retrying — fail once and back off.
-    retry: false,
-  })
-
   const activeByFilename = new Map<string, SoulseekTransfer>()
-  for (const t of transfers.data ?? []) activeByFilename.set(t.filename, t)
-
-  // When a transfer flips to Completed, the backend has already kicked off a library
-  // re-scan of slskd's download folder (assuming the user set DownloadFolder in Settings).
-  // Wait a moment for the scan to land then invalidate the library so the new track shows up.
-  useEffect(() => {
-    const newlyDone = (transfers.data ?? []).filter(
-      (t) => t.state.includes('Completed') && t.id && !completedSeenRef.current.has(t.id),
-    )
-    if (newlyDone.length === 0) return
-    for (const t of newlyDone) completedSeenRef.current.add(t.id)
-    // Library scan worker runs on a Channel — give it a beat to enumerate the file
-    // before we ask for fresh data. Two refetches catch both the fast (already-scanned)
-    // and slow (still-scanning) cases.
-    const earlyId = setTimeout(() => qc.invalidateQueries({ queryKey: ['tracks'] }), 1_500)
-    const lateId = setTimeout(() => qc.invalidateQueries({ queryKey: ['tracks'] }), 6_000)
-    return () => {
-      clearTimeout(earlyId)
-      clearTimeout(lateId)
-    }
-  }, [transfers.data, qc])
+  for (const t of transfers) activeByFilename.set(t.filename, t)
 
   const startSearch = useMutation({
     mutationFn: () => soulseek.startSearch(query),
@@ -182,7 +134,7 @@ export function SoulseekPanel({ artist, title }: Props) {
                   key={`${h.username}:${h.filename}:${i}`}
                   hit={h}
                   transfer={activeByFilename.get(h.filename) ?? null}
-                  onQueued={() => setTransferPollingActive(true)}
+                  onQueued={ensurePolling}
                 />
               ))}
             </tbody>
