@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tracks as tracksApi } from '../../api/library'
 import { tags as tagsApi } from '../../api/tags'
 import type { TagType, Track, TrackTag } from '../../api/types'
+import { detectFirstBeatFromPeaks, getCachedBandedPeaks } from '../../audio/peaks'
 import { usePlayer } from '../../state/player'
 import { useCues } from '../cues/useCues'
 import { formatBpm, formatDuration } from '../library/format'
@@ -70,12 +71,33 @@ export function CuesTab({ track }: { track: Track }) {
     setTimeout(() => seek(timeSeconds), 50)
   }
 
-  /// "Generate phrases" anchors at the current playhead and walks the rest of
-  /// the track at 16-beat (4-bar) intervals using the track's BPM. Mirrors the
-  /// MiK pattern: pause at the kick on bar 1, click generate, the rest of the
-  /// markers extrapolate from there. No DSP needed because dance music holds
-  /// its grid throughout a tagged BPM.
-  const phraseAnchorTime = playerTrackId === track.id && position > 0 ? position : 0
+  /// "Generate phrases" needs a first-beat anchor. We try, in priority order:
+  ///   1. An existing FirstBeat-typed cue (user explicitly tagged it)
+  ///   2. The current playhead (user paused at the kick + clicked generate)
+  ///   3. Auto-detected first beat from the cached banded peaks
+  ///   4. Fallback to track start (0s)
+  /// — so a brand-new track with no cues + no playback still gets a sensible
+  /// anchor without the user needing to know how to use the tool. The header
+  /// label tells the user which source the current anchor came from so it's
+  /// not magic.
+  const firstBeatCue = cues.find((c) => c.type === 'FirstBeat')
+  const cachedPeaks = getCachedBandedPeaks(track.id)
+  const detectedFirstBeat = cachedPeaks
+    ? detectFirstBeatFromPeaks(cachedPeaks, track.durationSeconds)
+    : null
+  const playheadAnchor = playerTrackId === track.id && position > 0 ? position : null
+
+  const phraseAnchorTime =
+    firstBeatCue?.timeSeconds ??
+    playheadAnchor ??
+    detectedFirstBeat ??
+    0
+  const anchorSource: 'firstBeatCue' | 'playhead' | 'autoDetected' | 'trackStart' =
+    firstBeatCue !== undefined ? 'firstBeatCue' :
+    playheadAnchor !== null ? 'playhead' :
+    detectedFirstBeat !== null ? 'autoDetected' :
+    'trackStart'
+
   const handleGeneratePhrases = () => {
     if (track.bpm === null) return
     if (cues.some((c) => c.isAutoSuggested) && !window.confirm(
@@ -92,10 +114,27 @@ export function CuesTab({ track }: { track: Track }) {
   // affordance). When the track has no BPM tag, the button is disabled with a
   // tooltip explaining why — more discoverable than hiding the whole strip.
   const noBpm = track.bpm === null
+  const anchorLabel: Record<typeof anchorSource, string> = {
+    firstBeatCue: 'from cue',
+    playhead: 'from playhead',
+    autoDetected: '🎯 auto',
+    trackStart: 'fallback',
+  }
   const header = (
     <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)]/40 px-5 py-2 text-xs">
-      <span className="text-[var(--color-muted)]">Anchor at</span>
+      <span className="text-[var(--color-muted)]">Anchor</span>
       <span className="tabular-nums text-white">{formatDuration(phraseAnchorTime)}</span>
+      <span
+        className="rounded bg-[var(--color-bg)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
+        title={
+          anchorSource === 'firstBeatCue' ? 'Using your existing FirstBeat-typed cue' :
+          anchorSource === 'playhead' ? 'Using the current playback position' :
+          anchorSource === 'autoDetected' ? 'Auto-detected from the loudest low-band onset (first kick). Pause at a more accurate spot to override.' :
+          'Defaulting to track start — pause at the first kick to override.'
+        }
+      >
+        {anchorLabel[anchorSource]}
+      </span>
       <span className="text-[var(--color-muted)]">
         {noBpm ? '· no BPM tag' : `· ${Number(track.bpm).toFixed(0)} BPM · 16-beat phrases`}
       </span>
@@ -105,7 +144,7 @@ export function CuesTab({ track }: { track: Track }) {
         className="ml-auto rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
         title={noBpm
           ? 'Track has no BPM tag — Wisp can\'t extrapolate phrase positions. Add a BPM via cleanup first.'
-          : 'Use the current playhead as the first beat; extrapolate phrase markers across the rest of the track using the BPM'}
+          : 'Generate phrase markers across the track using the anchor + the BPM tag'}
       >
         {generatePhraseMarkers.isPending ? 'Generating…' : '✨ Generate phrases'}
       </button>

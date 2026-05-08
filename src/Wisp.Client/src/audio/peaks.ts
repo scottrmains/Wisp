@@ -116,6 +116,34 @@ async function renderBand(
   return ctx.startRendering()
 }
 
+/// Heuristic "first beat" detection from already-loaded banded peaks. Walks the
+/// low band (where kicks dominate) and returns the timestamp of the first peak
+/// that exceeds 50% of the loudest low-band sample in the track — i.e. the
+/// first proper kick. Pre-roll silence + ambient pads sit well below that
+/// threshold for typical produced dance music, so this lands close to the kick
+/// on bar 1 without needing real DSP. Returns null when there's nothing audible.
+export function detectFirstBeatFromPeaks(peaks: BandedPeaks, durationSeconds: number): number | null {
+  if (durationSeconds <= 0) return null
+  const low = peaks.low
+  if (low.length === 0) return null
+
+  let maxLow = 0
+  for (let i = 0; i < low.length; i++) {
+    if (low[i] > maxLow) maxLow = low[i]
+  }
+  if (maxLow <= 0) return null
+  const threshold = maxLow * 0.5
+
+  for (let i = 0; i < low.length; i++) {
+    if (low[i] >= threshold) {
+      // i is a bucket index in [0, low.length). Map to time at the START of
+      // that bucket so we land just before the kick rather than mid-attack.
+      return (i / low.length) * durationSeconds
+    }
+  }
+  return null
+}
+
 function downsample(audioBuffer: AudioBuffer): Float32Array {
   const channels = audioBuffer.numberOfChannels
   const length = audioBuffer.length
