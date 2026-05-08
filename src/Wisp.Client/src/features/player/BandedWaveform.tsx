@@ -37,6 +37,9 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
   const [peaks, setPeaks] = useState<BandedPeaks | null>(() => getCachedBandedPeaks(trackId) ?? null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Cursor tracking for the precise-time tooltip + magnifier popover. Set on
+  // mousemove, cleared on mouseleave. `time` is the timestamp under the cursor.
+  const [cursor, setCursor] = useState<{ x: number; time: number } | null>(null)
   // Tracks the container's measured width so the canvas redraws when the
   // wrapper toggles visibility (display:none → block goes 0 → realW, which
   // ResizeObserver reports as a resize). Without this, the canvas stays at
@@ -163,13 +166,25 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
     onSeek(Math.max(0, Math.min(1, ratio)) * duration)
   }
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
+    const time = (x / rect.width) * duration
+    setCursor({ x, time })
+  }
+
+  const handleMouseLeave = () => setCursor(null)
+
   const playheadPct = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
     <div
       ref={containerRef}
       onClick={handleClick}
-      className="relative w-full cursor-pointer overflow-hidden rounded bg-[var(--color-bg)]"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className="relative w-full cursor-crosshair overflow-visible rounded bg-[var(--color-bg)]"
       style={{ height }}
       role="slider"
       aria-label="Seek"
@@ -251,8 +266,136 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
         className="pointer-events-none absolute top-0 bottom-0 w-px bg-white shadow-[0_0_4px_rgba(255,255,255,0.7)]"
         style={{ left: `${playheadPct}%` }}
       />
+      {/* Hover cursor: dashed guide line + time chip on the waveform itself.
+          Always-on whenever the user's mouse is over the waveform — gives the
+          precise time at the pointer so they can see what they'd seek to. */}
+      {cursor && (
+        <>
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-white/40"
+            style={{ left: cursor.x }}
+          />
+          <div
+            className="pointer-events-none absolute top-1 -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-mono text-white/90"
+            style={{ left: cursor.x }}
+          >
+            {formatTimeFine(cursor.time)}
+          </div>
+        </>
+      )}
+      {/* Magnifier popover — floats above the waveform near the cursor and
+          draws a zoomed window of the same banded peaks. Pixel-to-time
+          mapping inside the magnifier is much finer than the main waveform
+          (typical ~0.04s/px vs ~0.3s/px), so the user can pinpoint exactly
+          where to seek/place a cue. Pointer-events:none so it never steals
+          clicks from the waveform underneath. */}
+      {cursor && peaks && containerWidth > 0 && duration > 0 && (
+        <Magnifier
+          peaks={peaks}
+          duration={duration}
+          cursorTime={cursor.time}
+          cursorX={cursor.x}
+          containerWidth={containerWidth}
+          waveformHeight={height}
+        />
+      )}
     </div>
   )
+}
+
+interface MagnifierProps {
+  peaks: BandedPeaks
+  duration: number
+  cursorTime: number
+  cursorX: number
+  containerWidth: number
+  waveformHeight: number
+}
+
+const MAGNIFIER_WIDTH = 280
+const MAGNIFIER_HEIGHT = 70
+const MAGNIFIER_WINDOW_SECONDS = 6
+
+function Magnifier({ peaks, duration, cursorTime, cursorX, containerWidth, waveformHeight }: MagnifierProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = Math.floor(MAGNIFIER_WIDTH * dpr)
+    canvas.height = Math.floor(MAGNIFIER_HEIGHT * dpr)
+    canvas.style.width = `${MAGNIFIER_WIDTH}px`
+    canvas.style.height = `${MAGNIFIER_HEIGHT}px`
+
+    const ctx = canvas.getContext('2d')!
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.scale(dpr, dpr)
+    ctx.clearRect(0, 0, MAGNIFIER_WIDTH, MAGNIFIER_HEIGHT)
+
+    const buckets = peaks.low.length
+    const maxLow = arrayMax(peaks.low) || 1
+    const maxMid = arrayMax(peaks.mid) || 1
+    const maxHigh = arrayMax(peaks.high) || 1
+    const mid = MAGNIFIER_HEIGHT / 2
+
+    const startTime = cursorTime - MAGNIFIER_WINDOW_SECONDS / 2
+    const endTime = cursorTime + MAGNIFIER_WINDOW_SECONDS / 2
+    const windowSec = endTime - startTime
+
+    // Bar pitch chosen so we always have visible bars even when one bucket
+    // covers many pixels at this zoom level.
+    const barWidthPx = 2
+    const numBars = Math.floor(MAGNIFIER_WIDTH / barWidthPx)
+    for (let p = 0; p < numBars; p++) {
+      const t = startTime + (p / numBars) * windowSec
+      if (t < 0 || t > duration) continue
+      const bucket = Math.min(buckets - 1, Math.max(0, Math.floor((t / duration) * buckets)))
+      const lo = peaks.low[bucket] / maxLow
+      const md = peaks.mid[bucket] / maxMid
+      const hi = peaks.high[bucket] / maxHigh
+      const total = lo + md + hi || 1
+      const r = lo / total
+      const g = md / total
+      const b = hi / total
+      const red = Math.round(255 * (r * 1.0 + g * 0.55 + b * 0.0))
+      const grn = Math.round(255 * (r * 0.35 + g * 0.85 + b * 0.55))
+      const blu = Math.round(255 * (r * 0.0 + g * 0.15 + b * 1.0))
+      const amp = Math.max(lo, md, hi)
+      const h = Math.max(2, amp * (MAGNIFIER_HEIGHT - 6))
+      ctx.fillStyle = `rgb(${red}, ${grn}, ${blu})`
+      ctx.fillRect(p * barWidthPx, mid - h / 2, barWidthPx - 0.4, h)
+    }
+
+    // Centre crosshair — marks the exact time the cursor is on.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
+    ctx.fillRect(MAGNIFIER_WIDTH / 2 - 0.5, 0, 1, MAGNIFIER_HEIGHT)
+  }, [peaks, duration, cursorTime])
+
+  // Clamp the popover so it doesn't slide off the left/right edge of the
+  // waveform. Centre it on the cursor where there's room.
+  const half = MAGNIFIER_WIDTH / 2
+  const left = Math.max(0, Math.min(containerWidth - MAGNIFIER_WIDTH, cursorX - half))
+
+  return (
+    <div
+      className="pointer-events-none absolute z-10 rounded border border-white/10 bg-black/90 shadow-lg"
+      style={{ left, bottom: waveformHeight + 6, width: MAGNIFIER_WIDTH }}
+    >
+      <canvas ref={canvasRef} className="block" />
+      <div className="border-t border-white/10 px-2 py-0.5 text-center font-mono text-[10px] text-white/80">
+        {formatTimeFine(cursorTime)} · ±{(MAGNIFIER_WINDOW_SECONDS / 2).toFixed(1)}s
+      </div>
+    </div>
+  )
+}
+
+function formatTimeFine(seconds: number): string {
+  if (seconds < 0) return '0:00.00'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toFixed(2).padStart(5, '0')}`
 }
 
 function formatTimeShort(seconds: number): string {
