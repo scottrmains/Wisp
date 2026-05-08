@@ -21,11 +21,13 @@ public sealed record CatalogCredentials
     public SpotifyCredentials? Spotify { get; init; }
     public DiscogsCredentials? Discogs { get; init; }
     public YouTubeCredentials? YouTube { get; init; }
+    public SoulseekCredentials? Soulseek { get; init; }
 }
 
 public sealed record SpotifyCredentials(string ClientId, string ClientSecret);
 public sealed record DiscogsCredentials(string PersonalAccessToken);
 public sealed record YouTubeCredentials(string ApiKey);
+public sealed record SoulseekCredentials(string Url, string ApiKey, string? DownloadFolder = null);
 
 public sealed class WispSettingsStore
 {

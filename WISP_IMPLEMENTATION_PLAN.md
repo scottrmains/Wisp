@@ -727,6 +727,69 @@ Tempo control exposed (1.0 = native, 1.05 = +5% faster). Pitch locked at 1.0 in 
 
 ---
 
+## Phase 11 — Soulseek (slskd) integration ✅
+
+**Goal:** When Crate Digger surfaces a tune (or Rediscover surfaces a vinyl-only release), let the user search the Soulseek P2P network via a locally-running [slskd](https://github.com/slskd/slskd) daemon, queue a download, and have the file flow into their Wisp library when the transfer completes.
+
+**Why now:** the user's library is mostly old house — vinyl-only, out-of-print white labels, DJ-only edits — material that is **not commercially available anywhere**. Soulseek is the de facto archive for this catalogue and is how DJs typically recover tracks they own on vinyl or have lost. Phases 8–9 surface what to look for; Phase 11 closes the loop by surfacing where to actually get it.
+
+### Positioning + hard rules
+This is a different shape from the YouTube hard-line drawn in Phase 9. Worth being intentional about it:
+
+- **User runs slskd separately.** Wisp does not bundle, install, manage, or proxy uploads. We are an API client, not a peer.
+- **Single-user local tool only.** No sharing of credentials, no cloud sync, no broker.
+- **Wisp doesn't speak Soulseek protocol directly** — only the slskd HTTP API. The user's slskd config controls share / upload / ratio behaviour; we don't touch any of it.
+- **Search + download only.** No browse-other-users, no upload management, no chat.
+- **Authoring + ToS responsibility lives with the user**, who already chose to install slskd.
+
+### Scope (this iteration)
+
+- [x] `SoulseekOptions { Url, ApiKey, DownloadFolder? }`. `WispSettings.Catalog.Soulseek` for persistence; wired through `ApplyCatalogCredentials` alongside the other three sources.
+- [x] `SoulseekClient`:
+  - `X-API-Key` header auth, dedicated `Wisp.Soulseek` HttpClient
+  - `POST /api/v0/searches` (body `{ id, searchText, fileLimit }`) — Wisp generates the search id
+  - `GET  /api/v0/searches/{id}` + `/responses` — flattened into `SoulseekSearchHit[]` with files + locked files merged, sorted by free-slot then upload speed then bitrate
+  - `POST /api/v0/transfers/downloads/{username}` body `[{ filename, size }]`
+  - `GET  /api/v0/transfers/downloads` flattened across users + directories into a flat transfer list
+  - `GET  /api/v0/application` for the "Test connection" probe
+  - All catch `HttpRequestException` → `SoulseekUnreachableException` so the daemon being down surfaces as a clean message, not a 500
+- [x] API endpoints (all return clean `code: soulseek_unconfigured` / `soulseek_unreachable` instead of stack traces):
+  - `GET / POST / DELETE /api/settings/soulseek`
+  - `POST /api/soulseek/test`
+  - `POST /api/soulseek/searches` → `{ id }` (frontend polls)
+  - `GET  /api/soulseek/searches/{id}` → `{ isComplete, responseCount, hits[] }`
+  - `POST /api/soulseek/downloads` body `{ username, filename, size }`
+  - `GET  /api/soulseek/downloads` → flat transfer list. **This endpoint also opportunistically auto-imports** any newly-completed transfer if `DownloadFolder` is configured — kicks off a library scan job. A `ConcurrentDictionary` of seen transfer ids prevents double-scanning.
+- [x] `SoulseekPanel` inside `DiscoveredTrackDetail`:
+  - "Search Soulseek" button (uses parsed artist + title; disabled when missing)
+  - Polls the backend every 2s until `isComplete` or 30s timeout; shows live `(N users)` count during search
+  - Results table: filename / size / bitrate / user / upload-speed / locked badge, sorted by usability
+  - Per-row Download button → POSTs to backend → row state changes to live progress (% + state) when slskd starts the transfer; checkmark when complete
+  - Active downloads polled at 2s via TanStack Query `refetchInterval` — no separate worker needed
+- [x] Settings panel: URL (defaults to `http://localhost:5030`), API key with show/hide, optional download folder with bridge.pickFolder integration, Test connection button (calls `/api/v0/application`)
+- [x] Empty state explains how to get started — link to github.com/slskd/slskd via `bridge.openExternal`, makes clear Wisp doesn't bundle slskd
+
+### Explicitly NOT in this iteration *(remains future)*
+- Browse user shares (`/api/v0/users/{username}/browse`) — useful but not core
+- Wishlist via slskd's wishlist endpoint
+- Upload/sharing management UI
+- Chat / private messages
+- Auto-download on availability ("if any user with score ≥X has the file, just queue it") — too aggressive for v1
+
+### Risks & guardrails
+- **slskd may not be running** — surface a clear `connection_failed` error code in API responses; don't crash.
+- **Search latency is real** — Soulseek is P2P, results trickle in over 5–30s. Server-side timeout caps at 30s by default.
+- **Locked files** (user's share-ratio gate) — surface `locked: true` in the UI with a tooltip explaining why; don't disable the row.
+- **Variable file quality** — show bitrate prominently so the user can pick.
+- **Auto-import via library scan** — only fires when DownloadFolder is set in Wisp settings AND that folder is the user's main scanned folder (or a subfolder). User opts in; we don't guess.
+
+### Tests
+- *(slskd integration tests deferred — same call as the other catalog clients; would need WireMock or a live slskd. The HTTP shape is small and well-covered by manual smoke test.)*
+
+**Done when:** with slskd running locally, the user can click "Search Soulseek" on any Crate Digger track, see results, click Download, and (if `DownloadFolder` is configured) the file appears in their Wisp library automatically once the transfer completes.
+
+---
+
 ## Cross-cutting checklist
 
 - [ ] All destructive endpoints (`apply cleanup`, `delete plan`) require an explicit confirmation header or body flag — no accidental wipes

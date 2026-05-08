@@ -8,8 +8,10 @@ using Wisp.Api.Discovery;
 using Wisp.Api.Library;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
+using Wisp.Api.Soulseek;
 using Wisp.Infrastructure;
 using Wisp.Infrastructure.ExternalCatalog.Discogs;
+using Wisp.Infrastructure.ExternalCatalog.Soulseek;
 using Wisp.Infrastructure.ExternalCatalog.Spotify;
 using Wisp.Infrastructure.ExternalCatalog.YouTube;
 using Wisp.Infrastructure.Persistence;
@@ -91,7 +93,8 @@ public class Program
                 settingsStore,
                 app.Services.GetRequiredService<SpotifyOptions>(),
                 app.Services.GetRequiredService<DiscogsOptions>(),
-                app.Services.GetRequiredService<YouTubeOptions>());
+                app.Services.GetRequiredService<YouTubeOptions>(),
+                app.Services.GetRequiredService<SoulseekOptions>());
 
             if (app.Environment.IsDevelopment())
             {
@@ -125,13 +128,15 @@ public class Program
             app.MapCleanup();
             app.MapArtistRefresh();
             app.MapDiscovery();
+            app.MapSoulseek();
 
             // Helper: apply credentials after every save/delete so the catalog clients pick up changes.
             void ReapplyCatalog() => ApplyCatalogCredentials(
                 settingsStore,
                 app.Services.GetRequiredService<SpotifyOptions>(),
                 app.Services.GetRequiredService<DiscogsOptions>(),
-                app.Services.GetRequiredService<YouTubeOptions>());
+                app.Services.GetRequiredService<YouTubeOptions>(),
+                app.Services.GetRequiredService<SoulseekOptions>());
 
             // ─── Spotify ─────────────────────────────────────────────────────
             app.MapGet("/api/settings/spotify", (WispSettingsStore store) =>
@@ -238,6 +243,46 @@ public class Program
                 return Results.NoContent();
             });
 
+            // ─── Soulseek (slskd) ────────────────────────────────────────────
+            app.MapGet("/api/settings/soulseek", (WispSettingsStore store) =>
+            {
+                var creds = store.Current.Catalog?.Soulseek;
+                return Results.Ok(new
+                {
+                    isConfigured = !string.IsNullOrWhiteSpace(creds?.Url) && !string.IsNullOrWhiteSpace(creds?.ApiKey),
+                    url = creds?.Url,
+                    keyPreview = creds?.ApiKey is { Length: > 6 } k ? k[..6] + "…" : null,
+                    downloadFolder = creds?.DownloadFolder,
+                });
+            });
+
+            app.MapPost("/api/settings/soulseek", (SoulseekCredentials? creds, WispSettingsStore store) =>
+            {
+                if (creds is null
+                    || string.IsNullOrWhiteSpace(creds.Url)
+                    || string.IsNullOrWhiteSpace(creds.ApiKey))
+                {
+                    return Results.BadRequest(new { code = "credentials_required",
+                        message = "Url and ApiKey are required." });
+                }
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { Soulseek = creds }
+                });
+                ReapplyCatalog();
+                return Results.NoContent();
+            });
+
+            app.MapDelete("/api/settings/soulseek", (WispSettingsStore store) =>
+            {
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { Soulseek = null }
+                });
+                ReapplyCatalog();
+                return Results.NoContent();
+            });
+
             app.MapFallbackToFile("index.html");
 
             var photinoEnabled = app.Configuration.GetValue("Wisp:LaunchPhotino", !app.Environment.IsDevelopment());
@@ -316,7 +361,8 @@ public class Program
         WispSettingsStore store,
         SpotifyOptions spotify,
         DiscogsOptions discogs,
-        YouTubeOptions youTube)
+        YouTubeOptions youTube,
+        SoulseekOptions soulseek)
     {
         var catalog = store.Current.Catalog;
 
@@ -326,5 +372,9 @@ public class Program
         discogs.PersonalAccessToken = catalog?.Discogs?.PersonalAccessToken;
 
         youTube.ApiKey = catalog?.YouTube?.ApiKey;
+
+        soulseek.Url = catalog?.Soulseek?.Url;
+        soulseek.ApiKey = catalog?.Soulseek?.ApiKey;
+        soulseek.DownloadFolder = catalog?.Soulseek?.DownloadFolder;
     }
 }

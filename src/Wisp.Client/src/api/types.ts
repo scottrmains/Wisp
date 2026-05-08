@@ -312,3 +312,36 @@ export interface DiscoveryScanProgress {
   parsedConfidently: number
   error: string | null
 }
+
+export interface SoulseekSearchHit {
+  username: string
+  filename: string
+  size: number
+  bitRate: number | null
+  sampleRate: number | null
+  bitDepth: number | null
+  length: number | null
+  locked: boolean
+  uploadSpeed: number
+  queueLength: number
+  hasFreeUploadSlot: boolean
+}
+
+export interface SoulseekSearchResult {
+  id: string
+  isComplete: boolean
+  responseCount: number
+  hits: SoulseekSearchHit[]
+}
+
+export interface SoulseekTransfer {
+  id: string
+  username: string
+  filename: string
+  size: number
+  bytesTransferred: number
+  percentage: number
+  state: string
+  startedAt: string | null
+  endedAt: string | null
+}

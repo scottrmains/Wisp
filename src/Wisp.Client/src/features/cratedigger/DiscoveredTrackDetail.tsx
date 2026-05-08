@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { discovery } from '../../api/discovery'
 import type { DigitalMatch, DiscoveredTrack, DiscoveryStatus } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
+import { SoulseekPanel } from './SoulseekPanel'
 
 interface Props {
   trackId: string
@@ -140,6 +141,13 @@ export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
                 <ul className="space-y-1.5">
                   {detail.data.matches.map((m) => <MatchRow key={m.id} match={m} />)}
                 </ul>
+              )}
+
+              {detail.data && (
+                <SoulseekPanel
+                  artist={detail.data.track.parsedArtist}
+                  title={detail.data.track.parsedTitle}
+                />
               )}
             </div>
           </div>

@@ -64,6 +64,10 @@ export function SettingsPanel({ onClose }: Props) {
             <YouTubeSettings />
           </Section>
 
+          <Section title="Soulseek / slskd (P2P download for old / vinyl-only tunes)">
+            <SoulseekSettings />
+          </Section>
+
           <Section title="Coming soon">
             <p className="text-xs text-[var(--color-muted)]">
               Recommendation weight overrides, default mix mode, FFmpeg path, audio device selection, MusicBrainz.
@@ -263,6 +267,171 @@ function YouTubeSettings() {
 interface SingleTokenStatus {
   isConfigured: boolean
   [k: string]: string | boolean | null | undefined
+}
+
+interface SoulseekStatus {
+  isConfigured: boolean
+  url: string | null
+  keyPreview: string | null
+  downloadFolder: string | null
+}
+
+function SoulseekSettings() {
+  const qc = useQueryClient()
+  const status = useQuery({
+    queryKey: ['soulseek-status'],
+    queryFn: () => apiGet<SoulseekStatus>('/api/settings/soulseek'),
+  })
+  const [url, setUrl] = useState('http://localhost:5030')
+  const [apiKey, setApiKey] = useState('')
+  const [downloadFolder, setDownloadFolder] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message?: string } | null>(null)
+
+  const save = useMutation({
+    mutationFn: () => apiPost('/api/settings/soulseek', {
+      url: url.trim(),
+      apiKey,
+      downloadFolder: downloadFolder.trim() || null,
+    }),
+    onSuccess: () => {
+      setApiKey('')
+      setTestResult(null)
+      qc.invalidateQueries({ queryKey: ['soulseek-status'] })
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: () => apiDelete('/api/settings/soulseek'),
+    onSuccess: () => {
+      setTestResult(null)
+      qc.invalidateQueries({ queryKey: ['soulseek-status'] })
+    },
+  })
+
+  const test = useMutation({
+    mutationFn: async () => {
+      try {
+        await apiPost('/api/soulseek/test')
+        return { ok: true } as const
+      } catch (e) {
+        return { ok: false, message: (e as Error).message } as const
+      }
+    },
+    onSuccess: setTestResult,
+  })
+
+  const pickFolder = async () => {
+    if (!bridgeAvailable()) return
+    try {
+      const result = await bridge.pickFolder()
+      if (result.path) setDownloadFolder(result.path)
+    } catch {
+      /* swallow */
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {status.data?.isConfigured ? (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm">
+            <span>
+              <span className="text-[var(--color-muted)]">Connected to</span>
+              <span className="ml-2 font-mono text-xs">{status.data.url}</span>
+              {status.data.keyPreview && (
+                <span className="ml-2 font-mono text-xs text-[var(--color-muted)]">{status.data.keyPreview}</span>
+              )}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => test.mutate()}
+                disabled={test.isPending}
+                className="rounded border border-[var(--color-border)] px-2 py-0.5 text-xs hover:bg-white/5 disabled:opacity-40"
+              >
+                {test.isPending ? 'Testing…' : 'Test'}
+              </button>
+              <button
+                onClick={() => remove.mutate()}
+                disabled={remove.isPending}
+                className="rounded border border-red-500/30 px-2 py-0.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+          {status.data.downloadFolder && (
+            <p className="px-1 text-[10px] text-[var(--color-muted)]">
+              Auto-import folder: <code>{status.data.downloadFolder}</code> (rescanned when transfers complete)
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--color-muted)]">
+            Run{' '}
+            <button
+              onClick={() => bridgeAvailable() && void bridge.openExternal('https://github.com/slskd/slskd')}
+              className="text-[var(--color-accent)] hover:underline"
+            >
+              slskd
+            </button>{' '}
+            locally as a daemon, generate an API key in its <code>slskd.yml</code>, and paste it here. Wisp doesn't bundle slskd — install + run it separately. The default URL is <code>http://localhost:5030</code>.
+          </p>
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="slskd URL"
+            className="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+          />
+          <div className="flex gap-2">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="API key"
+              className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+            />
+            <button
+              onClick={() => setShowKey((s) => !s)}
+              className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)]"
+            >
+              {showKey ? 'hide' : 'show'}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={downloadFolder}
+              onChange={(e) => setDownloadFolder(e.target.value)}
+              placeholder="Download folder (optional — enables auto-import on completion)"
+              className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs font-mono"
+            />
+            <button
+              onClick={pickFolder}
+              disabled={!bridgeAvailable()}
+              className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] disabled:opacity-30"
+            >
+              Pick…
+            </button>
+          </div>
+          <button
+            onClick={() => save.mutate()}
+            disabled={!url.trim() || !apiKey.trim() || save.isPending}
+            className="w-full rounded bg-[var(--color-accent)] px-2 py-1 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {save.isPending ? 'Saving…' : 'Save slskd connection'}
+          </button>
+        </div>
+      )}
+      {testResult && (
+        <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {testResult.ok ? '✓ Connected' : `✗ ${testResult.message}`}
+        </p>
+      )}
+    </div>
+  )
 }
 
 function SingleTokenSettings(props: {
