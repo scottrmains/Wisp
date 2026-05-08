@@ -5,14 +5,24 @@ const singleInflight = new Map<string, Promise<Float32Array>>()
 const bandedCache = new Map<string, BandedPeaks>()
 const bandedInflight = new Map<string, Promise<BandedPeaks>>()
 
-const TARGET_BUCKETS = 1024
+/// 4096 buckets gives ~11 buckets/sec on a 6-minute track — enough that each
+/// kick / snare gets its own visible peak rather than being averaged into a
+/// neighbour. (Mixed in Key looks "sharp" because they store much more than
+/// this, but 4096 is the sweet spot for our render path before cache size
+/// becomes silly: ~64 KB per band, 256 KB total per cached track.)
+const TARGET_BUCKETS = 4096
 
 export interface BandedPeaks {
-  /// Sub-bass + bass (~< 250 Hz) — drives the warm/red end of the waveform.
+  /// Unfiltered amplitude envelope — drives the clean single-colour
+  /// rendering (matches the Mixed-in-Key flat-cyan waveform style).
+  full: Float32Array
+  /// Sub-bass + bass (~< 250 Hz) — drives the structural-cue detector
+  /// (kick onsets in the low band reveal breakdowns / drops).
   low: Float32Array
   /// Midrange (~250 Hz – 2 kHz) — vocals + lead synths + body of the kit.
+  /// Kept available for future analysis (vocal-in detection, etc.).
   mid: Float32Array
-  /// Highs (~2 kHz +) — hats, cymbals, presence.
+  /// Highs (~2 kHz +) — hats, cymbals, presence. Same: analysis-only now.
   high: Float32Array
 }
 
@@ -83,14 +93,17 @@ async function computeBandedPeaks(trackId: string): Promise<BandedPeaks> {
   const probe = new OfflineAudioContext({ numberOfChannels: 1, length: 1, sampleRate: 44100 })
   const audioBuffer = await probe.decodeAudioData(arrayBuffer.slice(0))
 
+  // Unfiltered envelope first — that's what we render. Cheap (no filter pass).
+  const full = downsample(audioBuffer)
   // Three filtered renders against the same decoded buffer. Run sequentially —
   // running them in parallel triples the memory footprint with no real gain on
-  // the user's typical machine.
+  // the user's typical machine. These now feed the structural detector only;
+  // the visual waveform comes from `full`.
   const low = downsample(await renderBand(audioBuffer, 'lowpass', 250))
   const mid = downsample(await renderBand(audioBuffer, 'bandpass', 800))
   const high = downsample(await renderBand(audioBuffer, 'highpass', 2000))
 
-  return { low, mid, high }
+  return { full, low, mid, high }
 }
 
 async function renderBand(

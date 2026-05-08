@@ -37,9 +37,12 @@ interface Props {
   firstBeatSec?: number | null
 }
 
-/// Mixed-in-Key style multi-band waveform for the mini-player.
-/// Each bucket is drawn as a centred bar; the colour mixes the three bands' relative
-/// strengths so bass-heavy regions read warm/red and treble-heavy regions read cool/blue.
+/// Flat-cyan waveform render in the Mixed-in-Key style. Every bucket is drawn
+/// as a centred bar mirrored top + bottom around the midline; the colour is
+/// solid cyan rather than per-band-mixed. Multi-band info (low/mid/high) is
+/// still computed but it feeds the structural-cue detector now, not the
+/// rendering — the visual is calmer and the kick / snare transients read more
+/// clearly because they're not competing with band-blend colour shifts.
 /// Click anywhere to seek; vertical playhead overlays the current position.
 ///
 /// While peaks are computing, falls back to a thin baseline so the click-to-seek still works.
@@ -133,51 +136,12 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
 
     if (!peaks) {
       // Baseline so the area still reads as "the waveform" while peaks compute.
-      ctx.fillStyle = 'rgba(170, 59, 255, 0.15)'
+      ctx.fillStyle = WAVEFORM_COLOR_DIM
       ctx.fillRect(0, cssHeight / 2 - 0.5, cssWidth, 1)
       return
     }
 
-    const buckets = peaks.low.length
-    const mid = cssHeight / 2
-    const barWidth = cssWidth / buckets
-    const drawW = Math.max(1, barWidth - 0.4)
-
-    // Find the per-band max so we can normalise — a single global max would let one
-    // dominant band crush the others. Using per-band max gives the colour blend
-    // proper headroom across the whole length of the track.
-    const maxLow = arrayMax(peaks.low)
-    const maxMid = arrayMax(peaks.mid)
-    const maxHigh = arrayMax(peaks.high)
-
-    // For bar height we use the loudest band per bucket so quiet sections don't disappear.
-    const ampMax = Math.max(maxLow, maxMid, maxHigh) || 1
-
-    for (let i = 0; i < buckets; i++) {
-      const lo = maxLow > 0 ? peaks.low[i] / maxLow : 0
-      const md = maxMid > 0 ? peaks.mid[i] / maxMid : 0
-      const hi = maxHigh > 0 ? peaks.high[i] / maxHigh : 0
-
-      const total = lo + md + hi || 1
-      const r = lo / total
-      const g = md / total
-      const b = hi / total
-
-      // Heuristic palette tuned for the dark UI: red+orange for bass, green/yellow
-      // for mids, cyan/blue for highs. Mixing these via the per-band ratios gives
-      // the smooth rainbow MiK is known for.
-      const red = Math.round(255 * (r * 1.0 + g * 0.55 + b * 0.0))
-      const grn = Math.round(255 * (r * 0.35 + g * 0.85 + b * 0.55))
-      const blu = Math.round(255 * (r * 0.0 + g * 0.15 + b * 1.0))
-
-      // Bar height: combined amplitude scaled into the available vertical space.
-      // Loud sections still hit the full height; quiet sections show a few pixels.
-      const amp = Math.max(lo, md, hi) * (ampMax / 1)
-      const h = Math.max(2, amp * (cssHeight - 4))
-
-      ctx.fillStyle = `rgb(${red}, ${grn}, ${blu})`
-      ctx.fillRect(i * barWidth, mid - h / 2, drawW, h)
-    }
+    drawWaveformBars(ctx, peaks.full, cssWidth, cssHeight)
   }, [peaks, height, containerWidth])
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -409,37 +373,16 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, b
     ctx.scale(dpr, dpr)
     ctx.clearRect(0, 0, MAGNIFIER_WIDTH, MAGNIFIER_HEIGHT)
 
-    const buckets = peaks.low.length
-    const maxLow = arrayMax(peaks.low) || 1
-    const maxMid = arrayMax(peaks.mid) || 1
-    const maxHigh = arrayMax(peaks.high) || 1
-    const mid = MAGNIFIER_HEIGHT / 2
-
     const startTime = cursorTime - windowSec / 2
-
-    // Bar pitch chosen so we always have visible bars even when one bucket
-    // covers many pixels at this zoom level.
-    const barWidthPx = 2
-    const numBars = Math.floor(MAGNIFIER_WIDTH / barWidthPx)
-    for (let p = 0; p < numBars; p++) {
-      const t = startTime + (p / numBars) * windowSec
-      if (t < 0 || t > duration) continue
-      const bucket = Math.min(buckets - 1, Math.max(0, Math.floor((t / duration) * buckets)))
-      const lo = peaks.low[bucket] / maxLow
-      const md = peaks.mid[bucket] / maxMid
-      const hi = peaks.high[bucket] / maxHigh
-      const total = lo + md + hi || 1
-      const r = lo / total
-      const g = md / total
-      const b = hi / total
-      const red = Math.round(255 * (r * 1.0 + g * 0.55 + b * 0.0))
-      const grn = Math.round(255 * (r * 0.35 + g * 0.85 + b * 0.55))
-      const blu = Math.round(255 * (r * 0.0 + g * 0.15 + b * 1.0))
-      const amp = Math.max(lo, md, hi)
-      const h = Math.max(2, amp * (MAGNIFIER_HEIGHT - 6))
-      ctx.fillStyle = `rgb(${red}, ${grn}, ${blu})`
-      ctx.fillRect(p * barWidthPx, mid - h / 2, barWidthPx - 0.4, h)
-    }
+    drawZoomedWaveformBars(
+      ctx,
+      peaks.full,
+      MAGNIFIER_WIDTH,
+      MAGNIFIER_HEIGHT,
+      startTime,
+      windowSec,
+      duration,
+    )
 
     // Beat grid overlay — drawn UNDER the centre crosshair so the white
     // crosshair stays visible. Only rendered when we have BPM + a first-beat
@@ -516,4 +459,77 @@ function arrayMax(a: Float32Array): number {
     if (v > m) m = v
   }
   return m
+}
+
+/// Solid sky-blue cyan tuned to match MiK's flat-coloured waveform on a dark
+/// background. Bright enough to read at thumbnail height in the mini-player
+/// but not so saturated it competes with the playhead / accent UI.
+const WAVEFORM_COLOR = 'rgb(56, 189, 248)'
+/// Faded version used for the "computing waveform…" baseline + the per-bucket
+/// minimum-height fallback when amplitude is near zero.
+const WAVEFORM_COLOR_DIM = 'rgba(56, 189, 248, 0.18)'
+
+/// Render the full track as a vertically-mirrored cyan bar chart. One bar per
+/// bucket of `peaks` (already pre-downsampled). Mirrors top + bottom around
+/// the midline so the result reads as a classic stereo-ish waveform — the
+/// look that MiK / Rekordbox / etc. share.
+function drawWaveformBars(
+  ctx: CanvasRenderingContext2D,
+  peaks: Float32Array,
+  cssWidth: number,
+  cssHeight: number,
+) {
+  const buckets = peaks.length
+  if (buckets === 0) return
+
+  const mid = cssHeight / 2
+  const barWidth = cssWidth / buckets
+  const drawW = Math.max(1, barWidth)
+  const ampMax = arrayMax(peaks) || 1
+  const usableHeight = cssHeight - 4
+
+  ctx.fillStyle = WAVEFORM_COLOR
+  for (let i = 0; i < buckets; i++) {
+    const amp = peaks[i] / ampMax
+    if (amp <= 0) continue
+    const h = Math.max(1.5, amp * usableHeight)
+    ctx.fillRect(i * barWidth, mid - h / 2, drawW, h)
+  }
+}
+
+/// Render a windowed slice of the waveform — same flat cyan look, but each
+/// rendered pixel maps a chosen time range so the magnifier can zoom freely.
+/// Walks the rendered pixel column and pulls peak amplitude from the source
+/// bucket(s) that overlap the time slice for that column. At deep zoom the
+/// same bucket repeats across columns, which is honest about the underlying
+/// resolution — but the user still sees precise time mapping via the
+/// crosshair.
+function drawZoomedWaveformBars(
+  ctx: CanvasRenderingContext2D,
+  peaks: Float32Array,
+  cssWidth: number,
+  cssHeight: number,
+  startTime: number,
+  windowSec: number,
+  totalDuration: number,
+) {
+  const buckets = peaks.length
+  if (buckets === 0 || totalDuration <= 0) return
+
+  const ampMax = arrayMax(peaks) || 1
+  const mid = cssHeight / 2
+  const usableHeight = cssHeight - 6
+
+  const barWidthPx = 1
+  const numBars = Math.floor(cssWidth / barWidthPx)
+  ctx.fillStyle = WAVEFORM_COLOR
+  for (let p = 0; p < numBars; p++) {
+    const t = startTime + (p / numBars) * windowSec
+    if (t < 0 || t > totalDuration) continue
+    const bucket = Math.min(buckets - 1, Math.max(0, Math.floor((t / totalDuration) * buckets)))
+    const amp = peaks[bucket] / ampMax
+    if (amp <= 0) continue
+    const h = Math.max(1.5, amp * usableHeight)
+    ctx.fillRect(p * barWidthPx, mid - h / 2, barWidthPx, h)
+  }
 }
