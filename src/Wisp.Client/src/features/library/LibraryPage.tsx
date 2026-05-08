@@ -142,14 +142,18 @@ export function LibraryPage() {
     return [t]
   }
 
-  const inspectorTarget = selectedIds.size > 1 ? null : selected
+  // Workspace now drives off the player's loaded track, not the row selection.
+  // Single-click selecting just highlights for context menu / bulk operations.
+  const playerTrackId = usePlayer((s) => s.trackId)
+  const loadTrack = usePlayer((s) => s.loadTrack)
+  const workspaceActive = playerTrackId !== null
 
   // Tell App when the workspace is showing so it can suppress the redundant MiniPlayer.
   // Cleared on unmount so navigating away re-enables the mini-player on the next page.
   useEffect(() => {
-    setLibraryWorkspaceActive(inspectorTarget !== null)
+    setLibraryWorkspaceActive(workspaceActive)
     return () => setLibraryWorkspaceActive(false)
-  }, [inspectorTarget, setLibraryWorkspaceActive])
+  }, [workspaceActive, setLibraryWorkspaceActive])
 
   const buildMenuItems = (rowTrack: Track): ContextMenuItem[] => {
     const opIds = selectedIds.has(rowTrack.id) && selectedIds.size > 1
@@ -172,8 +176,8 @@ export function LibraryPage() {
         id: 'find', icon: '✨', label: 'Find matches',
         disabled: isMulti, disabledReason: 'Single track only',
         onSelect: () => {
-          setSelected(rowTrack)
-          setSelectedIds(new Set([rowTrack.id]))
+          // Load (without auto-play) so the workspace appears at the right tab.
+          loadTrack(rowTrack.id)
           setFocusTab('recommendations')
           setTimeout(() => setFocusTab(null), 0)
         },
@@ -184,8 +188,7 @@ export function LibraryPage() {
         onSelect: () => {
           if (isMulti) setBulkTagIds(opIds)
           else {
-            setSelected(rowTrack)
-            setSelectedIds(new Set([rowTrack.id]))
+            loadTrack(rowTrack.id)
             setFocusTab('tags')
             setTimeout(() => setFocusTab(null), 0)
           }
@@ -200,8 +203,7 @@ export function LibraryPage() {
         id: 'notes', icon: '📝', label: 'Notes',
         disabled: isMulti, disabledReason: 'Single track only',
         onSelect: () => {
-          setSelected(rowTrack)
-          setSelectedIds(new Set([rowTrack.id]))
+          loadTrack(rowTrack.id)
           setFocusTab('notes')
           setTimeout(() => setFocusTab(null), 0)
         },
@@ -263,6 +265,8 @@ export function LibraryPage() {
       }
       if (e.key === 'r' || e.key === 'R') {
         if (selected) {
+          // Load the highlighted row into the workspace + focus the Recommendations tab.
+          loadTrack(selected.id)
           setFocusTab('recommendations')
           setTimeout(() => setFocusTab(null), 0)
           e.preventDefault()
@@ -335,20 +339,17 @@ export function LibraryPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Track prep workspace (Phase 20b) — appears at the top when a single track is
-          selected. Multi-selection hides the workspace because bulk operations live in
-          the BulkActionBar instead and the workspace's per-track actions wouldn't make
-          sense for a selection. */}
-      {inspectorTarget && (
-        <TrackPrepWorkspace
-          track={inspectorTarget}
-          onClose={() => setSelected(null)}
-          onAddToChain={activePlanId ? addToActivePlan : undefined}
-          onCleanup={setCleanupTarget}
-          onArchive={onArchiveOrRestore}
-          focusTab={focusTab ?? undefined}
-        />
-      )}
+      {/* Track prep workspace (Phase 20b) — appears whenever a track is loaded
+          into the App-level player (via double-click on a row, hover ▶, or a
+          context-menu item that loads the track). Self-hides when no track is
+          loaded. Single-click selection no longer triggers this — that was
+          getting in the way of casual browsing. */}
+      <TrackPrepWorkspace
+        onAddToChain={activePlanId ? addToActivePlan : undefined}
+        onCleanup={setCleanupTarget}
+        onArchive={onArchiveOrRestore}
+        focusTab={focusTab ?? undefined}
+      />
 
       {activePlaylist && (
         <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 px-4 py-2 text-xs">

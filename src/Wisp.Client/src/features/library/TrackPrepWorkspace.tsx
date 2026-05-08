@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Track } from '../../api/types'
-import { useAudioDeck } from '../../audio/useAudioDeck'
+import { tracks as tracksApi } from '../../api/library'
 import { usePlayer } from '../../state/player'
 import { useUiPrefs, type InspectorTab as Tab } from '../../state/uiPrefs'
 import { cues as cuesApi } from '../../api/cues'
@@ -13,8 +13,9 @@ import { BpmPill, EnergyPill, KeyPill } from './pills'
 import { formatDuration } from './format'
 
 interface Props {
-  track: Track
-  onClose: () => void
+  /// Drives off the App-level player state — workspace appears whenever a track
+  /// is loaded into the player (whether playback was started or not). Caller
+  /// just renders this; it self-hides if no track is loaded.
   onAddToChain?: (trackId: string) => void
   onCleanup?: (track: Track) => void
   onArchive?: (track: Track) => void
@@ -31,29 +32,37 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
 ]
 
-/// Top-of-Library workspace that takes over the page when a track is selected.
-/// Reuses the inspector tab content under a horizontal layout — the right-rail
-/// inspector panel is gone, this is the new home.
+/// Top-of-Library workspace for the *currently loaded* track — the one in the
+/// player. Single-click selection on a library row no longer opens this; users
+/// have to either play the track (double-click / row ▶) or use a context menu
+/// item that explicitly loads it (e.g. "Notes…" / "Tag…"). That keeps casual
+/// browsing free of workspace pop-ups.
 ///
 /// Layout (top → bottom):
-///   1. Big banded waveform (re-uses BandedWaveform; click-to-seek + cue markers later in 20c)
-///   2. Title row + close button
+///   1. Big banded waveform (re-uses BandedWaveform; cue markers come in 20c)
+///   2. Title row + close button (close clears the player → workspace hides)
 ///   3. Pill row (Key / BPM / Energy / Cues / Duration)
 ///   4. Action row (Play / Add to mix / Find matches / Tag / Notes / Archive / Reveal / Cleanup)
 ///   5. Tab bar
-///   6. Tab content (max-height ~240px so library table below stays usable)
+///   6. Tab content (max-height ~14rem so library table below stays usable)
 ///
-/// The whole thing collapses to a slim title + play strip via the chevron at the top right —
-/// useful when the user wants to keep the workspace mounted (so cue marks / playhead stay live)
-/// but reclaim vertical space for the library.
+/// The whole thing collapses to a slim title + play strip via the chevron at the top right.
 export function TrackPrepWorkspace({
-  track,
-  onClose,
   onAddToChain,
   onCleanup,
   onArchive,
   focusTab,
 }: Props) {
+  const trackId = usePlayer((s) => s.trackId)
+  // Fetch the loaded track's metadata so we can show title/artist/chips/etc.
+  // Same query the MiniPlayer uses — TanStack caches it cross-component.
+  const trackQuery = useQuery({
+    queryKey: ['track', trackId],
+    queryFn: () => tracksApi.get(trackId!),
+    enabled: !!trackId,
+    staleTime: 60_000,
+  })
+  const track = trackQuery.data ?? null
   const lastTab = useUiPrefs((s) => s.lastInspectorTab)
   const setLastTab = useUiPrefs((s) => s.setLastInspectorTab)
   const collapsed = useUiPrefs((s) => s.inspectorCollapsed)
@@ -78,56 +87,42 @@ export function TrackPrepWorkspace({
     }
   }, [focusTab, setLastTab])
 
-  // Player state — drives the play/pause label + the waveform's playhead + click-to-seek.
-  const playTrack = usePlayer((s) => s.playTrack)
-  const playerTrackId = usePlayer((s) => s.trackId)
+  // Player state — workspace and player are 1:1 now: workspace renders for whatever
+  // track the player has loaded.
   const isPlaying = usePlayer((s) => s.isPlaying)
   const togglePlay = usePlayer((s) => s.togglePlay)
   const seek = usePlayer((s) => s.seek)
-  const isLoadedHere = playerTrackId === track.id
-
-  // The waveform needs current time + duration. The mini-player owns the audio
-  // element; here we read its state via the same `usePlayer` mirror. When the
-  // selected track ISN'T loaded in the player yet we use a stand-in deck so the
-  // waveform can still render (with a dead playhead).
-  //
-  // If the track IS loaded, mirror through the store so we don't double-instantiate.
-  const standInDeck = useAudioDeck(isLoadedHere ? null : track.id)
+  const clear = usePlayer((s) => s.clear)
   const liveTime = usePlayer((s) => s.position)
   const liveDuration = usePlayer((s) => s.duration)
-  const currentTime = isLoadedHere ? liveTime : standInDeck.currentTime
-  const duration = isLoadedHere
-    ? (liveDuration > 0 ? liveDuration : track.durationSeconds)
-    : (standInDeck.duration > 0 ? standInDeck.duration : track.durationSeconds)
 
-  // Cue count for the chip row.
+  // Cue count for the chip row. Still useful even when track isn't fully resolved
+  // — we query off the trackId, not the resolved Track object.
   const cuesQuery = useQuery({
-    queryKey: ['cues', track.id],
-    queryFn: () => cuesApi.list(track.id),
+    queryKey: ['cues', trackId],
+    queryFn: () => cuesApi.list(trackId!),
+    enabled: !!trackId,
     staleTime: 30_000,
   })
   const cueCount = cuesQuery.data?.length ?? 0
 
   const playLabel = useMemo(() =>
-    isLoadedHere && isPlaying ? '❚❚ Pause' : '▶ Play',
-  [isLoadedHere, isPlaying])
+    isPlaying ? '❚❚ Pause' : '▶ Play',
+  [isPlaying])
 
-  const handlePlayClick = () => {
-    if (isLoadedHere) togglePlay()
-    else playTrack(track.id)
+  const handleClose = () => {
+    // Closing the workspace stops + unloads the player. (If the user just wanted
+    // to free vertical space without losing playback, the ▴ collapse button is
+    // the right tool — the workspace stays mounted, just visually slim.)
+    clear()
   }
 
-  const handleSeek = (t: number) => {
-    if (isLoadedHere) {
-      seek(t)
-    } else {
-      // Promote to the active player + store the desired seek time so the player
-      // jumps once it's loaded. For now: just kick playback at the start.
-      // (Phase 12-style "playTrack" auto-starts; the user can re-click on the
-      //  waveform once it's live to land on the precise time.)
-      playTrack(track.id)
-    }
-  }
+  const handleSeek = (t: number) => seek(t)
+
+  // Self-hide if no track loaded. App.tsx still renders us, but we render nothing.
+  if (!trackId || !track) return null
+
+  const duration = liveDuration > 0 ? liveDuration : track.durationSeconds
 
   // Collapsed mode — slim strip with title + play + close. Keeps the workspace
   // mounted (waveform component cached) but reclaims most vertical space.
@@ -135,12 +130,12 @@ export function TrackPrepWorkspace({
     return (
       <div className="flex shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
         <button
-          onClick={handlePlayClick}
+          onClick={togglePlay}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-xs text-white"
           title={playLabel}
           aria-label={playLabel}
         >
-          {isLoadedHere && isPlaying ? '❚❚' : '▶'}
+          {isPlaying ? '❚❚' : '▶'}
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" title={track.title ?? ''}>
@@ -160,9 +155,9 @@ export function TrackPrepWorkspace({
           ▾
         </button>
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="text-lg leading-none text-[var(--color-muted)] hover:text-white"
-          title="Close workspace"
+          title="Close workspace (stops playback)"
           aria-label="Close workspace"
         >
           ×
@@ -178,7 +173,7 @@ export function TrackPrepWorkspace({
         <BandedWaveform
           trackId={track.id}
           duration={duration}
-          currentTime={currentTime}
+          currentTime={liveTime}
           onSeek={handleSeek}
           height={120}
         />
@@ -186,15 +181,15 @@ export function TrackPrepWorkspace({
           <button
             onClick={toggleCollapsed}
             className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-xs text-[var(--color-muted)] hover:text-white"
-            title="Collapse workspace"
+            title="Collapse workspace (keeps playback)"
             aria-label="Collapse workspace"
           >
             ▴
           </button>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-base leading-none text-[var(--color-muted)] hover:text-white"
-            title="Close workspace"
+            title="Close workspace (stops playback)"
             aria-label="Close workspace"
           >
             ×
@@ -229,7 +224,7 @@ export function TrackPrepWorkspace({
       {/* Action row */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
         <button
-          onClick={handlePlayClick}
+          onClick={togglePlay}
           className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
         >
           {playLabel}
