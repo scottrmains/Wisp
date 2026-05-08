@@ -248,58 +248,68 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
         </div>
       )}
       {/* Cue sections — wide hover regions BETWEEN markers. Hovering a section
-          highlights the area + reveals its label; clicking anywhere in the
-          section seeks (and the workspace then auto-plays from that point).
-          Mirrors the Mixed-in-Key pattern of "click a section, play from there"
-          — much easier to navigate track structure than hitting a 3px marker.
-          Sections render BEFORE markers so the markers stay clickable on top. */}
+          tints the area + reveals its label and a "▶" play-from-cue button.
+          The section itself does NOT handle clicks — clicks bubble up to the
+          container's seek-to-click handler so clicking the waveform always
+          seeks to the click point. To play from the cue's start, hover the
+          section and click the floating play button. Mirrors the Mixed-in-Key
+          model where the click point is "go here exactly" and the per-cue
+          play affordance is "start from this cue". Sections render BEFORE
+          markers so markers stay clickable on top. */}
       {cues && duration > 0 && cues.map((c, i) => {
         const startPct = (c.timeSeconds / duration) * 100
         const nextTime = i + 1 < cues.length ? cues[i + 1].timeSeconds : duration
         const endPct = (nextTime / duration) * 100
         if (startPct >= 100 || endPct <= startPct) return null
         return (
-          <button
+          <div
             key={`section-${c.id}`}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (onCueClick) onCueClick(c.id)
-              else onSeek(c.timeSeconds)
-            }}
-            title={c.label ? `Play from "${c.label}" · ${formatTimeShort(c.timeSeconds)}` : `Play from ${formatTimeShort(c.timeSeconds)}`}
-            className="group absolute top-0 bottom-0 cursor-pointer transition-colors hover:bg-[var(--color-accent)]/15"
+            className="group absolute top-0 bottom-0 transition-colors hover:bg-[var(--color-accent)]/15"
             style={{ left: `${startPct}%`, width: `${endPct - startPct}%` }}
-            aria-label={c.label ?? `Section starting at ${formatTimeShort(c.timeSeconds)}`}
           >
+            {/* Play-from-cue affordance. Stops propagation so it doesn't also
+                trigger the container's click-to-seek handler underneath. */}
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (onCueClick) onCueClick(c.id)
+                else onSeek(c.timeSeconds)
+              }}
+              title={c.label
+                ? `Play from "${c.label}" · ${formatTimeShort(c.timeSeconds)}`
+                : `Play from cue · ${formatTimeShort(c.timeSeconds)}`}
+              aria-label={c.label
+                ? `Play from ${c.label}`
+                : `Play from cue at ${formatTimeShort(c.timeSeconds)}`}
+              className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-accent)] text-[9px] leading-none text-white opacity-0 shadow transition-opacity hover:scale-110 group-hover:opacity-95"
+            >
+              ▶
+            </button>
             {c.label && (
-              <span className="pointer-events-none absolute inset-x-1.5 top-1.5 truncate text-left text-[10px] font-semibold uppercase tracking-wide text-white opacity-0 transition-opacity group-hover:opacity-90">
+              <span className="pointer-events-none absolute left-7 right-1.5 top-1.5 truncate text-left text-[10px] font-semibold uppercase tracking-wide text-white opacity-0 transition-opacity group-hover:opacity-90">
                 {c.label}
               </span>
             )}
-          </button>
+          </div>
         )
       })}
 
-      {/* Cue markers — thin vertical lines on top of the section overlays so
-          they stay precisely clickable. Marker click also calls onCueClick. */}
+      {/* Cue markers — thin vertical lines drawn on top of the section
+          overlays. Pointer-events:none so clicks pass through to the
+          container's seek-to-click handler (clicking a marker seeks to
+          its own time, which is the same as clicking the cue's spot on
+          the bare waveform). The play-from-cue affordance is the ▶
+          button inside the section overlay, not the marker itself. */}
       {cues && duration > 0 && cues.map((c) => {
         const left = (c.timeSeconds / duration) * 100
         if (left < 0 || left > 100) return null
-        const tone = c.isAutoSuggested
-          ? 'bg-amber-400/40 hover:bg-amber-400'
-          : 'bg-emerald-400/70 hover:bg-emerald-400'
+        const tone = c.isAutoSuggested ? 'bg-amber-400/60' : 'bg-emerald-400/80'
         return (
-          <button
+          <div
             key={c.id}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (onCueClick) onCueClick(c.id)
-              else onSeek(c.timeSeconds)
-            }}
             title={c.label ? `${c.label} · ${formatTimeShort(c.timeSeconds)}` : formatTimeShort(c.timeSeconds)}
-            className={`absolute top-0 bottom-0 w-[3px] -translate-x-1/2 cursor-pointer transition-colors ${tone}`}
+            className={`pointer-events-none absolute top-0 bottom-0 w-[3px] -translate-x-1/2 ${tone}`}
             style={{ left: `${left}%` }}
             aria-label={c.label ?? `Cue at ${formatTimeShort(c.timeSeconds)}`}
           />
