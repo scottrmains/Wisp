@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { artists } from '../../api/artists'
 import type { ArtistSummary, CatalogSource, ExternalRelease } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
+import { SoulseekPanel } from '../cratedigger/SoulseekPanel'
 import { ArtistMatchModal } from './ArtistMatchModal'
 
 /// Rediscover is now routed at the App level — no `fixed inset-0` overlay,
@@ -380,6 +381,7 @@ function ReleaseRow({
 }) {
   const qc = useQueryClient()
   const [ytExpanded, setYtExpanded] = useState(false)
+  const [slskdExpanded, setSlskdExpanded] = useState(false)
   const update = useMutation({
     mutationFn: (body: { isDismissed?: boolean; isSavedForLater?: boolean }) =>
       artists.updateRelease(release.id, body),
@@ -449,6 +451,16 @@ function ReleaseRow({
               ↗
             </button>
           )}
+          {/* Soulseek search — same component Crate Digger uses, just fed the
+              release's artist + title. Useful for tracking down vinyl-only / OOP
+              material that the catalog sources only have a tracklist entry for. */}
+          <button
+            onClick={() => setSlskdExpanded((s) => !s)}
+            className="rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+            title="Search Soulseek for this release"
+          >
+            {slskdExpanded ? '▾ Soulseek' : '🎼 Soulseek'}
+          </button>
           {/* Action buttons swap based on which tab the row is rendered in.
               `library` tab is read-only — the row's already in the user's library,
               there's nothing to want/dismiss. */}
@@ -501,6 +513,11 @@ function ReleaseRow({
               allowFullScreen
             />
           </div>
+        </div>
+      )}
+      {slskdExpanded && (
+        <div className="border-t border-[var(--color-border)] px-3 pb-3">
+          <SoulseekPanel artist={artistName} title={release.title} />
         </div>
       )}
     </li>
