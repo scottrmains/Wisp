@@ -416,7 +416,7 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
           <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
             Artists · Spotify
           </h2>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {data.artists.map((a) => (
               <ArtistResultCard key={a.externalId} hit={a} />
             ))}
@@ -429,7 +429,7 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
           <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
             Videos · YouTube
           </h2>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {data.videos.map((v) => (
               <VideoResultCard key={v.videoId} hit={v} />
             ))}
@@ -449,26 +449,26 @@ function ErrorBanner({ children, tone = 'error' }: { children: React.ReactNode; 
   )
 }
 
-/// One Spotify artist hit — image + name + follower count + genres + Follow.
-/// Wired in 22d (Follow creates an ArtistProfile + matches it). For now the
-/// button is a placeholder so the layout is locked.
+/// Spotify artist hit — vertical card to match the YouTube-grid feel:
+/// circular avatar on top, name below, followers + genres beneath, Follow
+/// button at the bottom. Hover slightly raises the card so the grid feels
+/// interactive at a glance.
 function ArtistResultCard({ hit }: { hit: DiscoverArtistHit }) {
   return (
-    <div className="flex items-center gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+    <div className="group flex flex-col items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-center transition-colors hover:border-[var(--color-accent)]/40">
       {hit.imageUrl ? (
-        <img src={hit.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />
+        <img src={hit.imageUrl} alt="" className="h-24 w-24 shrink-0 rounded-full object-cover ring-1 ring-[var(--color-border)] transition-transform group-hover:scale-105" />
       ) : (
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg)] text-lg text-[var(--color-muted)]">
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg)] text-2xl text-[var(--color-muted)] ring-1 ring-[var(--color-border)]">
           {hit.name[0]?.toUpperCase()}
         </div>
       )}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{hit.name}</p>
-        <p className="truncate text-[11px] text-[var(--color-muted)]">
-          {hit.followers !== null && `${hit.followers.toLocaleString()} followers`}
-          {hit.genres.length > 0 && ` · ${hit.genres.slice(0, 3).join(', ')}`}
-        </p>
-      </div>
+      <p className="line-clamp-2 text-sm font-medium" title={hit.name}>{hit.name}</p>
+      <p className="line-clamp-2 text-[11px] text-[var(--color-muted)]">
+        {hit.followers !== null && `${hit.followers.toLocaleString()} followers`}
+        {hit.followers !== null && hit.genres.length > 0 && ' · '}
+        {hit.genres.length > 0 && hit.genres.slice(0, 2).join(', ')}
+      </p>
       <FollowButton hit={hit} />
     </div>
   )
@@ -557,20 +557,32 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
   )
 
   return (
-    <div className="flex flex-col rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="flex gap-3 p-3">
+    <div className="group flex flex-col overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] transition-colors hover:border-[var(--color-accent)]/40">
+      <div className="relative aspect-video w-full bg-[var(--color-bg)]">
         {hit.thumbnailUrl ? (
-          <img src={hit.thumbnailUrl} alt="" className="h-16 w-24 shrink-0 rounded object-cover" />
+          <img src={hit.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <div className="h-16 w-24 shrink-0 rounded bg-[var(--color-bg)]" />
+          <div className="flex h-full w-full items-center justify-center text-[var(--color-muted)]">🎬</div>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-sm font-medium" title={hit.title}>{hit.title}</p>
-          <p className="mt-0.5 truncate text-[11px] text-[var(--color-muted)]" title={hit.channelTitle}>
-            {hit.channelTitle}
-            {hit.publishedAt && ` · ${new Date(hit.publishedAt).toLocaleDateString()}`}
-          </p>
+        {/* Hover overlay — quick-action shortcut over the thumbnail. The
+            full action row lives below for keyboard / always-visible
+            access; this is the YouTube-style hover affordance. */}
+        <div className="pointer-events-none absolute inset-0 flex items-end justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            onClick={() => setExpandWatch((e) => !e)}
+            className="pointer-events-auto rounded-full bg-red-500/90 px-2 py-1 text-[10px] font-medium text-white hover:bg-red-500"
+            title="Watch on YouTube"
+          >
+            ▶
+          </button>
         </div>
+      </div>
+      <div className="flex flex-col gap-1 p-3">
+        <p className="line-clamp-2 text-sm font-medium leading-snug" title={hit.title}>{hit.title}</p>
+        <p className="truncate text-[11px] text-[var(--color-muted)]" title={hit.channelTitle}>
+          {hit.channelTitle}
+          {hit.publishedAt && ` · ${new Date(hit.publishedAt).toLocaleDateString()}`}
+        </p>
       </div>
       <div className="flex flex-wrap gap-1 border-t border-[var(--color-border)]/40 px-3 py-2">
         <button
