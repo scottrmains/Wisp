@@ -92,6 +92,7 @@ export function TrackPrepWorkspace({
   const isPlaying = usePlayer((s) => s.isPlaying)
   const togglePlay = usePlayer((s) => s.togglePlay)
   const seek = usePlayer((s) => s.seek)
+  const playTrack = usePlayer((s) => s.playTrack)
   const clear = usePlayer((s) => s.clear)
   const liveTime = usePlayer((s) => s.position)
   const liveDuration = usePlayer((s) => s.duration)
@@ -217,13 +218,17 @@ export function TrackPrepWorkspace({
           currentTime={liveTime}
           onSeek={handleSeek}
           cues={cueMarkers}
-          // Click on a cue marker → seek + jump to the Cues tab so the user can
-          // edit the label/type of the one they just clicked. Single-purpose
-          // routing — feels more discoverable than "click marker → mystery".
+          // Click on a cue marker / section → seek + start playback from that
+          // cue (matches Mixed-in-Key's "click section, play from there"
+          // pattern). If the user wants to edit a cue's label/type, the Cues
+          // tab is right there in the tab bar.
           onCueClick={(id) => {
             const c = cuesHook.cues.find((x) => x.id === id)
-            if (c) seek(c.timeSeconds)
-            switchTab('cues')
+            if (!c) return
+            // playTrack on the same id is a no-op for "load" but kicks audio
+            // back into play if it was paused; then seek lands the playhead.
+            playTrack(track.id)
+            setTimeout(() => seek(c.timeSeconds), 50)
           }}
           height={120}
         />

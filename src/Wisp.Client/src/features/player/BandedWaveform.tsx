@@ -188,10 +188,42 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           waveform unavailable
         </div>
       )}
-      {/* Cue markers — rendered BEFORE the playhead so the playhead always wins
-          when overlapping. Each marker is its own clickable strip; mousedown
-          stopPropagation so clicking the marker doesn't fall through to the
-          container's click-to-seek handler. */}
+      {/* Cue sections — wide hover regions BETWEEN markers. Hovering a section
+          highlights the area + reveals its label; clicking anywhere in the
+          section seeks (and the workspace then auto-plays from that point).
+          Mirrors the Mixed-in-Key pattern of "click a section, play from there"
+          — much easier to navigate track structure than hitting a 3px marker.
+          Sections render BEFORE markers so the markers stay clickable on top. */}
+      {cues && duration > 0 && cues.map((c, i) => {
+        const startPct = (c.timeSeconds / duration) * 100
+        const nextTime = i + 1 < cues.length ? cues[i + 1].timeSeconds : duration
+        const endPct = (nextTime / duration) * 100
+        if (startPct >= 100 || endPct <= startPct) return null
+        return (
+          <button
+            key={`section-${c.id}`}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onCueClick) onCueClick(c.id)
+              else onSeek(c.timeSeconds)
+            }}
+            title={c.label ? `Play from "${c.label}" · ${formatTimeShort(c.timeSeconds)}` : `Play from ${formatTimeShort(c.timeSeconds)}`}
+            className="group absolute top-0 bottom-0 cursor-pointer transition-colors hover:bg-[var(--color-accent)]/15"
+            style={{ left: `${startPct}%`, width: `${endPct - startPct}%` }}
+            aria-label={c.label ?? `Section starting at ${formatTimeShort(c.timeSeconds)}`}
+          >
+            {c.label && (
+              <span className="pointer-events-none absolute inset-x-1.5 top-1.5 truncate text-left text-[10px] font-semibold uppercase tracking-wide text-white opacity-0 transition-opacity group-hover:opacity-90">
+                {c.label}
+              </span>
+            )}
+          </button>
+        )
+      })}
+
+      {/* Cue markers — thin vertical lines on top of the section overlays so
+          they stay precisely clickable. Marker click also calls onCueClick. */}
       {cues && duration > 0 && cues.map((c) => {
         const left = (c.timeSeconds / duration) * 100
         if (left < 0 || left > 100) return null

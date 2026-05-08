@@ -59,8 +59,9 @@ const CUE_TYPES = ['FirstBeat', 'Intro', 'MixIn', 'Breakdown', 'Drop', 'VocalIn'
 type CueTypeName = typeof CUE_TYPES[number]
 
 export function CuesTab({ track }: { track: Track }) {
-  const { cues, loading, update, remove } = useCues(track.id)
+  const { cues, loading, update, remove, generatePhraseMarkers } = useCues(track.id)
   const seek = usePlayer((s) => s.seek)
+  const position = usePlayer((s) => s.position)
   const playerTrackId = usePlayer((s) => s.trackId)
   const playTrack = usePlayer((s) => s.playTrack)
 
@@ -69,17 +70,73 @@ export function CuesTab({ track }: { track: Track }) {
     setTimeout(() => seek(timeSeconds), 50)
   }
 
+  /// "Generate phrases" anchors at the current playhead and walks the rest of
+  /// the track at 16-beat (4-bar) intervals using the track's BPM. Mirrors the
+  /// MiK pattern: pause at the kick on bar 1, click generate, the rest of the
+  /// markers extrapolate from there. No DSP needed because dance music holds
+  /// its grid throughout a tagged BPM.
+  const phraseAnchorTime = playerTrackId === track.id && position > 0 ? position : 0
+  const handleGeneratePhrases = () => {
+    if (track.bpm === null) return
+    if (cues.some((c) => c.isAutoSuggested) && !window.confirm(
+      'This track already has auto-generated phrase markers. Generate again will keep them and add more — clear them first via the trash icon if you want a fresh set. Continue?',
+    )) return
+    generatePhraseMarkers.mutate({
+      firstBeatSeconds: phraseAnchorTime,
+      stepBeats: 16,
+      replaceExisting: false,
+    })
+  }
+
+  // Header — "Generate phrases" is always available; cue list renders below.
+  // We don't gate the header behind cues.length > 0 because the empty state
+  // is the most common moment the user wants to use generate.
+  const header = track.bpm !== null && (
+    <div className="flex items-center gap-2 border-b border-[var(--color-border)]/40 px-5 py-2 text-xs">
+      <span className="text-[var(--color-muted)]">Anchor at</span>
+      <span className="tabular-nums text-white">{formatDuration(phraseAnchorTime)}</span>
+      <span className="text-[var(--color-muted)]">
+        · {Number(track.bpm).toFixed(0)} BPM · 16-beat phrases
+      </span>
+      <button
+        onClick={handleGeneratePhrases}
+        disabled={generatePhraseMarkers.isPending}
+        className="ml-auto rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+        title="Use the current playhead as the first beat; extrapolate phrase markers across the rest of the track using the BPM"
+      >
+        {generatePhraseMarkers.isPending ? 'Generating…' : '✨ Generate phrases'}
+      </button>
+    </div>
+  )
+
   if (loading) return <p className="px-5 py-6 text-sm text-[var(--color-muted)]">Loading cues…</p>
   if (cues.length === 0) {
     return (
-      <p className="px-5 py-6 text-sm text-[var(--color-muted)]">
-        No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>＋ Cue</strong> in the action row.
-      </p>
+      <div>
+        {header}
+        <div className="space-y-2 px-5 py-6 text-sm text-[var(--color-muted)]">
+          <p>
+            No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>＋ Cue</strong> in the action row.
+          </p>
+          {track.bpm !== null && (
+            <p className="text-xs">
+              For phrase markers across the whole track: pause at the kick on bar 1, then click <strong>✨ Generate phrases</strong> above — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
+            </p>
+          )}
+          {track.bpm === null && (
+            <p className="text-xs italic">
+              "Generate phrases" needs a BPM tag on this track. Add one via the cleanup flow first.
+            </p>
+          )}
+        </div>
+      </div>
     )
   }
 
   return (
-    <ul className="overflow-auto py-1">
+    <div>
+      {header}
+      <ul className="overflow-auto py-1">
       {cues.map((c, i) => (
         <li
           key={c.id}
@@ -132,7 +189,8 @@ export function CuesTab({ track }: { track: Track }) {
           </button>
         </li>
       ))}
-    </ul>
+      </ul>
+    </div>
   )
 }
 
