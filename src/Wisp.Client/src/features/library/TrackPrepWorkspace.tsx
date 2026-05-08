@@ -127,12 +127,24 @@ export function TrackPrepWorkspace({
 
   const handleSeek = (t: number) => seek(t)
 
-  // Adds a cue at the current playhead. `Custom` is the safe default type — the
-  // user can change it from the Cues tab or by clicking the marker. We don't
-  // try to be clever about which cue type to default to; classifying drops/
-  // breakdowns is its own feature (auto-detection in the spec for v2).
-  const addCueAtPlayhead = () => {
-    if (!trackId || liveTime <= 0) return
+  // Hover time on the waveform — populated whenever the cursor is over the
+  // BandedWaveform (and therefore the magnifier is showing). Q reads this
+  // first so you can hover-and-tap to drop a cue at the precise hovered
+  // position instead of the playhead. Lives in a ref so the keydown handler
+  // doesn't have to re-bind on every mouse move.
+  const hoverTimeRef = useRef<number | null>(null)
+
+  // Adds a cue at the magnifier's hover position when active, otherwise at
+  // the current playhead. `Custom` is the safe default type — the user can
+  // change it from the Cues tab or by clicking the marker.
+  const addCueAtCursorOrPlayhead = () => {
+    if (!trackId) return
+    const hoverTime = hoverTimeRef.current
+    if (hoverTime !== null && hoverTime >= 0) {
+      cuesHook.create.mutate({ timeSeconds: hoverTime, type: 'Custom' })
+      return
+    }
+    if (liveTime <= 0) return
     cuesHook.create.mutate({ timeSeconds: liveTime, type: 'Custom' })
   }
 
@@ -204,7 +216,8 @@ export function TrackPrepWorkspace({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackId, cuesHook.loading])
 
-  // Hotkeys: Q adds a cue at playhead, 1-8 jump to the Nth cue.
+  // Hotkeys: Q adds a cue (at the magnifier hover position if the cursor is
+  // over the waveform, otherwise at the playhead); 1-8 jump to the Nth cue.
   // Skipped while the user is typing in inputs (notes textarea, tag input, etc.)
   // so they don't fire when the user means to type Q or a digit.
   useEffect(() => {
@@ -213,7 +226,7 @@ export function TrackPrepWorkspace({
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       if (e.key === 'q' || e.key === 'Q') {
-        addCueAtPlayhead()
+        addCueAtCursorOrPlayhead()
         e.preventDefault()
         return
       }
@@ -300,6 +313,7 @@ export function TrackPrepWorkspace({
             playTrack(track.id)
             setTimeout(() => seek(c.timeSeconds), 50)
           }}
+          onHoverChange={(t) => { hoverTimeRef.current = t }}
           height={120}
         />
         <div className="absolute right-4 top-4 flex items-center gap-1">
@@ -360,8 +374,8 @@ export function TrackPrepWorkspace({
           </ActionButton>
         )}
         <ActionButton
-          onClick={addCueAtPlayhead}
-          title="Add a cue at the current playhead position (or press Q)"
+          onClick={addCueAtCursorOrPlayhead}
+          title="Add a cue at the hovered waveform position (or playhead). Same as pressing Q."
         >
           ＋ Cue
         </ActionButton>

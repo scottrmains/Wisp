@@ -31,6 +31,11 @@ export function useCues(trackId: string | null) {
     onSuccess: invalidate,
   })
 
+  const removeAll = useMutation({
+    mutationFn: () => api.deleteAll(trackId!),
+    onSuccess: invalidate,
+  })
+
   const generatePhraseMarkers = useMutation({
     mutationFn: (body: { firstBeatSeconds: number; stepBeats?: number; replaceExisting?: boolean }) =>
       api.generatePhraseMarkers(trackId!, body),
@@ -43,6 +48,7 @@ export function useCues(trackId: string | null) {
     create,
     update,
     remove,
+    removeAll,
     generatePhraseMarkers,
   }
 }

@@ -11,6 +11,7 @@ public static class CueEndpoints
         app.MapGet("/api/tracks/{trackId:guid}/cues", List);
         app.MapPost("/api/tracks/{trackId:guid}/cues", Create);
         app.MapPost("/api/tracks/{trackId:guid}/cues/phrase-markers", GeneratePhraseMarkers);
+        app.MapDelete("/api/tracks/{trackId:guid}/cues", DeleteAllForTrack);
         app.MapPatch("/api/cues/{id:guid}", Update);
         app.MapDelete("/api/cues/{id:guid}", Delete);
         return app;
@@ -76,6 +77,13 @@ public static class CueEndpoints
         db.CuePoints.Remove(cue);
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> DeleteAllForTrack(Guid trackId, WispDbContext db, CancellationToken ct)
+    {
+        if (!await db.Tracks.AnyAsync(t => t.Id == trackId, ct)) return Results.NotFound();
+        var rows = await db.CuePoints.Where(c => c.TrackId == trackId).ExecuteDeleteAsync(ct);
+        return Results.Ok(new { deleted = rows });
     }
 
     private static async Task<IResult> GeneratePhraseMarkers(

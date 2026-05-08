@@ -16,6 +16,8 @@ export const cues = {
 
   delete: (id: string) => apiDelete(`/api/cues/${id}`),
 
+  deleteAll: (trackId: string) => apiDelete<{ deleted: number }>(`/api/tracks/${trackId}/cues`),
+
   generatePhraseMarkers: (
     trackId: string,
     body: { firstBeatSeconds: number; stepBeats?: number; replaceExisting?: boolean },

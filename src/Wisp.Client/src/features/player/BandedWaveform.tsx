@@ -24,6 +24,10 @@ interface Props {
   onCueClick?: (cueId: string) => void
   /// Pixel height of the waveform area. Defaults to 80 to match the mini-player layout.
   height?: number
+  /// Fires when the user hovers over the waveform with timestamp at the cursor,
+  /// or null when the cursor leaves. Lets the parent (workspace) wire hotkeys
+  /// like Q to "place a cue at the hovered position" instead of the playhead.
+  onHoverChange?: (timeSeconds: number | null) => void
 }
 
 /// Mixed-in-Key style multi-band waveform for the mini-player.
@@ -32,7 +36,7 @@ interface Props {
 /// Click anywhere to seek; vertical playhead overlays the current position.
 ///
 /// While peaks are computing, falls back to a thin baseline so the click-to-seek still works.
-export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80 }: Props) {
+export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [peaks, setPeaks] = useState<BandedPeaks | null>(() => getCachedBandedPeaks(trackId) ?? null)
@@ -43,6 +47,13 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
   // in-canvas guide line); `clientX/clientY` are viewport coords for the
   // portal-rendered magnifier. `time` is the timestamp under the cursor.
   const [cursor, setCursor] = useState<{ x: number; clientX: number; clientY: number; time: number } | null>(null)
+  // Mirror of `cursor != null` for the native wheel listener to read without
+  // forcing a listener re-attach on every mousemove.
+  const cursorActiveRef = useRef(false)
+  // Magnifier zoom level — total seconds visible in the popover. Scroll
+  // wheel adjusts this between MIN/MAX_WINDOW so the user can zoom in to
+  // sub-second precision when they need it.
+  const [magnifierWindowSec, setMagnifierWindowSec] = useState(MAGNIFIER_DEFAULT_WINDOW)
   // Tracks the container's measured width so the canvas redraws when the
   // wrapper toggles visibility (display:none → block goes 0 → realW, which
   // ResizeObserver reports as a resize). Without this, the canvas stays at
@@ -175,9 +186,39 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
     const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
     const time = (x / rect.width) * duration
     setCursor({ x, clientX: e.clientX, clientY: e.clientY, time })
+    cursorActiveRef.current = true
+    onHoverChange?.(time)
   }
 
-  const handleMouseLeave = () => setCursor(null)
+  const handleMouseLeave = () => {
+    setCursor(null)
+    cursorActiveRef.current = false
+    onHoverChange?.(null)
+  }
+
+  // Wheel-to-zoom on the magnifier. React's synthetic onWheel listeners are
+  // attached as passive in modern React, which means preventDefault() is a
+  // no-op — the page would scroll behind the waveform. Attach the wheel
+  // listener natively with passive:false so we can stop the default scroll
+  // when the cursor is over the waveform. Reads cursor state via ref so
+  // mousemove churn doesn't re-attach this listener every frame.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!cursorActiveRef.current) return
+      e.preventDefault()
+      // deltaY positive = scroll down (mousewheel away) → zoom out (larger window).
+      // Negative = scroll up (toward user) → zoom in. Multiplicative step gives
+      // even feel across the zoom range.
+      const factor = e.deltaY > 0 ? MAGNIFIER_WHEEL_FACTOR : 1 / MAGNIFIER_WHEEL_FACTOR
+      setMagnifierWindowSec((prev) =>
+        Math.max(MAGNIFIER_MIN_WINDOW, Math.min(MAGNIFIER_MAX_WINDOW, prev * factor)),
+      )
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   const playheadPct = duration > 0 ? (currentTime / duration) * 100 : 0
 
@@ -301,6 +342,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           cursorTime={cursor.time}
           clientX={cursor.clientX}
           clientY={cursor.clientY}
+          windowSec={magnifierWindowSec}
         />
       )}
     </div>
@@ -313,13 +355,19 @@ interface MagnifierProps {
   cursorTime: number
   clientX: number
   clientY: number
+  /// Total seconds visible inside the magnifier (zoom level). Smaller = more
+  /// zoomed in. Driven by the parent's wheel handler.
+  windowSec: number
 }
 
 const MAGNIFIER_WIDTH = 280
 const MAGNIFIER_HEIGHT = 70
-const MAGNIFIER_WINDOW_SECONDS = 6
+const MAGNIFIER_DEFAULT_WINDOW = 6
+const MAGNIFIER_MIN_WINDOW = 0.5
+const MAGNIFIER_MAX_WINDOW = 30
+const MAGNIFIER_WHEEL_FACTOR = 1.2
 
-function Magnifier({ peaks, duration, cursorTime, clientX, clientY }: MagnifierProps) {
+function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec }: MagnifierProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -343,9 +391,7 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY }: MagnifierP
     const maxHigh = arrayMax(peaks.high) || 1
     const mid = MAGNIFIER_HEIGHT / 2
 
-    const startTime = cursorTime - MAGNIFIER_WINDOW_SECONDS / 2
-    const endTime = cursorTime + MAGNIFIER_WINDOW_SECONDS / 2
-    const windowSec = endTime - startTime
+    const startTime = cursorTime - windowSec / 2
 
     // Bar pitch chosen so we always have visible bars even when one bucket
     // covers many pixels at this zoom level.
@@ -374,7 +420,7 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY }: MagnifierP
     // Centre crosshair — marks the exact time the cursor is on.
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
     ctx.fillRect(MAGNIFIER_WIDTH / 2 - 0.5, 0, 1, MAGNIFIER_HEIGHT)
-  }, [peaks, duration, cursorTime])
+  }, [peaks, duration, cursorTime, windowSec])
 
   // Position the popover via fixed coords on the viewport. Place it just
   // above the cursor; flip to below when the cursor is near the top of the
@@ -395,7 +441,7 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY }: MagnifierP
     >
       <canvas ref={canvasRef} className="block" />
       <div className="border-t border-white/10 px-2 py-0.5 text-center font-mono text-[10px] text-white/80">
-        🔍 {formatTimeFine(cursorTime)} · ±{(MAGNIFIER_WINDOW_SECONDS / 2).toFixed(1)}s
+        🔍 {formatTimeFine(cursorTime)} · ±{(windowSec / 2).toFixed(windowSec < 2 ? 2 : 1)}s · scroll to zoom
       </div>
     </div>,
     document.body,

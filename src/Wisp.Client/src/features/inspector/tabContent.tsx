@@ -60,7 +60,7 @@ const CUE_TYPES = ['FirstBeat', 'Intro', 'MixIn', 'Breakdown', 'Drop', 'VocalIn'
 type CueTypeName = typeof CUE_TYPES[number]
 
 export function CuesTab({ track }: { track: Track }) {
-  const { cues, loading, update, remove, generatePhraseMarkers } = useCues(track.id)
+  const { cues, loading, update, remove, removeAll, generatePhraseMarkers } = useCues(track.id)
   const seek = usePlayer((s) => s.seek)
   const position = usePlayer((s) => s.position)
   const playerTrackId = usePlayer((s) => s.trackId)
@@ -110,6 +110,14 @@ export function CuesTab({ track }: { track: Track }) {
     })
   }
 
+  const handleClearAll = () => {
+    if (cues.length === 0) return
+    if (!window.confirm(
+      `Delete all ${cues.length} cue${cues.length === 1 ? '' : 's'} on this track? This can't be undone.`,
+    )) return
+    removeAll.mutate()
+  }
+
   // Header is always rendered (so the user always sees the generate-phrases
   // affordance). When the track has no BPM tag, the button is disabled with a
   // tooltip explaining why — more discoverable than hiding the whole strip.
@@ -138,16 +146,28 @@ export function CuesTab({ track }: { track: Track }) {
       <span className="text-[var(--color-muted)]">
         {noBpm ? '· no BPM tag' : `· ${Number(track.bpm).toFixed(0)} BPM · 16-beat phrases`}
       </span>
-      <button
-        onClick={handleGeneratePhrases}
-        disabled={noBpm || generatePhraseMarkers.isPending}
-        className="ml-auto rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
-        title={noBpm
-          ? 'Track has no BPM tag — Wisp can\'t extrapolate phrase positions. Add a BPM via cleanup first.'
-          : 'Generate phrase markers across the track using the anchor + the BPM tag'}
-      >
-        {generatePhraseMarkers.isPending ? 'Generating…' : '✨ Generate phrases'}
-      </button>
+      <div className="ml-auto flex items-center gap-1.5">
+        <button
+          onClick={handleClearAll}
+          disabled={cues.length === 0 || removeAll.isPending}
+          className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-muted)] hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted)]"
+          title={cues.length === 0
+            ? 'No cues to delete'
+            : `Delete all ${cues.length} cues on this track`}
+        >
+          {removeAll.isPending ? 'Clearing…' : '🗑 Clear all'}
+        </button>
+        <button
+          onClick={handleGeneratePhrases}
+          disabled={noBpm || generatePhraseMarkers.isPending}
+          className="rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
+          title={noBpm
+            ? 'Track has no BPM tag — Wisp can\'t extrapolate phrase positions. Add a BPM via cleanup first.'
+            : 'Generate phrase markers across the track using the anchor + the BPM tag'}
+        >
+          {generatePhraseMarkers.isPending ? 'Generating…' : '✨ Generate phrases'}
+        </button>
+      </div>
     </div>
   )
 
