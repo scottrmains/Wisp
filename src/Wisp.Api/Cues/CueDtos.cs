@@ -28,5 +28,5 @@ public sealed record UpdateCueRequest(
 
 public sealed record GeneratePhraseMarkersRequest(
     double FirstBeatSeconds,
-    int StepBeats = 16,
+    int StepBeats = 64,
     bool ReplaceExisting = true);

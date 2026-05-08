@@ -105,7 +105,7 @@ export function CuesTab({ track }: { track: Track }) {
     )) return
     generatePhraseMarkers.mutate({
       firstBeatSeconds: phraseAnchorTime,
-      stepBeats: 16,
+      stepBeats: 64,
       replaceExisting: false,
     })
   }

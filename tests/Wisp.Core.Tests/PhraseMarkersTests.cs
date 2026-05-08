@@ -7,8 +7,10 @@ public class PhraseMarkersTests
     [Fact]
     public void Spec_example_at_126_bpm_matches_to_within_1ms()
     {
-        // From spec §8: 1 beat = 0.476s; 32 beats = 15.23s; 64 beats = 30.47s
-        var markers = PhraseMarkers.Generate(0, 126m, 60).ToList();
+        // From spec §8: 1 beat = 0.476s; 32 beats = 15.23s; 64 beats = 30.47s.
+        // Use stepBeats: 16 here so beats 32 and 64 are both emitted independent
+        // of the default phrase step (now 64).
+        var markers = PhraseMarkers.Generate(0, 126m, 60, stepBeats: 16).ToList();
 
         var beat32 = markers.First(m => m.BeatNumber == 32);
         Assert.InRange(beat32.TimeSeconds, 15.237, 15.239);
@@ -21,7 +23,7 @@ public class PhraseMarkersTests
     public void Offsets_from_first_beat_position()
     {
         // First beat at 0.5s, 120 BPM = 0.5s/beat. Beat 16 = 0.5 + 8 = 8.5s.
-        var markers = PhraseMarkers.Generate(firstBeatSec: 0.5, bpm: 120m, trackDurationSec: 60).ToList();
+        var markers = PhraseMarkers.Generate(firstBeatSec: 0.5, bpm: 120m, trackDurationSec: 60, stepBeats: 16).ToList();
         Assert.Equal(8.5, markers.First(m => m.BeatNumber == 16).TimeSeconds, precision: 6);
     }
 

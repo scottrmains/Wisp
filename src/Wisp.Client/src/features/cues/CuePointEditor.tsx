@@ -36,7 +36,7 @@ export function CuePointEditor({ trackId, hasBpm, currentTime, onSeek }: Props) 
 
   const generate = () => {
     const firstBeat = firstBeatCue?.timeSeconds ?? currentTime
-    generatePhraseMarkers.mutate({ firstBeatSeconds: firstBeat, stepBeats: 16, replaceExisting: true })
+    generatePhraseMarkers.mutate({ firstBeatSeconds: firstBeat, stepBeats: 64, replaceExisting: true })
   }
 
   return (

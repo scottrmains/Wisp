@@ -12,6 +12,7 @@ import { RecommendationsList } from './RecommendationPanel'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
 import { formatDuration } from './format'
 import { detectFirstBeatFromPeaks, loadBandedPeaks } from '../../audio/peaks'
+import { detectStructuralCues } from '../../audio/structure'
 
 interface Props {
   /// Drives off the App-level player state — workspace appears whenever a track
@@ -135,50 +136,73 @@ export function TrackPrepWorkspace({
     cuesHook.create.mutate({ timeSeconds: liveTime, type: 'Custom' })
   }
 
-  // Auto-drop a FirstBeat cue the first time we see a track in the workspace.
-  // Walks the cached banded peaks (loading them if needed) and finds the first
-  // low-band sample exceeding 50% of the loudest kick — typically lands on bar 1
-  // for produced dance music. Marker renders as the amber "auto-suggested" tone
-  // so the user knows to verify it; clicking edits demote it via PATCH.
+  // Auto-drop structural cues the first time we see a track in the workspace.
+  // Walks the cached banded peaks (loading them if needed) to find:
+  //   • FirstBeat — first low-band sample exceeding 50% of loudest kick
+  //   • Breakdown / Drop / Outro — structurally meaningful energy boundaries,
+  //     snapped to a 16-bar phrase grid (see audio/structure.ts)
   //
-  // Tracks attempts in a ref keyed by trackId so we don't re-create the cue if
-  // the user deletes it. Skips when a FirstBeat cue already exists (manual or
-  // prior auto-suggest), or when cues haven't loaded yet, or peaks fail.
-  const autoFirstBeatAttemptedRef = useRef<Set<string>>(new Set())
+  // Replaces the dumb every-N-beats grid the old "Generate phrases" produced.
+  // Auto-suggested markers render amber so the user knows to verify them; any
+  // edit demotes them to "approved" via the PATCH endpoint.
+  //
+  // Tracks attempts in a ref keyed by trackId so we don't re-create the cues
+  // if the user deletes them. Skips when the track already has any auto cues
+  // for that role, when cues haven't loaded yet, or when peaks fail.
+  const autoCueAttemptedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (!trackId || !track) return
     if (cuesHook.loading) return
-    if (autoFirstBeatAttemptedRef.current.has(trackId)) return
-    if (cuesHook.cues.some((c) => c.type === 'FirstBeat')) {
-      // Already has one — record the attempt so we don't keep checking.
-      autoFirstBeatAttemptedRef.current.add(trackId)
-      return
-    }
+    if (autoCueAttemptedRef.current.has(trackId)) return
+
     let cancelled = false
     const tid = trackId
+    autoCueAttemptedRef.current.add(tid)
+
+    const hasFirstBeat = cuesHook.cues.some((c) => c.type === 'FirstBeat')
+    const hasStructural = cuesHook.cues.some((c) => c.type === 'Drop' || c.type === 'Breakdown' || c.type === 'Outro')
+
     loadBandedPeaks(tid)
       .then((peaks) => {
         if (cancelled) return
-        if (autoFirstBeatAttemptedRef.current.has(tid)) return
-        const detected = detectFirstBeatFromPeaks(peaks, track.durationSeconds)
-        if (detected === null) return
-        autoFirstBeatAttemptedRef.current.add(tid)
-        cuesHook.create.mutate({
-          timeSeconds: detected,
-          type: 'FirstBeat',
-          isAutoSuggested: true,
-          label: 'First beat (auto)',
-        })
+        const detectedFirstBeat = detectFirstBeatFromPeaks(peaks, track.durationSeconds)
+
+        if (!hasFirstBeat && detectedFirstBeat !== null) {
+          cuesHook.create.mutate({
+            timeSeconds: detectedFirstBeat,
+            type: 'FirstBeat',
+            isAutoSuggested: true,
+            label: 'First beat (auto)',
+          })
+        }
+
+        // Structural detection needs both BPM (for bar-line snapping) and a
+        // first-beat anchor (use the existing cue if present, else the freshly
+        // detected one). Without either we can't snap, so skip — the user can
+        // tag BPM and reload to retry.
+        const anchor = cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds
+          ?? detectedFirstBeat
+        if (!hasStructural && track.bpm && anchor !== null && anchor !== undefined) {
+          const structural = detectStructuralCues(peaks, track.durationSeconds, track.bpm, anchor)
+          for (const cue of structural) {
+            cuesHook.create.mutate({
+              timeSeconds: cue.timeSeconds,
+              type: cue.type,
+              isAutoSuggested: true,
+              label: cue.label,
+            })
+          }
+        }
       })
       .catch(() => {
-        // Peaks compute failed — give up silently. Don't poison the ref so
-        // a later page reload could retry.
+        // Peaks compute failed — give up silently. Refreshing the page will
+        // hit the cache or retry, so no need to poison the attempted set.
       })
     return () => {
       cancelled = true
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId, cuesHook.loading, cuesHook.cues.length])
+  }, [trackId, cuesHook.loading])
 
   // Hotkeys: Q adds a cue at playhead, 1-8 jump to the Nth cue.
   // Skipped while the user is typing in inputs (notes textarea, tag input, etc.)
