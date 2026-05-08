@@ -202,19 +202,7 @@ public static class DiscoverEndpoints
         // Cache check first so today's repeat queries don't even reach the
         // budget. Trim+lowercase normalisation handled inside the tracker.
         var cached = quota.TryGetCached(query);
-        if (cached is not null)
-        {
-            return cached
-                .Select(h => new DiscoverVideoHit(
-                    Source: "YouTube",
-                    VideoId: h.VideoId,
-                    Title: h.Title,
-                    ChannelTitle: h.ChannelTitle,
-                    Url: h.Url,
-                    ThumbnailUrl: h.ThumbnailUrl,
-                    PublishedAt: h.PublishedAt))
-                .ToArray();
-        }
+        if (cached is not null) return cached.Select(ToDto).ToArray();
 
         if (!youTube.IsConfigured)
         {
@@ -222,42 +210,97 @@ public static class DiscoverEndpoints
             return [];
         }
 
-        // Budget check before spending the unit. When exhausted, surface a
-        // distinct error code so the UI can render the "out of quota" banner.
+        // Two parallel YouTube paths feed the result block:
+        //   1) `SearchVideosAsync` — general video search, music-category-
+        //      filtered. Catches non-Topic content (mixes, fan uploads of
+        //      track IDs, edits) and unmatched track-name queries.
+        //   2) `GetArtistTopicUploadsAsync` — resolves the artist's Topic
+        //      channel and lists its uploads. This is the path that turns
+        //      "Jasper Tygner" from "5 unrelated mix recordings" into
+        //      "his actual catalogue" because Topic channels carry the
+        //      official licensed releases.
+        // Both consume one search.list call (100 units each). We charge
+        // the budget once per overall request and let YouTube's own quota
+        // surface the hard cap if we ever overshoot.
         if (!quota.TryConsume())
         {
             errors.Add("youtube_quota_exhausted");
             return [];
         }
 
-        try
+        var videoTask = TryAsync(() => youTube.SearchVideosAsync(query, limit: 10, ct), log, "YouTube video search");
+        var topicTask = TryAsync(() => youTube.GetArtistTopicUploadsAsync(query, maxUploads: 50, ct), log, "YouTube Topic uploads");
+
+        var videos = await videoTask;
+        var topic = await topicTask;
+
+        if (videos is null && topic is null)
         {
-            var hits = await youTube.SearchVideosAsync(query, limit: 10, ct);
-            quota.Cache(query, hits);
-            return hits
-                .Select(h => new DiscoverVideoHit(
-                    Source: "YouTube",
-                    VideoId: h.VideoId,
-                    Title: h.Title,
-                    ChannelTitle: h.ChannelTitle,
-                    Url: h.Url,
-                    ThumbnailUrl: h.ThumbnailUrl,
-                    PublishedAt: h.PublishedAt))
-                .ToArray();
-        }
-        catch (YouTubeQuotaExceededException)
-        {
-            // The API returned 403 quotaExceeded — cap our local counter so
-            // we stop trying for the rest of the day.
-            errors.Add("youtube_quota_exhausted");
-            return [];
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            log.LogWarning(ex, "YouTube search for '{Query}' failed", query);
+            // Both calls threw — surface as failure so UI can show the banner.
             errors.Add("youtube_failed");
             return [];
         }
+
+        // Detect quota exhaustion via the dedicated exception → cap our
+        // local counter so subsequent requests skip cleanly.
+        if (videos is QuotaExhaustedSentinel || topic is QuotaExhaustedSentinel)
+        {
+            errors.Add("youtube_quota_exhausted");
+            // Continue with whichever side did succeed.
+        }
+
+        var videoHits = videos is QuotaExhaustedSentinel ? [] : videos ?? [];
+        var topicHits = topic is QuotaExhaustedSentinel ? [] : topic ?? [];
+
+        // Topic uploads first — they're the more relevant "this is the
+        // artist's catalogue" hits. Then the looser video search rows
+        // backfill via a videoId-keyed dedupe.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var merged = new List<YouTubeVideoHit>(topicHits.Count + videoHits.Count);
+        foreach (var h in topicHits)
+            if (seen.Add(h.VideoId)) merged.Add(h);
+        foreach (var h in videoHits)
+            if (seen.Add(h.VideoId)) merged.Add(h);
+
+        // Cap the merged list — too many rows turn the page into a wall
+        // of thumbnails. 24 is enough for two grid rows on a wide screen
+        // plus a bit more.
+        var capped = merged.Take(24).ToArray();
+        quota.Cache(query, capped);
+        return capped.Select(ToDto).ToArray();
     }
+
+    /// Wrapper used to flag quota-exhausted vs other failures from the
+    /// parallel YouTube tasks without throwing across `await Task.WhenAll`.
+    private sealed class QuotaExhaustedSentinel : List<YouTubeVideoHit> { }
+
+    private static async Task<IReadOnlyList<YouTubeVideoHit>?> TryAsync(
+        Func<Task<IReadOnlyList<YouTubeVideoHit>>> action,
+        ILogger log,
+        string label)
+    {
+        try
+        {
+            return await action();
+        }
+        catch (YouTubeQuotaExceededException)
+        {
+            return new QuotaExhaustedSentinel();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "{Label} failed", label);
+            return null;
+        }
+    }
+
+    private static DiscoverVideoHit ToDto(YouTubeVideoHit h) => new(
+        Source: "YouTube",
+        VideoId: h.VideoId,
+        Title: h.Title,
+        ChannelTitle: h.ChannelTitle,
+        Url: h.Url,
+        ThumbnailUrl: h.ThumbnailUrl,
+        PublishedAt: h.PublishedAt);
 }
 

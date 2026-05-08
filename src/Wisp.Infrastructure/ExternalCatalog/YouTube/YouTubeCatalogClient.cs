@@ -108,16 +108,19 @@ public sealed class YouTubeCatalogClient(
 
     /// Free-text video search used by Discover ("Anywhere" mode). 100 quota
     /// units per call — same shape as SearchTopicChannelsAsync, just with
-    /// `type=video`. Caller (DiscoverEndpoints + YouTubeQuotaTracker) is
-    /// responsible for caching + budgeting; this method just talks to the
-    /// API and shapes the result.
+    /// `type=video`. Filtered to YouTube's Music category (id=10) which
+    /// strongly biases toward Topic-channel uploads + actual music videos
+    /// over fan reaction content / interviews / mix recordings.
+    /// Caller (DiscoverEndpoints + YouTubeQuotaTracker) is responsible for
+    /// caching + budgeting; this method just talks to the API and shapes
+    /// the result.
     public async Task<IReadOnlyList<YouTubeVideoHit>> SearchVideosAsync(
         string query, int limit, CancellationToken ct)
     {
         if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
 
         var http = httpFactory.CreateClient("Wisp.YouTube");
-        var url = $"{ApiBase}/search?part=snippet&type=video&maxResults={Math.Clamp(limit, 1, 25)}" +
+        var url = $"{ApiBase}/search?part=snippet&type=video&videoCategoryId=10&maxResults={Math.Clamp(limit, 1, 25)}" +
                   $"&q={Uri.EscapeDataString(query)}&key={Uri.EscapeDataString(options.ApiKey!)}";
 
         using var resp = await http.GetAsync(url, ct);
@@ -137,6 +140,55 @@ public sealed class YouTubeCatalogClient(
                 ThumbnailUrl: i.Snippet?.Thumbnails?.Medium?.Url ?? i.Snippet?.Thumbnails?.Default?.Url,
                 PublishedAt: i.Snippet?.PublishedAt,
                 Description: i.Snippet?.Description))
+            .ToArray();
+    }
+
+    /// Resolve an artist's Topic channel and pull recent uploads as
+    /// YouTubeVideoHit-shaped rows. Topic channels are auto-generated from
+    /// licensed music feeds, so their uploads are the artist's actual
+    /// catalogue — way more relevant for Discover than what `search.list`
+    /// returns from general YouTube. Used alongside SearchVideosAsync; the
+    /// two are merged + deduped server-side so the user gets both Topic
+    /// catalogue and looser video matches in one result block.
+    ///
+    /// Cost: 100 units (channel search) + 1 unit (channel resolve) + 1 per
+    /// page of 50 uploads. So ~102 units to grab the latest 50 uploads,
+    /// 103 for 100, etc.
+    ///
+    /// Returns an empty array when no Topic channel matches — the caller
+    /// shouldn't treat that as an error, just a "no Topic catalogue" case.
+    public async Task<IReadOnlyList<YouTubeVideoHit>> GetArtistTopicUploadsAsync(
+        string artistName, int maxUploads, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+
+        // Re-use the existing Phase 8b helper that already biases toward
+        // "ARTIST - Topic" channels.
+        var channels = await SearchTopicChannelsAsync(artistName, limit: 1, ct);
+        if (channels.Count == 0) return [];
+
+        var topic = channels[0];
+        // Only treat it as a real Topic channel hit if the channel name
+        // contains the artist or is suffixed with " - Topic". Otherwise
+        // SearchTopicChannelsAsync may have fallen back to a general
+        // channel match that isn't actually the artist's catalogue.
+        var looksLikeTopic = topic.Name.Contains("- Topic", StringComparison.OrdinalIgnoreCase)
+            || topic.Name.Equals(artistName, StringComparison.OrdinalIgnoreCase);
+        if (!looksLikeTopic) return [];
+
+        var uploads = await GetTopicChannelUploadsAsync(topic.ExternalId, ct, maxItems: maxUploads);
+        return uploads
+            .Select(u => new YouTubeVideoHit(
+                VideoId: u.VideoId,
+                Title: u.Title,
+                // The Topic channel name is what the upload's `channelTitle`
+                // would show — synthesise it from the channel hit so the
+                // card label reads "Jasper Tygner - Topic" not "(unknown)".
+                ChannelTitle: topic.Name,
+                Url: u.Url,
+                ThumbnailUrl: u.ThumbnailUrl,
+                PublishedAt: u.PublishedAt,
+                Description: u.Description))
             .ToArray();
     }
 
