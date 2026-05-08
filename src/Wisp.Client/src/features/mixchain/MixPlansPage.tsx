@@ -16,6 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { MixPlanTrack, Track } from '../../api/types'
+import { confirmDialog, promptDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
 import { formatBpm } from '../library/format'
 import { PreviewDialog } from '../preview/PreviewDialog'
@@ -82,13 +83,24 @@ export function MixPlansPage() {
   }
 
   const handleCreate = async () => {
-    const name = window.prompt('Mix plan name', `Mix ${new Date().toLocaleDateString()}`)
-    if (!name?.trim()) return
-    await create.mutateAsync(name.trim())
+    const name = await promptDialog({
+      title: 'New mix plan',
+      message: 'Give the plan a name — you can rename it later.',
+      defaultValue: `Mix ${new Date().toLocaleDateString()}`,
+      placeholder: 'Plan name',
+      confirmLabel: 'Create',
+    })
+    if (!name) return
+    await create.mutateAsync(name)
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Delete "${name}"?`)) return
+    const ok = await confirmDialog({
+      title: `Delete "${name}"?`,
+      message: 'The mix plan and its track ordering will be removed. The tracks themselves stay in your library.',
+      danger: true,
+    })
+    if (!ok) return
     await remove.mutateAsync(id)
   }
 

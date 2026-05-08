@@ -4,6 +4,7 @@ import { tracks as tracksApi } from '../../api/library'
 import { tags as tagsApi } from '../../api/tags'
 import type { TagType, Track, TrackTag } from '../../api/types'
 import { detectFirstBeatFromPeaks, getCachedBandedPeaks } from '../../audio/peaks'
+import { confirmDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
 import { useCues } from '../cues/useCues'
 import { formatBpm, formatDuration } from '../library/format'
@@ -98,11 +99,16 @@ export function CuesTab({ track }: { track: Track }) {
     detectedFirstBeat !== null ? 'autoDetected' :
     'trackStart'
 
-  const handleGeneratePhrases = () => {
+  const handleGeneratePhrases = async () => {
     if (track.bpm === null) return
-    if (cues.some((c) => c.isAutoSuggested) && !window.confirm(
-      'This track already has auto-generated phrase markers. Generate again will keep them and add more — clear them first via the trash icon if you want a fresh set. Continue?',
-    )) return
+    if (cues.some((c) => c.isAutoSuggested)) {
+      const ok = await confirmDialog({
+        title: 'Generate phrase markers again?',
+        message: 'This track already has auto-generated markers. Generating again will add more on top — clear all cues first if you want a fresh set.',
+        confirmLabel: 'Add markers',
+      })
+      if (!ok) return
+    }
     generatePhraseMarkers.mutate({
       firstBeatSeconds: phraseAnchorTime,
       stepBeats: 64,
@@ -110,11 +116,15 @@ export function CuesTab({ track }: { track: Track }) {
     })
   }
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (cues.length === 0) return
-    if (!window.confirm(
-      `Delete all ${cues.length} cue${cues.length === 1 ? '' : 's'} on this track? This can't be undone.`,
-    )) return
+    const ok = await confirmDialog({
+      title: `Delete all cues?`,
+      message: `${cues.length} cue${cues.length === 1 ? '' : 's'} on this track will be removed. This can't be undone.`,
+      danger: true,
+      confirmLabel: 'Delete all',
+    })
+    if (!ok) return
     removeAll.mutate()
   }
 

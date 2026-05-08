@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { confirmDialog, promptDialog } from '../../components/dialog'
 import { useMixPlans } from './useMixPlans'
 
 export function PlanSwitcher() {
@@ -8,14 +9,24 @@ export function PlanSwitcher() {
   const active = plans.find((p) => p.id === activePlanId) ?? null
 
   const handleCreate = async () => {
-    const name = window.prompt('Mix plan name', `Mix ${new Date().toLocaleDateString()}`)
-    if (!name?.trim()) return
-    await create.mutateAsync(name.trim())
+    const name = await promptDialog({
+      title: 'New mix plan',
+      defaultValue: `Mix ${new Date().toLocaleDateString()}`,
+      placeholder: 'Plan name',
+      confirmLabel: 'Create',
+    })
+    if (!name) return
+    await create.mutateAsync(name)
     setOpen(false)
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Delete "${name}"?`)) return
+    const ok = await confirmDialog({
+      title: `Delete "${name}"?`,
+      message: 'The mix plan and its track ordering will be removed. The tracks themselves stay in your library.',
+      danger: true,
+    })
+    if (!ok) return
     await remove.mutateAsync(id)
   }
 

@@ -4,6 +4,7 @@ import { playlists } from '../../api/playlists'
 import { useActivePlaylist } from '../../state/activePlaylist'
 import { useCurrentPage, type AppPage } from '../../state/currentPage'
 import { useUiPrefs } from '../../state/uiPrefs'
+import { confirmDialog, promptDialog } from '../../components/dialog'
 import { CreatePlaylistDialog } from '../library/CreatePlaylistDialog'
 
 interface SectionDef {
@@ -58,16 +59,24 @@ export function AppSidebar() {
     },
   })
 
-  const handleRename = (id: string, currentName: string) => {
-    // Inline prompt is fine for rename — small, well-known target. If this becomes
-    // a workflow tax we'll promote it to the same modal pattern as Create.
-    const name = window.prompt('Rename playlist', currentName)
-    if (!name?.trim() || name.trim() === currentName) return
-    rename.mutate({ id, name: name.trim() })
+  const handleRename = async (id: string, currentName: string) => {
+    const name = await promptDialog({
+      title: 'Rename playlist',
+      defaultValue: currentName,
+      placeholder: 'Playlist name',
+      confirmLabel: 'Rename',
+    })
+    if (!name || name === currentName) return
+    rename.mutate({ id, name })
   }
 
-  const handleDelete = (id: string, name: string) => {
-    if (!window.confirm(`Delete playlist "${name}"?\n\nTracks themselves stay in your library.`)) return
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirmDialog({
+      title: `Delete playlist "${name}"?`,
+      message: 'The playlist is removed. The tracks themselves stay in your library.',
+      danger: true,
+    })
+    if (!ok) return
     remove.mutate(id)
   }
 

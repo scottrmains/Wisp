@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { discovery } from '../../api/discovery'
+import { alertDialog, confirmDialog, promptDialog } from '../../components/dialog'
 import type {
   DiscoveredTrack,
   DiscoverySource,
@@ -69,16 +70,22 @@ export function CrateDiggerPage() {
   })
 
   const handleAddSource = async () => {
-    const url = window.prompt(
-      'Paste a YouTube channel URL (or @handle) or a playlist URL:\n\n' +
-        'e.g. https://www.youtube.com/@RokTorkar\n' +
-        'or   https://www.youtube.com/playlist?list=PLxxxxxxxxx',
-    )
-    if (!url?.trim()) return
+    const url = await promptDialog({
+      title: 'Add discovery source',
+      message: 'Paste a YouTube channel URL (or @handle) or a playlist URL.\n\nExamples:\n  https://www.youtube.com/@RokTorkar\n  https://www.youtube.com/playlist?list=PL…',
+      placeholder: 'https://www.youtube.com/...',
+      confirmLabel: 'Add',
+      maxLength: 1000,
+    })
+    if (!url) return
     try {
-      await addSource.mutateAsync(url.trim())
+      await addSource.mutateAsync(url)
     } catch (e) {
-      alert((e as Error).message)
+      await alertDialog({
+        title: 'Could not add source',
+        message: (e as Error).message,
+        tone: 'error',
+      })
     }
   }
 
@@ -257,9 +264,15 @@ function SourceRow({
           {startScan.isPending || isScanning ? 'scanning…' : 'rescan'}
         </button>
         <button
-          onClick={(e) => {
+          onClick={async (e) => {
             e.stopPropagation()
-            if (window.confirm(`Remove "${source.name}"?`)) remove.mutate()
+            const ok = await confirmDialog({
+              title: `Remove "${source.name}"?`,
+              message: 'The source and any tracks it discovered will be removed from Crate Digger. The original YouTube content stays untouched.',
+              danger: true,
+              confirmLabel: 'Remove',
+            })
+            if (ok) remove.mutate()
           }}
           className="ml-auto text-red-400 hover:underline"
         >

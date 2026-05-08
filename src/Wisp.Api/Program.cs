@@ -109,6 +109,25 @@ public class Program
                 app.UseCors();
             }
 
+            // Swallow client-side cancellation so it doesn't surface as an
+            // unhandled exception (and the dev exception page). Audio
+            // <audio>-tag streaming, scrubbing, and page navigation routinely
+            // abort in-flight requests — that's normal, not an error. Any
+            // OperationCanceledException whose ct == ctx.RequestAborted
+            // means "the browser closed the socket"; silently no-op.
+            app.Use(async (ctx, next) =>
+            {
+                try
+                {
+                    await next();
+                }
+                catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested)
+                {
+                    // Client disconnected mid-stream. The response is already
+                    // aborted; logging this would just be noise.
+                }
+            });
+
             app.UseDefaultFiles();
             app.UseStaticFiles();
 

@@ -13,6 +13,7 @@ import { SettingsPanel } from './features/settings/SettingsPanel'
 import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
+import { DialogHost } from './components/DialogHost'
 
 /// App-level shell. Layout is:
 ///
@@ -103,6 +104,7 @@ function App() {
         onDismiss={scan.dismiss}
       />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      <DialogHost />
     </div>
   )
 }
