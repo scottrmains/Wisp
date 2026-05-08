@@ -4,8 +4,8 @@ import type { Track } from '../../api/types'
 import { tracks as tracksApi } from '../../api/library'
 import { usePlayer } from '../../state/player'
 import { useUiPrefs, type InspectorTab as Tab } from '../../state/uiPrefs'
-import { cues as cuesApi } from '../../api/cues'
 import { bridge, bridgeAvailable } from '../../bridge'
+import { useCues } from '../cues/useCues'
 import { CuesTab, MetadataTab, NotesTab, OverviewTab, TagsTab } from '../inspector/tabContent'
 import { BandedWaveform } from '../player/BandedWaveform'
 import { RecommendationsList } from './RecommendationPanel'
@@ -96,15 +96,20 @@ export function TrackPrepWorkspace({
   const liveTime = usePlayer((s) => s.position)
   const liveDuration = usePlayer((s) => s.duration)
 
-  // Cue count for the chip row. Still useful even when track isn't fully resolved
-  // — we query off the trackId, not the resolved Track object.
-  const cuesQuery = useQuery({
-    queryKey: ['cues', trackId],
-    queryFn: () => cuesApi.list(trackId!),
-    enabled: !!trackId,
-    staleTime: 30_000,
-  })
-  const cueCount = cuesQuery.data?.length ?? 0
+  // Cues for the chip count + waveform markers + the Q hotkey's "add at playhead".
+  // useCues already exposes the create/update/delete mutations the CuesTab consumes;
+  // we hook into the same hook so the workspace's add-cue and the tab share state.
+  const cuesHook = useCues(trackId)
+  const cueCount = cuesHook.cues.length
+  const cueMarkers = useMemo(
+    () => cuesHook.cues.map((c) => ({
+      id: c.id,
+      timeSeconds: c.timeSeconds,
+      label: c.label || c.type,
+      isAutoSuggested: c.isAutoSuggested,
+    })),
+    [cuesHook.cues],
+  )
 
   const playLabel = useMemo(() =>
     isPlaying ? '❚❚ Pause' : '▶ Play',
@@ -118,6 +123,42 @@ export function TrackPrepWorkspace({
   }
 
   const handleSeek = (t: number) => seek(t)
+
+  // Adds a cue at the current playhead. `Custom` is the safe default type — the
+  // user can change it from the Cues tab or by clicking the marker. We don't
+  // try to be clever about which cue type to default to; classifying drops/
+  // breakdowns is its own feature (auto-detection in the spec for v2).
+  const addCueAtPlayhead = () => {
+    if (!trackId || liveTime <= 0) return
+    cuesHook.create.mutate({ timeSeconds: liveTime, type: 'Custom' })
+  }
+
+  // Hotkeys: Q adds a cue at playhead, 1-8 jump to the Nth cue.
+  // Skipped while the user is typing in inputs (notes textarea, tag input, etc.)
+  // so they don't fire when the user means to type Q or a digit.
+  useEffect(() => {
+    if (!trackId) return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (e.key === 'q' || e.key === 'Q') {
+        addCueAtPlayhead()
+        e.preventDefault()
+        return
+      }
+      const n = Number(e.key)
+      if (Number.isInteger(n) && n >= 1 && n <= 8) {
+        const cue = cuesHook.cues[n - 1]
+        if (cue) {
+          seek(cue.timeSeconds)
+          e.preventDefault()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackId, cuesHook.cues, liveTime])
 
   // Self-hide if no track loaded. App.tsx still renders us, but we render nothing.
   if (!trackId || !track) return null
@@ -175,6 +216,15 @@ export function TrackPrepWorkspace({
           duration={duration}
           currentTime={liveTime}
           onSeek={handleSeek}
+          cues={cueMarkers}
+          // Click on a cue marker → seek + jump to the Cues tab so the user can
+          // edit the label/type of the one they just clicked. Single-purpose
+          // routing — feels more discoverable than "click marker → mystery".
+          onCueClick={(id) => {
+            const c = cuesHook.cues.find((x) => x.id === id)
+            if (c) seek(c.timeSeconds)
+            switchTab('cues')
+          }}
           height={120}
         />
         <div className="absolute right-4 top-4 flex items-center gap-1">
@@ -234,6 +284,12 @@ export function TrackPrepWorkspace({
             + Add to mix
           </ActionButton>
         )}
+        <ActionButton
+          onClick={addCueAtPlayhead}
+          title="Add a cue at the current playhead position (or press Q)"
+        >
+          ＋ Cue
+        </ActionButton>
         <ActionButton onClick={() => switchTab('recommendations')} title="Find compatible tracks">
           ✨ Find matches
         </ActionButton>

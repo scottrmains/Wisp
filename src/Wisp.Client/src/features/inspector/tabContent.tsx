@@ -55,45 +55,117 @@ function Field({ label, value }: { label: string; value: string | null }) {
   )
 }
 
+const CUE_TYPES = ['FirstBeat', 'Intro', 'MixIn', 'Breakdown', 'Drop', 'VocalIn', 'MixOut', 'Outro', 'Custom'] as const
+type CueTypeName = typeof CUE_TYPES[number]
+
 export function CuesTab({ track }: { track: Track }) {
-  const { cues, loading } = useCues(track.id)
+  const { cues, loading, update, remove } = useCues(track.id)
   const seek = usePlayer((s) => s.seek)
   const playerTrackId = usePlayer((s) => s.trackId)
   const playTrack = usePlayer((s) => s.playTrack)
+
+  const handleJump = (timeSeconds: number) => {
+    if (playerTrackId !== track.id) playTrack(track.id)
+    setTimeout(() => seek(timeSeconds), 50)
+  }
 
   if (loading) return <p className="px-5 py-6 text-sm text-[var(--color-muted)]">Loading cues…</p>
   if (cues.length === 0) {
     return (
       <p className="px-5 py-6 text-sm text-[var(--color-muted)]">
-        No cue points yet. Open the blend preview from the mix plan to add cue markers (Phase 20c will add inline cue editing on the workspace waveform).
+        No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>＋ Cue</strong> in the action row.
       </p>
     )
   }
 
   return (
-    <ul className="overflow-auto py-2">
-      {cues.map((c) => (
-        <li key={c.id} className="flex items-center justify-between gap-3 px-5 py-1.5 text-sm hover:bg-white/5">
-          <span className="min-w-0 flex-1 truncate" title={c.label}>
-            <span className="text-[var(--color-muted)]">{c.type}</span>
-            {c.label && c.label !== c.type ? ` — ${c.label}` : ''}
-          </span>
-          <span className="tabular-nums text-xs text-[var(--color-muted)]">
+    <ul className="overflow-auto py-1">
+      {cues.map((c, i) => (
+        <li
+          key={c.id}
+          className="flex items-center gap-2 border-b border-[var(--color-border)]/30 px-5 py-1.5 text-sm hover:bg-white/5"
+        >
+          {/* Index badge — matches the 1-8 hotkey assignment so the user sees
+              which number jumps to which cue. */}
+          {i < 8 ? (
+            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--color-bg)] text-[10px] font-semibold tabular-nums text-[var(--color-muted)]">
+              {i + 1}
+            </span>
+          ) : (
+            <span className="w-5" />
+          )}
+
+          {/* Type dropdown — quick way to re-classify a cue without going through a modal. */}
+          <select
+            value={c.type}
+            onChange={(e) => update.mutate({ id: c.id, type: e.target.value as CueTypeName })}
+            className="shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1.5 py-0.5 text-[11px]"
+          >
+            {CUE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+
+          {/* Inline-editable label. Saves on blur; empty input falls back to type name. */}
+          <InlineLabelEdit
+            initial={c.label && c.label !== c.type ? c.label : ''}
+            placeholder={c.type}
+            onSave={(label) => update.mutate({ id: c.id, label })}
+          />
+
+          <span className="shrink-0 tabular-nums text-xs text-[var(--color-muted)]">
             {formatDuration(c.timeSeconds)}
           </span>
           <button
-            onClick={() => {
-              if (playerTrackId !== track.id) playTrack(track.id)
-              setTimeout(() => seek(c.timeSeconds), 50)
-            }}
-            className="text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+            onClick={() => handleJump(c.timeSeconds)}
+            className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-accent)]"
             title="Jump to cue"
+            aria-label="Jump to cue"
           >
             ↪
+          </button>
+          <button
+            onClick={() => remove.mutate(c.id)}
+            className="shrink-0 text-[var(--color-muted)] hover:text-red-400"
+            title="Delete cue"
+            aria-label="Delete cue"
+          >
+            🗑
           </button>
         </li>
       ))}
     </ul>
+  )
+}
+
+function InlineLabelEdit({
+  initial,
+  placeholder,
+  onSave,
+}: {
+  initial: string
+  placeholder: string
+  onSave: (label: string) => void
+}) {
+  const [value, setValue] = useState(initial)
+  // Reset draft when the cue's saved label changes externally (rename via another path).
+  useEffect(() => { setValue(initial) }, [initial])
+
+  return (
+    <input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if (value !== initial) onSave(value)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') {
+          setValue(initial)
+          ;(e.target as HTMLInputElement).blur()
+        }
+      }}
+      placeholder={placeholder}
+      className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--color-border)] focus:border-[var(--color-accent)] focus:bg-[var(--color-bg)] focus:outline-none"
+    />
   )
 }
 

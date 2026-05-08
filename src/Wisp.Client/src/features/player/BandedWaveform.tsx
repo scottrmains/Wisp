@@ -1,11 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCachedBandedPeaks, loadBandedPeaks, type BandedPeaks } from '../../audio/peaks'
 
+export interface CueMarker {
+  id: string
+  timeSeconds: number
+  /// Optional label rendered as a tooltip on the marker. Truncated cleanly by the browser.
+  label?: string
+  /// True when slskd / external generation suggested this; renders subtler.
+  isAutoSuggested?: boolean
+}
+
 interface Props {
   trackId: string
   duration: number
   currentTime: number
   onSeek: (seconds: number) => void
+  /// Cue markers to overlay. Each renders as a thin vertical strip clickable to jump.
+  /// The workspace passes its loaded track's cues; the mini-player leaves this empty.
+  cues?: CueMarker[]
+  /// Fired when a cue marker (not the empty waveform) is clicked. The waveform's own
+  /// click-to-seek handler ignores clicks on cue markers via the marker's stopPropagation.
+  onCueClick?: (cueId: string) => void
   /// Pixel height of the waveform area. Defaults to 80 to match the mini-player layout.
   height?: number
 }
@@ -16,7 +31,7 @@ interface Props {
 /// Click anywhere to seek; vertical playhead overlays the current position.
 ///
 /// While peaks are computing, falls back to a thin baseline so the click-to-seek still works.
-export function BandedWaveform({ trackId, duration, currentTime, onSeek, height = 80 }: Props) {
+export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [peaks, setPeaks] = useState<BandedPeaks | null>(() => getCachedBandedPeaks(trackId) ?? null)
@@ -173,6 +188,32 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, height 
           waveform unavailable
         </div>
       )}
+      {/* Cue markers — rendered BEFORE the playhead so the playhead always wins
+          when overlapping. Each marker is its own clickable strip; mousedown
+          stopPropagation so clicking the marker doesn't fall through to the
+          container's click-to-seek handler. */}
+      {cues && duration > 0 && cues.map((c) => {
+        const left = (c.timeSeconds / duration) * 100
+        if (left < 0 || left > 100) return null
+        const tone = c.isAutoSuggested
+          ? 'bg-amber-400/40 hover:bg-amber-400'
+          : 'bg-emerald-400/70 hover:bg-emerald-400'
+        return (
+          <button
+            key={c.id}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onCueClick) onCueClick(c.id)
+              else onSeek(c.timeSeconds)
+            }}
+            title={c.label ? `${c.label} · ${formatTimeShort(c.timeSeconds)}` : formatTimeShort(c.timeSeconds)}
+            className={`absolute top-0 bottom-0 w-[3px] -translate-x-1/2 cursor-pointer transition-colors ${tone}`}
+            style={{ left: `${left}%` }}
+            aria-label={c.label ?? `Cue at ${formatTimeShort(c.timeSeconds)}`}
+          />
+        )
+      })}
       {/* Playhead: bright thin line + soft glow shadow. */}
       <div
         className="pointer-events-none absolute top-0 bottom-0 w-px bg-white shadow-[0_0_4px_rgba(255,255,255,0.7)]"
@@ -180,6 +221,12 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, height 
       />
     </div>
   )
+}
+
+function formatTimeShort(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
 }
 
 function arrayMax(a: Float32Array): number {
