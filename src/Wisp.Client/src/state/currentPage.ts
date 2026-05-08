@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type AppPage = 'library' | 'mix-plans' | 'rediscover' | 'crate-digger'
+export type AppPage = 'library' | 'mix-plans' | 'discover' | 'crate-digger'
 
 interface CurrentPageState {
   page: AppPage
@@ -29,6 +29,14 @@ export const useCurrentPage = create<CurrentPageState>()(
       name: 'wisp.currentPage',
       // Only `page` is persisted — workspace-active is session state.
       partialize: (s) => ({ page: s.page }),
+      // Phase 22a: legacy `rediscover` value migrates to `discover` on load
+      // so existing sessions don't land on a dead page after the rename.
+      migrate: (persisted: unknown, _version) => {
+        const s = persisted as { page?: string } | undefined
+        if (s && (s.page as string) === 'rediscover') return { ...s, page: 'discover' }
+        return s
+      },
+      version: 1,
     },
   ),
 )

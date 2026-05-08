@@ -6,9 +6,13 @@ import { bridge, bridgeAvailable } from '../../bridge'
 import { SoulseekPanel } from '../cratedigger/SoulseekPanel'
 import { ArtistMatchModal } from './ArtistMatchModal'
 
-/// Rediscover is now routed at the App level — no `fixed inset-0` overlay,
-/// no internal Esc handler. The shell owns the back-out path via the top nav.
-export function RediscoverScreen() {
+/// Discover is routed at the App level — no `fixed inset-0` overlay, no
+/// internal Esc handler. The shell owns the back-out path via the sidebar.
+///
+/// Phase 22a only renames Rediscover → Discover. The search-driven UI
+/// (library artist search + Anywhere search via Spotify/YouTube + per-result
+/// Watch / Soulseek / Want / Follow) lands in 22b–f.
+export function DiscoverPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [matchTarget, setMatchTarget] = useState<{ artist: ArtistSummary; source: CatalogSource } | null>(null)
 
@@ -23,7 +27,7 @@ export function RediscoverScreen() {
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Rediscover</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Discover</h1>
           <p className="text-xs text-[var(--color-muted)]">
             See what your favourite artists released since you last checked. Match across Spotify, Discogs, and YouTube.
           </p>
@@ -83,7 +87,7 @@ function ArtistList({
       <aside className="w-[24rem] shrink-0 overflow-y-auto">
         <div className="space-y-2 p-6 text-sm text-[var(--color-muted)]">
           <p className="font-medium text-white">No artists in your library yet.</p>
-          <p>Scan a folder first — Rediscover pulls from whatever artists are in your tagged tracks.</p>
+          <p>Scan a folder first — Discover pulls from whatever artists are in your tagged tracks.</p>
         </div>
       </aside>
     )

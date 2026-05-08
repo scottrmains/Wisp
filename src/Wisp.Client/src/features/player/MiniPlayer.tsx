@@ -11,7 +11,7 @@ import { BandedWaveform } from './BandedWaveform'
 /// its own two decks — different lifecycle, different graph.
 ///
 /// Stays mounted at the App root so playback survives navigation between
-/// Library / Mix Plans / Rediscover / Crate Digger.
+/// Library / Mix Plans / Discover / Crate Digger.
 export function MiniPlayer() {
   const trackId = usePlayer((s) => s.trackId)
   const registerCommands = usePlayer((s) => s._registerCommands)

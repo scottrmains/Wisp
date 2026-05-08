@@ -16,7 +16,7 @@ interface SectionDef {
 const SECTIONS: SectionDef[] = [
   { id: 'library', label: 'Library', icon: '🎵' },
   { id: 'mix-plans', label: 'Mix Plans', icon: '🎚' },
-  { id: 'rediscover', label: 'Rediscover', icon: '🔁' },
+  { id: 'discover', label: 'Discover', icon: '🔁' },
   { id: 'crate-digger', label: 'Crate Digger', icon: '⛏' },
 ]
 

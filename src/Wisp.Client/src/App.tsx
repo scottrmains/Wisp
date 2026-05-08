@@ -8,7 +8,7 @@ import { useScan } from './features/library/useScan'
 import { ChainDock } from './features/mixchain/ChainDock'
 import { MixPlansPage } from './features/mixchain/MixPlansPage'
 import { MiniPlayer } from './features/player/MiniPlayer'
-import { RediscoverScreen } from './features/rediscover/RediscoverScreen'
+import { DiscoverPage } from './features/discover/DiscoverPage'
 import { SettingsPanel } from './features/settings/SettingsPanel'
 import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
@@ -79,7 +79,7 @@ function App() {
         <main className="min-h-0 flex-1 overflow-hidden">
           {page === 'library' && <LibraryPage />}
           {page === 'mix-plans' && <MixPlansPage />}
-          {page === 'rediscover' && <RediscoverScreen />}
+          {page === 'discover' && <DiscoverPage />}
           {page === 'crate-digger' && <CrateDiggerPage />}
         </main>
 
