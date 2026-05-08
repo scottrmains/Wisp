@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Wisp.Core.ArtistRefresh;
 using Wisp.Core.Cleanup;
 using Wisp.Core.Cues;
 using Wisp.Core.MixPlans;
@@ -14,6 +15,8 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
     public DbSet<CuePoint> CuePoints => Set<CuePoint>();
     public DbSet<MetadataAuditLog> MetadataAuditLogs => Set<MetadataAuditLog>();
+    public DbSet<ArtistProfile> ArtistProfiles => Set<ArtistProfile>();
+    public DbSet<ExternalRelease> ExternalReleases => Set<ExternalRelease>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -67,5 +70,24 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         audit.HasIndex(a => a.TrackId);
         audit.HasIndex(a => a.CreatedAt);
         // No FK to Track — keep audit history even if the track row is deleted.
+
+        var artist = b.Entity<ArtistProfile>();
+        artist.HasKey(a => a.Id);
+        artist.Property(a => a.Name).IsRequired().HasMaxLength(200);
+        artist.Property(a => a.NormalizedName).IsRequired().HasMaxLength(200);
+        artist.HasIndex(a => a.NormalizedName).IsUnique();
+
+        var release = b.Entity<ExternalRelease>();
+        release.HasKey(r => r.Id);
+        release.Property(r => r.Source).IsRequired().HasMaxLength(40);
+        release.Property(r => r.ExternalId).IsRequired().HasMaxLength(100);
+        release.Property(r => r.Title).IsRequired().HasMaxLength(400);
+        release.Property(r => r.ReleaseType).HasConversion<string>().HasMaxLength(20);
+        release.HasIndex(r => r.ArtistProfileId);
+        release.HasIndex(r => new { r.Source, r.ExternalId }).IsUnique();
+        release.HasOne(r => r.Artist)
+            .WithMany()
+            .HasForeignKey(r => r.ArtistProfileId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

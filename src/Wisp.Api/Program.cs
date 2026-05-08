@@ -1,12 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using Wisp.Api.ArtistRefresh;
 using Wisp.Api.Cleanup;
 using Wisp.Api.Cues;
 using Wisp.Api.Library;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
 using Wisp.Infrastructure;
+using Wisp.Infrastructure.ExternalCatalog.Spotify;
 using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Api;
@@ -80,6 +82,11 @@ public class Program
                 db.Database.Migrate();
             }
 
+            // Wire saved Spotify credentials (if any) into the catalog client options.
+            var settingsStore = app.Services.GetRequiredService<WispSettingsStore>();
+            var spotifyOpts = app.Services.GetRequiredService<SpotifyOptions>();
+            ApplySpotifyCredentials(settingsStore, spotifyOpts);
+
             if (app.Environment.IsDevelopment())
             {
                 app.MapOpenApi();
@@ -110,6 +117,49 @@ public class Program
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();
+            app.MapArtistRefresh();
+
+            app.MapGet("/api/settings/spotify", (WispSettingsStore store) =>
+            {
+                var creds = store.Current.Catalog?.Spotify;
+                return Results.Ok(new
+                {
+                    isConfigured = !string.IsNullOrWhiteSpace(creds?.ClientId)
+                                   && !string.IsNullOrWhiteSpace(creds?.ClientSecret),
+                    clientIdPreview = creds?.ClientId is { Length: > 6 } id ? id[..6] + "…" : null,
+                });
+            });
+
+            app.MapPost("/api/settings/spotify", (
+                SpotifyCredentials? creds,
+                WispSettingsStore store,
+                SpotifyOptions opts) =>
+            {
+                if (creds is null
+                    || string.IsNullOrWhiteSpace(creds.ClientId)
+                    || string.IsNullOrWhiteSpace(creds.ClientSecret))
+                {
+                    return Results.BadRequest(new { code = "credentials_required",
+                        message = "ClientId and ClientSecret are required." });
+                }
+
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { Spotify = creds }
+                });
+                ApplySpotifyCredentials(store, opts);
+                return Results.NoContent();
+            });
+
+            app.MapDelete("/api/settings/spotify", (WispSettingsStore store, SpotifyOptions opts) =>
+            {
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { Spotify = null }
+                });
+                ApplySpotifyCredentials(store, opts);
+                return Results.NoContent();
+            });
 
             app.MapFallbackToFile("index.html");
 
@@ -183,5 +233,12 @@ public class Program
         {
             Log.CloseAndFlush();
         }
+    }
+
+    public static void ApplySpotifyCredentials(WispSettingsStore store, SpotifyOptions opts)
+    {
+        var creds = store.Current.Catalog?.Spotify;
+        opts.ClientId = creds?.ClientId;
+        opts.ClientSecret = creds?.ClientSecret;
     }
 }

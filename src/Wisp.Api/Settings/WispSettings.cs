@@ -9,11 +9,19 @@ public sealed record WispSettings
     public string? LastFolder { get; init; }
     public WindowState? Window { get; init; }
     public RecommendationWeights? RecommendationWeights { get; init; }
+    public CatalogCredentials? Catalog { get; init; }
 }
 
 public sealed record WindowState(int Width, int Height, int? X, int? Y);
 
 public sealed record RecommendationWeights(double Key, double Bpm, double Energy, double Genre);
+
+public sealed record CatalogCredentials
+{
+    public SpotifyCredentials? Spotify { get; init; }
+}
+
+public sealed record SpotifyCredentials(string ClientId, string ClientSecret);
 
 public sealed class WispSettingsStore
 {

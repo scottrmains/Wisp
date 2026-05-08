@@ -190,3 +190,41 @@ export interface SystemInfo {
   configPath: string
   environment: string
 }
+
+export interface ArtistSummary {
+  id: string
+  name: string
+  trackCount: number
+  latestLocalYear: number | null
+  newReleaseCount: number
+  isMatched: boolean
+  lastCheckedAt: string | null
+}
+
+export interface ArtistCandidate {
+  source: string
+  externalId: string
+  name: string
+  followers: number | null
+  genres: string[]
+  imageUrl: string | null
+}
+
+export type ReleaseType = 'Album' | 'Single' | 'Ep' | 'Remix' | 'Compilation' | 'AppearsOn' | 'Unknown'
+
+export interface ExternalRelease {
+  id: string
+  artistProfileId: string
+  source: string
+  externalId: string
+  title: string
+  releaseType: ReleaseType
+  releaseDate: string | null
+  url: string | null
+  artworkUrl: string | null
+  isAlreadyInLibrary: boolean
+  matchedLocalTrackId: string | null
+  isDismissed: boolean
+  isSavedForLater: boolean
+  fetchedAt: string
+}

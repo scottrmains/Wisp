@@ -72,7 +72,14 @@ export function PreviewDialog({ trackA, trackB, onClose }: Props) {
         </header>
 
         <DeckPreview label="A" track={trackA} deck={deckA} />
-        <Crossfader fade={fade} onChange={setFade} />
+
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <Crossfader fade={fade} onChange={setFade} />
+          </div>
+          <SyncButton trackA={trackA} trackB={trackB} deckB={deckB} />
+        </div>
+
         <DeckPreview label="B" track={trackB} deck={deckB} />
 
         <p className="text-center text-[11px] text-[var(--color-muted)]">
@@ -80,5 +87,41 @@ export function PreviewDialog({ trackA, trackB, onClose }: Props) {
         </p>
       </div>
     </div>
+  )
+}
+
+function SyncButton({
+  trackA,
+  trackB,
+  deckB,
+}: {
+  trackA: Track
+  trackB: Track
+  deckB: ReturnType<typeof useAudioDeck>
+}) {
+  const canSync = trackA.bpm !== null && trackB.bpm !== null && trackB.bpm > 0
+  const ratio = canSync ? Number(trackA.bpm) / Number(trackB.bpm) : 1
+  const inRange = ratio >= 0.9 && ratio <= 1.1
+
+  const handleSync = () => {
+    if (!canSync || !inRange) return
+    deckB.setTempo(ratio)
+  }
+
+  const title = !canSync
+    ? 'Both tracks need a BPM tag to sync'
+    : !inRange
+      ? `BPM ratio ${ratio.toFixed(3)} is outside ±10% — too aggressive a stretch for clean audio`
+      : `Match Deck B to Deck A's tempo (${(ratio * 100).toFixed(1)}%)`
+
+  return (
+    <button
+      onClick={handleSync}
+      disabled={!canSync || !inRange}
+      title={title}
+      className="shrink-0 rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/15 px-3 py-2 text-xs font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/25 disabled:cursor-not-allowed disabled:border-[var(--color-border)] disabled:bg-transparent disabled:text-[var(--color-muted)]"
+    >
+      Sync B → A
+    </button>
   )
 }

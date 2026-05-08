@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { apiGet } from '../../api/client'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { apiDelete, apiGet, apiPost } from '../../api/client'
 import { cleanup } from '../../api/cleanup'
 import type { SystemInfo } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
@@ -52,6 +52,10 @@ export function SettingsPanel({ onClose }: Props) {
             <PathRow label="Logs" path={sys.data?.logsDir} />
           </Section>
 
+          <Section title="Spotify (for Artist Refresh)">
+            <SpotifySettings />
+          </Section>
+
           <Section title="Coming soon">
             <p className="text-xs text-[var(--color-muted)]">
               Recommendation weight overrides, default mix mode, FFmpeg path, audio device selection.
@@ -86,6 +90,128 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div className="grid grid-cols-[10rem_1fr] items-center gap-2 text-sm">
       <span className="text-[var(--color-muted)]">{label}</span>
       <span>{children}</span>
+    </div>
+  )
+}
+
+interface SpotifyStatus { isConfigured: boolean; clientIdPreview: string | null }
+
+function SpotifySettings() {
+  const qc = useQueryClient()
+  const status = useQuery({
+    queryKey: ['spotify-status'],
+    queryFn: () => apiGet<SpotifyStatus>('/api/settings/spotify'),
+  })
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [showSecret, setShowSecret] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message?: string } | null>(null)
+
+  const save = useMutation({
+    mutationFn: () => apiPost('/api/settings/spotify', { clientId, clientSecret }),
+    onSuccess: () => {
+      setClientId('')
+      setClientSecret('')
+      setTestResult(null)
+      qc.invalidateQueries({ queryKey: ['spotify-status'] })
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: () => apiDelete('/api/settings/spotify'),
+    onSuccess: () => {
+      setTestResult(null)
+      qc.invalidateQueries({ queryKey: ['spotify-status'] })
+    },
+  })
+
+  const test = useMutation({
+    mutationFn: async () => {
+      try {
+        await apiPost('/api/spotify/test')
+        return { ok: true } as const
+      } catch (e) {
+        return { ok: false, message: (e as Error).message } as const
+      }
+    },
+    onSuccess: setTestResult,
+  })
+
+  return (
+    <div className="space-y-2">
+      {status.data?.isConfigured ? (
+        <div className="flex items-center justify-between rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm">
+          <span>
+            <span className="text-[var(--color-muted)]">Configured</span>
+            {status.data.clientIdPreview && (
+              <span className="ml-2 font-mono text-xs">{status.data.clientIdPreview}</span>
+            )}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => test.mutate()}
+              disabled={test.isPending}
+              className="rounded border border-[var(--color-border)] px-2 py-0.5 text-xs hover:bg-white/5 disabled:opacity-40"
+            >
+              {test.isPending ? 'Testing…' : 'Test'}
+            </button>
+            <button
+              onClick={() => remove.mutate()}
+              disabled={remove.isPending}
+              className="rounded border border-red-500/30 px-2 py-0.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--color-muted)]">
+            Create an app at{' '}
+            <button
+              onClick={() => bridgeAvailable() && void bridge.openExternal('https://developer.spotify.com/dashboard')}
+              className="text-[var(--color-accent)] hover:underline"
+            >
+              developer.spotify.com/dashboard
+            </button>{' '}
+            and paste its Client ID + Secret. Stored in plain JSON in your AppData folder.
+          </p>
+          <input
+            type="text"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            placeholder="Client ID"
+            className="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+          />
+          <div className="flex gap-2">
+            <input
+              type={showSecret ? 'text' : 'password'}
+              value={clientSecret}
+              onChange={(e) => setClientSecret(e.target.value)}
+              placeholder="Client Secret"
+              className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+            />
+            <button
+              onClick={() => setShowSecret((s) => !s)}
+              className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)]"
+            >
+              {showSecret ? 'hide' : 'show'}
+            </button>
+          </div>
+          <button
+            onClick={() => save.mutate()}
+            disabled={!clientId.trim() || !clientSecret.trim() || save.isPending}
+            className="w-full rounded bg-[var(--color-accent)] px-2 py-1 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {save.isPending ? 'Saving…' : 'Save credentials'}
+          </button>
+        </div>
+      )}
+      {testResult && (
+        <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {testResult.ok ? '✓ Connection OK' : `✗ ${testResult.message}`}
+        </p>
+      )}
     </div>
   )
 }

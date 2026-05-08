@@ -78,6 +78,8 @@ export function DeckPreview({ label, track, deck }: Props) {
         </div>
       </div>
 
+      <TempoRow track={track} deck={deck} />
+
       <CuePointEditor
         trackId={track.id}
         hasBpm={track.bpm !== null}
@@ -85,5 +87,65 @@ export function DeckPreview({ label, track, deck }: Props) {
         onSeek={deck.seek}
       />
     </section>
+  )
+}
+
+function TempoRow({ track, deck }: { track: Track; deck: AudioDeck }) {
+  const pct = (deck.tempo - 1) * 100
+  const effectiveBpm = track.bpm !== null ? track.bpm * deck.tempo : null
+
+  return (
+    <div className="mt-2 flex items-center gap-3 rounded-md border border-[var(--color-border)]/60 bg-[var(--color-bg)] px-3 py-2">
+      <span className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">Tempo</span>
+
+      <input
+        type="range"
+        min={-10}
+        max={10}
+        step={0.1}
+        value={pct}
+        onChange={(e) => deck.setTempo(1 + Number(e.target.value) / 100)}
+        onDoubleClick={deck.resetTempo}
+        className="flex-1 accent-[var(--color-accent)]"
+        title="Drag to change tempo · double-click to reset"
+        aria-label="Tempo"
+      />
+
+      <span className="w-14 shrink-0 text-right text-xs tabular-nums text-[var(--color-muted)]">
+        {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+      </span>
+
+      {effectiveBpm !== null && (
+        <span className="w-20 shrink-0 text-right text-xs tabular-nums">
+          {effectiveBpm.toFixed(1)} BPM
+        </span>
+      )}
+
+      <button
+        onClick={() => deck.setTempoMode(deck.tempoMode === 'masterTempo' ? 'pitch' : 'masterTempo')}
+        className={[
+          'rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide',
+          deck.tempoMode === 'masterTempo'
+            ? 'border-[var(--color-accent)]/50 bg-[var(--color-accent)]/15 text-[var(--color-accent)]'
+            : 'border-[var(--color-border)] text-[var(--color-muted)]',
+        ].join(' ')}
+        title={
+          deck.tempoMode === 'masterTempo'
+            ? 'Master tempo — pitch is preserved when tempo changes'
+            : 'Pitch mode — tempo and pitch shift together (vinyl-style)'
+        }
+      >
+        {deck.tempoMode === 'masterTempo' ? 'Master' : 'Pitch'}
+      </button>
+
+      <button
+        onClick={deck.resetTempo}
+        disabled={deck.tempo === 1}
+        className="text-xs text-[var(--color-muted)] hover:text-white disabled:opacity-30"
+        title="Reset tempo to 1.0"
+      >
+        Reset
+      </button>
+    </div>
   )
 }

@@ -9,6 +9,7 @@ import { UndoToast } from '../cleanup/UndoToast'
 import { ChainDock } from '../mixchain/ChainDock'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { useMixPlan } from '../mixchain/useMixPlans'
+import { RediscoverScreen } from '../rediscover/RediscoverScreen'
 import { SettingsPanel } from '../settings/SettingsPanel'
 import { LibraryFilters } from './LibraryFilters'
 import { LibraryTable } from './LibraryTable'
@@ -23,6 +24,7 @@ export function LibraryPage() {
   const [cleanupTarget, setCleanupTarget] = useState<Track | null>(null)
   const [recentAudit, setRecentAudit] = useState<AuditEntry | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [rediscoverOpen, setRediscoverOpen] = useState(false)
   const { activePlanId } = useActivePlan()
   const activePlan = useMixPlan(activePlanId)
   const scan = useScan()
@@ -54,6 +56,13 @@ export function LibraryPage() {
           <p className="text-xs text-[var(--color-muted)]">Library</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setRediscoverOpen(true)}
+            className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-muted)] hover:text-white"
+            title="What did your favourite artists release recently?"
+          >
+            Rediscover
+          </button>
           <PlanSwitcher />
           <button
             onClick={pickAndScan}
@@ -130,6 +139,7 @@ export function LibraryPage() {
       )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {rediscoverOpen && <RediscoverScreen onClose={() => setRediscoverOpen(false)} />}
     </div>
   )
 }

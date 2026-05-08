@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Wisp.Core.Cleanup;
 using Wisp.Core.Recommendations;
+using Wisp.Infrastructure.ArtistRefresh;
 using Wisp.Infrastructure.Cleanup;
+using Wisp.Infrastructure.ExternalCatalog.Spotify;
 using Wisp.Infrastructure.FileSystem;
 using Wisp.Infrastructure.Library;
 using Wisp.Infrastructure.Tagging;
@@ -26,6 +28,12 @@ public static class WispServiceCollectionExtensions
 
         services.AddScoped<CleanupSuggestionService>();
         services.AddScoped<CleanupApplier>();
+
+        services.AddHttpClient("Wisp.Spotify");
+        services.AddHttpClient("Wisp.Spotify.Auth");
+        services.AddSingleton<SpotifyOptions>();
+        services.AddSingleton<SpotifyCatalogClient>();
+        services.AddScoped<ArtistRefreshService>();
 
         return services;
     }
