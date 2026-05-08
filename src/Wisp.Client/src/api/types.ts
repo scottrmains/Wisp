@@ -234,3 +234,81 @@ export interface ExternalRelease {
   youTubeUrl: string | null
   fetchedAt: string
 }
+
+export type DiscoverySourceType = 'YouTubeChannel' | 'YouTubePlaylist'
+
+export interface DiscoverySource {
+  id: string
+  name: string
+  sourceType: DiscoverySourceType
+  sourceUrl: string
+  externalSourceId: string
+  addedAt: string
+  lastScannedAt: string | null
+  importedCount: number
+}
+
+export type DiscoveryStatus =
+  | 'New'
+  | 'Want'
+  | 'AlreadyHave'
+  | 'Ignore'
+  | 'NoMatch'
+  | 'VinylOnly'
+  | 'DigitalAvailable'
+  | 'PossibleMatch'
+
+export interface DiscoveredTrack {
+  id: string
+  discoverySourceId: string
+  sourceVideoId: string
+  sourceUrl: string
+  rawTitle: string
+  thumbnailUrl: string | null
+  parsedArtist: string | null
+  parsedTitle: string | null
+  mixVersion: string | null
+  releaseYear: number | null
+  status: DiscoveryStatus
+  isAlreadyInLibrary: boolean
+  matchedLocalTrackId: string | null
+  importedAt: string
+  lastMatchedAt: string | null
+}
+
+export type MatchAvailability =
+  | 'Unknown'
+  | 'StreamingOnly'
+  | 'DigitalPurchase'
+  | 'PhysicalOnly'
+  | 'Unavailable'
+  | 'SearchLink'
+
+export interface DigitalMatch {
+  id: string
+  source: string
+  url: string
+  artist: string
+  title: string
+  version: string | null
+  year: number | null
+  availability: MatchAvailability
+  confidenceScore: number
+  matchedAt: string
+}
+
+export interface DiscoveredTrackPage {
+  total: number
+  page: number
+  size: number
+  items: DiscoveredTrack[]
+}
+
+export interface DiscoveryScanProgress {
+  sourceId: string
+  status: 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled'
+  totalImported: number
+  newItems: number
+  parsedConfidently: number
+  error: string | null
+}

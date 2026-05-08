@@ -8,7 +8,26 @@ namespace Wisp.Infrastructure.ExternalCatalog.YouTube;
 public sealed class YouTubeNotConfiguredException() : Exception("YouTube Data API key is not configured.");
 public sealed class YouTubeQuotaExceededException(string message) : Exception(message);
 
-public sealed record YouTubeUpload(string VideoId, string Title, DateTimeOffset PublishedAt, string Url);
+public sealed record YouTubeUpload(
+    string VideoId,
+    string Title,
+    DateTimeOffset PublishedAt,
+    string Url,
+    string? ThumbnailUrl,
+    string? Description);
+
+public sealed record YouTubeChannelInfo(
+    string ChannelId,
+    string Title,
+    string? Description,
+    string? ThumbnailUrl,
+    string? UploadsPlaylistId);
+
+public sealed record YouTubePlaylistInfo(
+    string PlaylistId,
+    string Title,
+    string? Description,
+    string? ChannelTitle);
 
 public sealed class YouTubeCatalogClient(
     IHttpClientFactory httpFactory,
@@ -124,7 +143,9 @@ public sealed class YouTubeCatalogClient(
                     VideoId: videoId,
                     Title: title,
                     PublishedAt: item.ContentDetails?.VideoPublishedAt ?? item.Snippet?.PublishedAt ?? default,
-                    Url: $"https://www.youtube.com/watch?v={videoId}"));
+                    Url: $"https://www.youtube.com/watch?v={videoId}",
+                    ThumbnailUrl: item.Snippet?.Thumbnails?.Medium?.Url ?? item.Snippet?.Thumbnails?.Default?.Url,
+                    Description: item.Snippet?.Description));
 
                 if (results.Count >= maxItems) return results;
             }
@@ -133,6 +154,142 @@ public sealed class YouTubeCatalogClient(
 
         log.LogInformation("YouTube: channel {ChannelId} → {Count} uploads", channelId, results.Count);
         return results;
+    }
+
+    /// Resolve a `@handle` to a channelId via channels.list?forHandle=. 1 unit.
+    /// Returns the channel snippet + uploads playlist id in one call (`part=snippet,contentDetails`).
+    public async Task<YouTubeChannelInfo?> GetChannelByHandleAsync(string handle, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+        var url = $"{ApiBase}/channels?part=snippet,contentDetails&forHandle=@{Uri.EscapeDataString(handle)}" +
+                  $"&key={Uri.EscapeDataString(options.ApiKey!)}";
+        return await FetchSingleChannelAsync(http, url, ct);
+    }
+
+    /// Resolve a legacy /user/Username to a channelId. 1 unit.
+    public async Task<YouTubeChannelInfo?> GetChannelByUsernameAsync(string username, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+        var url = $"{ApiBase}/channels?part=snippet,contentDetails&forUsername={Uri.EscapeDataString(username)}" +
+                  $"&key={Uri.EscapeDataString(options.ApiKey!)}";
+        return await FetchSingleChannelAsync(http, url, ct);
+    }
+
+    /// Resolve a known channelId to its snippet + uploads playlist id. 1 unit.
+    public async Task<YouTubeChannelInfo?> GetChannelByIdAsync(string channelId, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+        var url = $"{ApiBase}/channels?part=snippet,contentDetails&id={Uri.EscapeDataString(channelId)}" +
+                  $"&key={Uri.EscapeDataString(options.ApiKey!)}";
+        return await FetchSingleChannelAsync(http, url, ct);
+    }
+
+    /// Last-resort fallback for /c/CustomUrl — use search.list (100 units) to find the channel.
+    public async Task<YouTubeChannelInfo?> SearchChannelAsync(string query, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+        var url = $"{ApiBase}/search?part=snippet&type=channel&maxResults=1&q={Uri.EscapeDataString(query)}" +
+                  $"&key={Uri.EscapeDataString(options.ApiKey!)}";
+        using var resp = await http.GetAsync(url, ct);
+        await ThrowOnQuota(resp, ct);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<YouTubeSearchResponse>(ct);
+        var hit = body?.Items?.FirstOrDefault(i => i.Id?.Kind == "youtube#channel" && !string.IsNullOrEmpty(i.Id.ChannelId));
+        if (hit?.Id?.ChannelId is null) return null;
+        return await GetChannelByIdAsync(hit.Id.ChannelId, ct);
+    }
+
+    /// Returns playlist metadata + paged items. 1 unit per page of 50.
+    public async Task<(YouTubePlaylistInfo Info, IReadOnlyList<YouTubeUpload> Items)> GetPlaylistAsync(
+        string playlistId, CancellationToken ct, int maxItems = 1000)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+
+        // Step 1: playlist metadata
+        var infoUrl = $"{ApiBase}/playlists?part=snippet&id={Uri.EscapeDataString(playlistId)}" +
+                      $"&key={Uri.EscapeDataString(options.ApiKey!)}";
+        using var infoResp = await http.GetAsync(infoUrl, ct);
+        await ThrowOnQuota(infoResp, ct);
+        infoResp.EnsureSuccessStatusCode();
+        var infoBody = await infoResp.Content.ReadFromJsonAsync<YouTubePlaylistsResponse>(ct);
+        var pl = infoBody?.Items?.FirstOrDefault();
+        if (pl is null) return (new YouTubePlaylistInfo(playlistId, playlistId, null, null), []);
+
+        var info = new YouTubePlaylistInfo(
+            playlistId,
+            pl.Snippet?.Title ?? playlistId,
+            pl.Snippet?.Description,
+            pl.Snippet?.ChannelTitle);
+
+        // Step 2: items (reuse the channel-uploads paging logic).
+        var items = await PageThroughPlaylistItemsAsync(playlistId, maxItems, ct);
+        return (info, items);
+    }
+
+    /// Reuses the channel-uploads paging path. Parameter is the playlist id (uploads or otherwise).
+    public async Task<IReadOnlyList<YouTubeUpload>> PageThroughPlaylistItemsAsync(
+        string playlistId, int maxItems, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+
+        var results = new List<YouTubeUpload>();
+        string? pageToken = null;
+        do
+        {
+            var url = $"{ApiBase}/playlistItems?part=snippet,contentDetails" +
+                      $"&playlistId={Uri.EscapeDataString(playlistId)}&maxResults=50" +
+                      $"&key={Uri.EscapeDataString(options.ApiKey!)}";
+            if (!string.IsNullOrEmpty(pageToken))
+                url += $"&pageToken={Uri.EscapeDataString(pageToken)}";
+
+            using var resp = await http.GetAsync(url, ct);
+            await ThrowOnQuota(resp, ct);
+            resp.EnsureSuccessStatusCode();
+            var body = await resp.Content.ReadFromJsonAsync<YouTubePlaylistItemsResponse>(ct);
+            if (body is null) break;
+
+            foreach (var item in body.Items ?? [])
+            {
+                var videoId = item.ContentDetails?.VideoId ?? item.Snippet?.ResourceId?.VideoId;
+                var title = item.Snippet?.Title;
+                if (string.IsNullOrEmpty(videoId) || string.IsNullOrEmpty(title)) continue;
+
+                results.Add(new YouTubeUpload(
+                    VideoId: videoId,
+                    Title: title,
+                    PublishedAt: item.ContentDetails?.VideoPublishedAt ?? item.Snippet?.PublishedAt ?? default,
+                    Url: $"https://www.youtube.com/watch?v={videoId}",
+                    ThumbnailUrl: item.Snippet?.Thumbnails?.Medium?.Url ?? item.Snippet?.Thumbnails?.Default?.Url,
+                    Description: item.Snippet?.Description));
+
+                if (results.Count >= maxItems) return results;
+            }
+            pageToken = body.NextPageToken;
+        } while (!string.IsNullOrEmpty(pageToken));
+
+        return results;
+    }
+
+    private async Task<YouTubeChannelInfo?> FetchSingleChannelAsync(HttpClient http, string url, CancellationToken ct)
+    {
+        using var resp = await http.GetAsync(url, ct);
+        await ThrowOnQuota(resp, ct);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<YouTubeChannelDetailsResponse>(ct);
+        var ch = body?.Items?.FirstOrDefault();
+        if (ch is null || string.IsNullOrEmpty(ch.Id)) return null;
+        return new YouTubeChannelInfo(
+            ChannelId: ch.Id,
+            Title: ch.Snippet?.Title ?? ch.Id,
+            Description: ch.Snippet?.Description,
+            ThumbnailUrl: ch.Snippet?.Thumbnails?.Medium?.Url ?? ch.Snippet?.Thumbnails?.Default?.Url,
+            UploadsPlaylistId: ch.ContentDetails?.RelatedPlaylists?.Uploads);
     }
 
     private static async Task ThrowOnQuota(HttpResponseMessage resp, CancellationToken ct)
@@ -160,6 +317,7 @@ public sealed class YouTubeCatalogClient(
 
     private sealed record YouTubeSnippet(
         [property: JsonPropertyName("title")] string? Title,
+        [property: JsonPropertyName("description")] string? Description,
         [property: JsonPropertyName("channelTitle")] string? ChannelTitle,
         [property: JsonPropertyName("publishedAt")] DateTimeOffset? PublishedAt,
         [property: JsonPropertyName("thumbnails")] YouTubeThumbnails? Thumbnails,
@@ -198,4 +356,18 @@ public sealed class YouTubeCatalogClient(
     private sealed record YouTubePlaylistItemContent(
         [property: JsonPropertyName("videoId")] string? VideoId,
         [property: JsonPropertyName("videoPublishedAt")] DateTimeOffset? VideoPublishedAt);
+
+    private sealed record YouTubeChannelDetailsResponse(
+        [property: JsonPropertyName("items")] YouTubeChannelDetail[] Items);
+
+    private sealed record YouTubeChannelDetail(
+        [property: JsonPropertyName("id")] string? Id,
+        [property: JsonPropertyName("snippet")] YouTubeSnippet? Snippet,
+        [property: JsonPropertyName("contentDetails")] YouTubeChannelContent? ContentDetails);
+
+    private sealed record YouTubePlaylistsResponse(
+        [property: JsonPropertyName("items")] YouTubePlaylistDetail[] Items);
+
+    private sealed record YouTubePlaylistDetail(
+        [property: JsonPropertyName("snippet")] YouTubeSnippet? Snippet);
 }

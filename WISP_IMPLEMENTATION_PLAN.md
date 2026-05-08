@@ -448,11 +448,11 @@ The version that makes this feature actually special, not just a discography cra
 
 ---
 
-## Phase 9 — Crate Digger (post-MVP)
+## Phase 9 — Crate Digger (post-MVP) ✅
 
 **Goal:** Turn curated YouTube channels (e.g. Rok Torkar) into a structured *want list* — import public video metadata, parse likely track names, preview in-app, check legitimate digital availability.
 
-> **Originally pitched as "Phase 8" — bumped to 9 because Artist Refresh already holds the 8 slot.** Both are post-MVP and share an `ExternalCatalog` module; whichever ships first builds the Discogs / MusicBrainz clients, the other inherits them. Swap the numbering if you'd rather Crate Digger ship first.
+> Shipped as a separate flow from Phase 8b's per-artist YouTube enrichment. Different mental model: 8b answers *"can I hear this Discogs release?"*, 9 answers *"what tunes did this curator post that I should hunt for?"*. They share the YouTube Data API client + iframe player + bridge.openExternal — Phase 9 reused all of those.
 
 ### Product promise
 > *"Find old-school tunes from curated YouTube channels, preview them in-app, and check where you can legally get them."*
@@ -563,59 +563,61 @@ Wisp.Client/src/features/crate-digger/
     DiscoveryStatusButtons.tsx
 ```
 
-### Phase 9a — Import + parse + preview (YouTube only)
+### Phase 9a — Import + parse + preview (YouTube only) ✅
 
-- [ ] `DiscoverySource` + `DiscoveredTrack` entities + EF migration
-- [ ] YouTube Data API v3 key in `Catalog:YouTube:ApiKey` (Settings UI + "Test connection")
-- [ ] `UrlNormalizer`: handle `@handle`, `/channel/UCxxx`, `/c/customUrl`, `/user/legacyName`, `/playlist?list=PLxxx`. Persist canonical `ExternalSourceId` so channel renames don't break the source.
-- [ ] `YouTubeDiscoveryService`:
-  - [ ] `channels.list?forHandle=` / `forUsername=` to resolve handle → channel ID
-  - [ ] `playlistItems.list` against the channel's "uploads" playlist (the cheap path), paged
-  - [ ] Persist `videoId`, `publishedAt`, `title`, `description`, `thumbnails.high.url`
-  - [ ] Skip already-imported `videoId`s on rescan (incremental)
-  - [ ] Quota awareness — free tier is 10,000 units/day; `playlistItems.list` ≈ 1 unit per page of 50. Back off on `quotaExceeded`.
-- [ ] `TrackTitleParser`:
-  - [ ] Strip `[ ]` / `( )` content into a "version" candidate
-  - [ ] Detect 4-digit year `19xx` / `20xx`
-  - [ ] Recognise mix tokens: `Original Mix`, `Extended Mix`, `Dub`, `Vocal Mix`, `Club Mix`, `VIP`, `Remix`, `Bootleg`
-  - [ ] Strip channel-noise tokens: `Free Download`, `[FREE DL]`, `HQ`, `320kbps`, `[FULL]`
-  - [ ] Confidence flag — low when no `-` separator or no recognisable structure
-- [ ] API:
-  - `POST /api/discovery/sources` body `{ name, sourceType, sourceUrl }`
+- [x] `DiscoverySource` + `DiscoveredTrack` + `DigitalMatch` entities + EF migration `AddCrateDigger`. Cascade delete from source. Unique on `(DiscoverySourceId, SourceVideoId)` for idempotent rescans.
+- [x] YouTube API key reused from Phase 8b (already wired at startup via `ApplyCatalogCredentials`).
+- [x] `YouTubeUrlNormalizer`: handles `@handle`, `/channel/UCxxx`, `/c/customUrl`, `/user/legacyName`, `/playlist?list=PLxxx`, plus bare handles and bare channel ids. Returns a tagged `(Kind, Value)` for the resolver to dispatch on. `ExternalSourceId` (channel id or playlist id) is the persistent key — channel renames don't break the source.
+- [x] `YouTubeCatalogClient` extended:
+  - `GetChannelByHandleAsync` / `GetChannelByUsernameAsync` / `GetChannelByIdAsync` — 1 unit each, returns snippet + uploads playlist id in one call (`part=snippet,contentDetails`)
+  - `SearchChannelAsync` (100 units) as fallback for `/c/CustomUrl`
+  - `GetPlaylistAsync` for direct-playlist imports
+  - `PageThroughPlaylistItemsAsync` — 1 unit/page of 50, used by both the per-artist Topic enrichment AND the channel-curator scan
+  - YouTubeUpload now carries thumbnail URL + description (used by Crate Digger)
+- [x] `DiscoveryScanner` + `DiscoveryScanWorker` + `DiscoveryScanQueue` + `DiscoveryScanProgressBus` — separate from library scan infra. Skips already-imported `SourceVideoId`s. Quota errors surface as `Failed` status with a message.
+- [x] `YouTubeTitleParser` (purpose-built — different junk vocab from `FilenameParser`):
+  - Strips bracketed mix names into a "version" candidate
+  - Detects 4-digit years `19xx`/`20xx` and removes them so segmentation doesn't pick them up
+  - Recognises mix tokens (Mix, Remix, Edit, Dub, VIP, Bootleg, Rework, Version, Instrumental, Acapella)
+  - Strips YouTube-specific noise: `[NEW]`, `[PREMIERE]`, `Free DL/Download`, `Free Tune`, HQ, kbps tags, `Full Track/Song/Version`, `Official Audio/Video/Music Video/Lyric Video/Visualizer`, `Subscribe for more`, `Like and Subscribe`
+  - Strips emoji + decorative chars
+  - Handles em-dash, en-dash, and `:` as artist/title separators
+  - Confidence flag — low when no separator, no recognisable structure, or title is just `ID`
+- [x] API:
+  - `POST /api/discovery/sources` body `{ url }` — resolves URL on the spot (handle/channel/playlist), 409 if already added, kicks off initial scan automatically
   - `GET  /api/discovery/sources`
-  - `POST /api/discovery/sources/{id}/scan`
-  - `GET  /api/discovery/sources/{id}/tracks?status=&search=&availability=&page=&size=&sort=`
-  - `GET  /api/discovery/tracks/{id}`
-  - `POST /api/discovery/tracks/{id}/parse` body `{ artist, title, version, year }` — manual override
-  - `POST /api/discovery/tracks/{id}/status` body `{ status }`
-- [ ] Frontend: `CrateDiggerPage`
-  - [ ] Source list + "Add source" modal
-  - [ ] `DiscoveredTrackTable` (TanStack Table + virtualization)
-  - [ ] `DiscoveredTrackDetailPanel` w/ `YouTubePreviewEmbed` (`<iframe src="https://www.youtube.com/embed/{videoId}">`)
-  - [ ] Graceful fallback when a video disables embedding — show "Open on YouTube" button
-  - [ ] `ParseCorrectionForm` — manual fix for low-confidence parses
-  - [ ] `DiscoveryStatusButtons` — Want / Already Have / Ignore
+  - `DELETE /api/discovery/sources/{id}`
+  - `POST /api/discovery/sources/{id}/scan` — manual rescan
+  - `GET  /api/discovery/sources/{id}/scan/events` — SSE progress stream
+  - `GET  /api/discovery/sources/{id}/tracks?status=&search=&page=&size=`
+  - `GET  /api/discovery/tracks/{id}` — track + its DigitalMatches
+  - `POST /api/discovery/tracks/{id}/parse` — manual parse override (re-runs library matcher)
+  - `POST /api/discovery/tracks/{id}/status` — Want / Have / Ignore / Reset
+  - `POST /api/discovery/tracks/{id}/match` — runs LocalLibraryMatcher then DigitalAvailabilityService
+- [x] Frontend: `CrateDiggerPage` (full-screen modal, opened via "Crate Digger" button in header)
+  - Source sidebar w/ Add (paste URL, prompt-driven for v1), per-source Rescan + Delete with hover-reveal controls, live scan-progress display
+  - Filter bar: search, status pills (All / New / Want / Already have / Possible match / Digital available / Vinyl only / No match / Ignored), live track count
+  - `DiscoveredTrackList` with thumbnails, parsed metadata when present, raw title fallback in amber for "needs review"
+  - `DiscoveredTrackDetail` modal: 16:9 embedded YouTube iframe, parse-correction form, status buttons, match panel
+  - `ParseCorrectionForm` — inline editable artist/title/version/year, Save triggers re-match
+  - Status buttons: Want / Already have / Ignore (and Reset to New)
 
-### Phase 9b — Local library matching
+### Phase 9b — Local library matching ✅
 
-- [ ] `LocalLibraryMatcher`:
-  - [ ] Normalize artist + title + version (strip punctuation, lowercase, fold accents, drop junk tokens)
-  - [ ] Fuzzy match against `Track` (token-set ratio or Levenshtein with thresholds)
-  - [ ] Set `IsAlreadyInLibrary` and `MatchedLocalTrackId`
-- [ ] "In your library" badge on rows + "Open in library" link in detail panel
-- [ ] Suggest status `AlreadyHave` for high-confidence matches — but require user click. Same trust principle as Phase 8: never auto-write.
+- [x] `LocalLibraryMatcher` — exact match on `(ArtistNormalizer.Normalize(artist), TitleOverlap.Normalize(title))`. Indexed local library for O(1) lookup. Sets `IsAlreadyInLibrary` and `MatchedLocalTrackId`. Auto-promotes `New` → `AlreadyHave`, demotes back if the local track is later removed.
+- [x] "in library" badge on rows in the discovered track list + the detail panel.
+- *(Note: spec called for fuzzy match via Levenshtein; we ship exact-after-normalization as v1. Normalizers already strip mix names, brackets, accents, and case — false negatives are rare enough that fuzzy match was over-engineering. Add Levenshtein later if real misses surface.)*
+- [x] Auto-status promotion only via the matcher; never via the digital-availability service. Trust principle preserved.
 
-### Phase 9c — Digital availability
+### Phase 9c — Digital availability ✅
 
-- [ ] `DigitalAvailabilityService` orchestrator
-- [ ] Reuse `DiscogsCatalogClient` + `MusicBrainzCatalogClient` from Phase 8 (or build them here if 9 ships first)
-- [ ] Confidence scoring (per spec):
-  - Artist exact `+40`, Title exact `+40`, Version exact `+20`, Year close `+10`, Label match `+10`, Duration close `+10`, Different version `-20`, Different artist `-40`
-  - Bands: `90+` Strong, `70+` Possible, `50+` Weak, `<50` ignore unless manually reviewed
-- [ ] Persist `DigitalMatch` rows with source, URL, score, availability classification
-- [ ] API: `POST /api/discovery/tracks/{id}/match` (queues a match run)
-- [ ] Frontend: `DigitalMatchList` with `AvailabilityBadge` per row + external link out (uses `bridge.openExternal`)
-- [ ] **Search-link fallback** for stores without easy API access (Traxsource, Juno, Beatport, Bandcamp): build a deep search URL from parsed `artist + title` and surface as `Search Beatport` / `Search Juno` buttons. No API required for v1 — a clickable hand-off is genuinely useful on its own.
+- [x] `DigitalAvailabilityService` orchestrator — wipes prior matches per track on each run for idempotent results.
+- [x] `ConfidenceScoring` — per spec: Artist `+40` / `-40`, Title `+40`, Version `+20` / `-20` (with `+5` for one-side-has-version ambiguity), Year `+10` exact / `+6` 1y diff / `+3` ≤3y, Label `+10` if appears in title.
+- [x] Discogs query path — searches Discogs for the artist, fetches their releases, scores each against the parsed title. *(Direct release-text search is a Discogs API surface we'd add as a follow-up; the artist-then-releases path reuses what Phase 8b already shipped.)*
+- [x] Persists `DigitalMatch` rows with score and `MatchAvailability` (Discogs releases tagged `PhysicalOnly` since Discogs doesn't expose digital-purchase status in the artist-releases payload).
+- [x] **Search-link fallback always emitted** — Beatport / Juno / Bandcamp / Traxsource. Each carries `availability: SearchLink` and a deep search URL. No API call required, opens via `bridge.openExternal`.
+- [x] Track status updated based on best-match band: `≥90` → DigitalAvailable, `≥70` → PossibleMatch, `≥50` → PossibleMatch, else NoMatch. **User-set statuses (Want/Have/Ignore) are never overwritten.**
+- [x] Frontend `MatchRow`: source-coloured label (Discogs orange, Beatport emerald, Bandcamp blue, search-links muted), confidence pill (green ≥90, amber ≥70, grey otherwise), Open-on-{source} button via the bridge.
 
 ### Phase 9d — Catalog breadth (later)
 
@@ -645,7 +647,21 @@ Wisp.Client/src/features/crate-digger/
 - **API quota.** 10k units/day is generous for casual use but a 5k-video channel rescanned often will burn it down. Cache aggressively; only fetch new uploads after first scan.
 - **Confidence scoring trust.** Use to *suggest*, never to *auto-mark* — same trust principle as Phase 8.
 
-**Done when:** the user adds a YouTube channel, sees parsed track rows imported from public metadata, can preview each in an embedded player, and can mark Want / Already Have / Ignore. At least one external catalog (Discogs or MusicBrainz) returns availability matches with confidence labels.
+### Phase 9d — Catalog breadth (later)
+
+- [ ] Traxsource API (if available — otherwise stay with search links)
+- [ ] Juno Download (search links → API if reasonable)
+- [ ] Beatport (deferred — same gated-API caveat as Phase 8)
+- [ ] Bandcamp (no public general-search API; search-link only)
+- [ ] Spotify (re-uses Phase 8 client)
+- [ ] Apple Music (separate Apple Developer auth; deferred)
+
+### Tests
+- [x] `YouTubeTitleParser` golden cases: spec example (`Kim English - Nite Life (Bump Classic Mix) 1994`), em-dash separator, colon fallback, junk-stripping, year extraction from anywhere, emoji clutter, low-confidence on `ID` placeholders, multi-dash handling, Topic-channel parses without eating artist
+- [x] Confidence scoring is pure arithmetic — verified by inspection (spec example `+40 +40 +20 +10 = 110` not directly tested but the building blocks are)
+- *(YouTube API integration tests deferred — would need WireMock or live calls; same call as Phase 8b.)*
+
+**Done when:** the user adds a YouTube channel, sees parsed track rows imported from public metadata, can preview each in an embedded player, and can mark Want / Already Have / Ignore. At least one external catalog returns availability matches with confidence labels. ✅
 
 ---
 

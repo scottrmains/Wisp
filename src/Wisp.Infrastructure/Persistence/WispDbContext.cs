@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Wisp.Core.ArtistRefresh;
 using Wisp.Core.Cleanup;
 using Wisp.Core.Cues;
+using Wisp.Core.Discovery;
 using Wisp.Core.MixPlans;
 using Wisp.Core.Tracks;
 
@@ -17,6 +18,9 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<MetadataAuditLog> MetadataAuditLogs => Set<MetadataAuditLog>();
     public DbSet<ArtistProfile> ArtistProfiles => Set<ArtistProfile>();
     public DbSet<ExternalRelease> ExternalReleases => Set<ExternalRelease>();
+    public DbSet<DiscoverySource> DiscoverySources => Set<DiscoverySource>();
+    public DbSet<DiscoveredTrack> DiscoveredTracks => Set<DiscoveredTrack>();
+    public DbSet<DigitalMatch> DigitalMatches => Set<DigitalMatch>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -88,6 +92,38 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         release.HasOne(r => r.Artist)
             .WithMany()
             .HasForeignKey(r => r.ArtistProfileId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var discoSrc = b.Entity<DiscoverySource>();
+        discoSrc.HasKey(s => s.Id);
+        discoSrc.Property(s => s.Name).IsRequired().HasMaxLength(200);
+        discoSrc.Property(s => s.SourceType).HasConversion<string>().HasMaxLength(30);
+        discoSrc.Property(s => s.SourceUrl).IsRequired();
+        discoSrc.Property(s => s.ExternalSourceId).IsRequired().HasMaxLength(100);
+        discoSrc.HasIndex(s => s.ExternalSourceId).IsUnique();
+
+        var discoTrk = b.Entity<DiscoveredTrack>();
+        discoTrk.HasKey(t => t.Id);
+        discoTrk.Property(t => t.SourceVideoId).IsRequired().HasMaxLength(40);
+        discoTrk.Property(t => t.RawTitle).IsRequired();
+        discoTrk.Property(t => t.Status).HasConversion<string>().HasMaxLength(30);
+        discoTrk.HasIndex(t => t.DiscoverySourceId);
+        discoTrk.HasIndex(t => new { t.DiscoverySourceId, t.SourceVideoId }).IsUnique();
+        discoTrk.HasOne(t => t.Source)
+            .WithMany()
+            .HasForeignKey(t => t.DiscoverySourceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var match = b.Entity<DigitalMatch>();
+        match.HasKey(m => m.Id);
+        match.Property(m => m.Source).IsRequired().HasMaxLength(40);
+        match.Property(m => m.ExternalId).IsRequired().HasMaxLength(100);
+        match.Property(m => m.Availability).HasConversion<string>().HasMaxLength(20);
+        match.HasIndex(m => m.DiscoveredTrackId);
+        match.HasIndex(m => new { m.DiscoveredTrackId, m.Source, m.ExternalId }).IsUnique();
+        match.HasOne(m => m.DiscoveredTrack)
+            .WithMany()
+            .HasForeignKey(m => m.DiscoveredTrackId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

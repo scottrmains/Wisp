@@ -6,6 +6,7 @@ import { bridge, bridgeAvailable } from '../../bridge'
 import { useActivePlan } from '../../state/activePlan'
 import { CleanupModal } from '../cleanup/CleanupModal'
 import { UndoToast } from '../cleanup/UndoToast'
+import { CrateDiggerPage } from '../cratedigger/CrateDiggerPage'
 import { ChainDock } from '../mixchain/ChainDock'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { useMixPlan } from '../mixchain/useMixPlans'
@@ -25,6 +26,7 @@ export function LibraryPage() {
   const [recentAudit, setRecentAudit] = useState<AuditEntry | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [rediscoverOpen, setRediscoverOpen] = useState(false)
+  const [crateDiggerOpen, setCrateDiggerOpen] = useState(false)
   const { activePlanId } = useActivePlan()
   const activePlan = useMixPlan(activePlanId)
   const scan = useScan()
@@ -62,6 +64,13 @@ export function LibraryPage() {
             title="What did your favourite artists release recently?"
           >
             Rediscover
+          </button>
+          <button
+            onClick={() => setCrateDiggerOpen(true)}
+            className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-muted)] hover:text-white"
+            title="Import tunes from curated YouTube channels"
+          >
+            Crate Digger
           </button>
           <PlanSwitcher />
           <button
@@ -140,6 +149,7 @@ export function LibraryPage() {
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       {rediscoverOpen && <RediscoverScreen onClose={() => setRediscoverOpen(false)} />}
+      {crateDiggerOpen && <CrateDiggerPage onClose={() => setCrateDiggerOpen(false)} />}
     </div>
   )
 }

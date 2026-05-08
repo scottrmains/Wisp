@@ -3,6 +3,7 @@ using Wisp.Core.Cleanup;
 using Wisp.Core.Recommendations;
 using Wisp.Infrastructure.ArtistRefresh;
 using Wisp.Infrastructure.Cleanup;
+using Wisp.Infrastructure.Discovery;
 using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Spotify;
 using Wisp.Infrastructure.ExternalCatalog.YouTube;
@@ -45,6 +46,13 @@ public static class WispServiceCollectionExtensions
         services.AddSingleton<YouTubeCatalogClient>();
 
         services.AddScoped<ArtistRefreshService>();
+
+        services.AddSingleton<DiscoveryScanQueue>();
+        services.AddSingleton<DiscoveryScanProgressBus>();
+        services.AddScoped<DiscoveryScanner>();
+        services.AddScoped<LocalLibraryMatcher>();
+        services.AddScoped<DigitalAvailabilityService>();
+        services.AddHostedService<DiscoveryScanWorker>();
 
         return services;
     }
