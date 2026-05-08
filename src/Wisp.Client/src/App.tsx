@@ -11,15 +11,24 @@ import { MiniPlayer } from './features/player/MiniPlayer'
 import { RediscoverScreen } from './features/rediscover/RediscoverScreen'
 import { SettingsPanel } from './features/settings/SettingsPanel'
 import { AppHeader } from './features/shell/AppHeader'
+import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 
-/// App-level shell. Owns the chrome that should persist across page navigation:
-///  - top header (brand + section nav + scan/settings)
-///  - active page content (Library / Mix Plans / Rediscover / Crate Digger)
-///  - chain dock (visible on every page except Mix Plans, where it'd duplicate the full view)
-///  - mini-player (always visible when a track is loaded)
-///  - settings overlay (still modal — it's a contextual panel, not a section)
-///  - global scan toast (scan is a top-level action)
+/// App-level shell. Layout is:
+///
+///   ┌────────┬──────────────────────────────────┐
+///   │        │ AppHeader (global actions)       │
+///   │        ├──────────────────────────────────┤
+///   │ Side   │                                  │
+///   │ bar    │ Active page content              │
+///   │        │                                  │
+///   │ (nav)  ├──────────────────────────────────┤
+///   │        │ ChainDock (when active plan)     │
+///   │        ├──────────────────────────────────┤
+///   │        │ MiniPlayer                       │
+///   └────────┴──────────────────────────────────┘
+///
+/// Settings stays as a modal overlay (contextual panel, not a section).
 function App() {
   const page = useCurrentPage((s) => s.page)
   const { activePlanId } = useActivePlan()
@@ -40,29 +49,33 @@ function App() {
   const showChainDock = !!activePlanId && page !== 'mix-plans'
 
   return (
-    <div className="flex h-full flex-col">
-      <AppHeader
-        scanActive={scan.active}
-        onScan={pickAndScan}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
+    <div className="flex h-full">
+      <AppSidebar />
 
-      <main className="min-h-0 flex-1 overflow-hidden">
-        {page === 'library' && <LibraryPage />}
-        {page === 'mix-plans' && <MixPlansPage />}
-        {page === 'rediscover' && <RediscoverScreen />}
-        {page === 'crate-digger' && <CrateDiggerPage />}
-      </main>
-
-      {showChainDock && (
-        <ChainDock
-          planId={activePlanId!}
-          collapsed={chainCollapsed}
-          onToggle={() => setChainCollapsed((c) => !c)}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <AppHeader
+          scanActive={scan.active}
+          onScan={pickAndScan}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
-      )}
 
-      <MiniPlayer />
+        <main className="min-h-0 flex-1 overflow-hidden">
+          {page === 'library' && <LibraryPage />}
+          {page === 'mix-plans' && <MixPlansPage />}
+          {page === 'rediscover' && <RediscoverScreen />}
+          {page === 'crate-digger' && <CrateDiggerPage />}
+        </main>
+
+        {showChainDock && (
+          <ChainDock
+            planId={activePlanId!}
+            collapsed={chainCollapsed}
+            onToggle={() => setChainCollapsed((c) => !c)}
+          />
+        )}
+
+        <MiniPlayer />
+      </div>
 
       {/* Global toasts + overlays — not page-scoped */}
       <ScanToast

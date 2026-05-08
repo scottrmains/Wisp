@@ -18,6 +18,10 @@ interface UiPrefsState {
   /// keeps you where you were.
   lastInspectorTab: InspectorTab
   setLastInspectorTab: (tab: InspectorTab) => void
+
+  /// Whether the App-level sidebar is collapsed to icons-only.
+  sidebarCollapsed: boolean
+  toggleSidebarCollapsed: () => void
 }
 
 const MIN_WIDTH = 280
@@ -38,6 +42,10 @@ export const useUiPrefs = create<UiPrefsState>()(
 
       lastInspectorTab: 'overview',
       setLastInspectorTab: (tab) => set({ lastInspectorTab: tab }),
+
+      sidebarCollapsed: false,
+      toggleSidebarCollapsed: () =>
+        set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
     }),
     {
       name: 'wisp.uiPrefs',
