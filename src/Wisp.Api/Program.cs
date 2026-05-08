@@ -8,7 +8,9 @@ using Wisp.Api.Library;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
 using Wisp.Infrastructure;
+using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Spotify;
+using Wisp.Infrastructure.ExternalCatalog.YouTube;
 using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Api;
@@ -82,10 +84,13 @@ public class Program
                 db.Database.Migrate();
             }
 
-            // Wire saved Spotify credentials (if any) into the catalog client options.
+            // Wire saved catalog credentials (if any) into the matching options instances.
             var settingsStore = app.Services.GetRequiredService<WispSettingsStore>();
-            var spotifyOpts = app.Services.GetRequiredService<SpotifyOptions>();
-            ApplySpotifyCredentials(settingsStore, spotifyOpts);
+            ApplyCatalogCredentials(
+                settingsStore,
+                app.Services.GetRequiredService<SpotifyOptions>(),
+                app.Services.GetRequiredService<DiscogsOptions>(),
+                app.Services.GetRequiredService<YouTubeOptions>());
 
             if (app.Environment.IsDevelopment())
             {
@@ -119,6 +124,14 @@ public class Program
             app.MapCleanup();
             app.MapArtistRefresh();
 
+            // Helper: apply credentials after every save/delete so the catalog clients pick up changes.
+            void ReapplyCatalog() => ApplyCatalogCredentials(
+                settingsStore,
+                app.Services.GetRequiredService<SpotifyOptions>(),
+                app.Services.GetRequiredService<DiscogsOptions>(),
+                app.Services.GetRequiredService<YouTubeOptions>());
+
+            // ─── Spotify ─────────────────────────────────────────────────────
             app.MapGet("/api/settings/spotify", (WispSettingsStore store) =>
             {
                 var creds = store.Current.Catalog?.Spotify;
@@ -130,10 +143,7 @@ public class Program
                 });
             });
 
-            app.MapPost("/api/settings/spotify", (
-                SpotifyCredentials? creds,
-                WispSettingsStore store,
-                SpotifyOptions opts) =>
+            app.MapPost("/api/settings/spotify", (SpotifyCredentials? creds, WispSettingsStore store) =>
             {
                 if (creds is null
                     || string.IsNullOrWhiteSpace(creds.ClientId)
@@ -142,22 +152,87 @@ public class Program
                     return Results.BadRequest(new { code = "credentials_required",
                         message = "ClientId and ClientSecret are required." });
                 }
-
                 store.Update(s => s with
                 {
                     Catalog = (s.Catalog ?? new CatalogCredentials()) with { Spotify = creds }
                 });
-                ApplySpotifyCredentials(store, opts);
+                ReapplyCatalog();
                 return Results.NoContent();
             });
 
-            app.MapDelete("/api/settings/spotify", (WispSettingsStore store, SpotifyOptions opts) =>
+            app.MapDelete("/api/settings/spotify", (WispSettingsStore store) =>
             {
                 store.Update(s => s with
                 {
                     Catalog = (s.Catalog ?? new CatalogCredentials()) with { Spotify = null }
                 });
-                ApplySpotifyCredentials(store, opts);
+                ReapplyCatalog();
+                return Results.NoContent();
+            });
+
+            // ─── Discogs ─────────────────────────────────────────────────────
+            app.MapGet("/api/settings/discogs", (WispSettingsStore store) =>
+            {
+                var creds = store.Current.Catalog?.Discogs;
+                return Results.Ok(new
+                {
+                    isConfigured = !string.IsNullOrWhiteSpace(creds?.PersonalAccessToken),
+                    tokenPreview = creds?.PersonalAccessToken is { Length: > 6 } t ? t[..6] + "…" : null,
+                });
+            });
+
+            app.MapPost("/api/settings/discogs", (DiscogsCredentials? creds, WispSettingsStore store) =>
+            {
+                if (creds is null || string.IsNullOrWhiteSpace(creds.PersonalAccessToken))
+                    return Results.BadRequest(new { code = "credentials_required", message = "PersonalAccessToken is required." });
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { Discogs = creds }
+                });
+                ReapplyCatalog();
+                return Results.NoContent();
+            });
+
+            app.MapDelete("/api/settings/discogs", (WispSettingsStore store) =>
+            {
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { Discogs = null }
+                });
+                ReapplyCatalog();
+                return Results.NoContent();
+            });
+
+            // ─── YouTube ─────────────────────────────────────────────────────
+            app.MapGet("/api/settings/youtube", (WispSettingsStore store) =>
+            {
+                var creds = store.Current.Catalog?.YouTube;
+                return Results.Ok(new
+                {
+                    isConfigured = !string.IsNullOrWhiteSpace(creds?.ApiKey),
+                    keyPreview = creds?.ApiKey is { Length: > 6 } k ? k[..6] + "…" : null,
+                });
+            });
+
+            app.MapPost("/api/settings/youtube", (YouTubeCredentials? creds, WispSettingsStore store) =>
+            {
+                if (creds is null || string.IsNullOrWhiteSpace(creds.ApiKey))
+                    return Results.BadRequest(new { code = "credentials_required", message = "ApiKey is required." });
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { YouTube = creds }
+                });
+                ReapplyCatalog();
+                return Results.NoContent();
+            });
+
+            app.MapDelete("/api/settings/youtube", (WispSettingsStore store) =>
+            {
+                store.Update(s => s with
+                {
+                    Catalog = (s.Catalog ?? new CatalogCredentials()) with { YouTube = null }
+                });
+                ReapplyCatalog();
                 return Results.NoContent();
             });
 
@@ -235,10 +310,19 @@ public class Program
         }
     }
 
-    public static void ApplySpotifyCredentials(WispSettingsStore store, SpotifyOptions opts)
+    public static void ApplyCatalogCredentials(
+        WispSettingsStore store,
+        SpotifyOptions spotify,
+        DiscogsOptions discogs,
+        YouTubeOptions youTube)
     {
-        var creds = store.Current.Catalog?.Spotify;
-        opts.ClientId = creds?.ClientId;
-        opts.ClientSecret = creds?.ClientSecret;
+        var catalog = store.Current.Catalog;
+
+        spotify.ClientId = catalog?.Spotify?.ClientId;
+        spotify.ClientSecret = catalog?.Spotify?.ClientSecret;
+
+        discogs.PersonalAccessToken = catalog?.Discogs?.PersonalAccessToken;
+
+        youTube.ApiKey = catalog?.YouTube?.ApiKey;
     }
 }

@@ -19,9 +19,13 @@ public sealed record RecommendationWeights(double Key, double Bpm, double Energy
 public sealed record CatalogCredentials
 {
     public SpotifyCredentials? Spotify { get; init; }
+    public DiscogsCredentials? Discogs { get; init; }
+    public YouTubeCredentials? YouTube { get; init; }
 }
 
 public sealed record SpotifyCredentials(string ClientId, string ClientSecret);
+public sealed record DiscogsCredentials(string PersonalAccessToken);
+public sealed record YouTubeCredentials(string ApiKey);
 
 public sealed class WispSettingsStore
 {

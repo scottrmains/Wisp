@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Wisp.Infrastructure.ArtistRefresh;
+using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Spotify;
+using Wisp.Infrastructure.ExternalCatalog.YouTube;
 using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Api.ArtistRefresh;
@@ -19,6 +21,8 @@ public static class ArtistRefreshEndpoints
         app.MapPatch("/api/releases/{id:guid}", UpdateRelease);
 
         app.MapPost("/api/spotify/test", TestSpotify);
+        app.MapPost("/api/discogs/test", TestDiscogs);
+        app.MapPost("/api/youtube/test", TestYouTube);
         return app;
     }
 
@@ -29,16 +33,35 @@ public static class ArtistRefreshEndpoints
     }
 
     private static async Task<IResult> MatchCandidates(
-        Guid id, ArtistRefreshService svc, CancellationToken ct)
+        Guid id,
+        ArtistRefreshService svc,
+        string? source = "Spotify",
+        CancellationToken ct = default)
     {
+        var normalizedSource = NormalizeSource(source);
+        if (normalizedSource is null)
+            return Results.BadRequest(new { code = "unsupported_source", message = $"Unsupported source '{source}'." });
+
         try
         {
-            var candidates = await svc.GetMatchCandidatesAsync(id, ct);
+            var candidates = await svc.GetMatchCandidatesAsync(id, normalizedSource, ct);
             return Results.Ok(candidates.Select(CandidateDto.From));
         }
         catch (SpotifyNotConfiguredException)
         {
             return Results.BadRequest(new { code = "spotify_unconfigured", message = "Spotify credentials are not set." });
+        }
+        catch (DiscogsNotConfiguredException)
+        {
+            return Results.BadRequest(new { code = "discogs_unconfigured", message = "Discogs token is not set." });
+        }
+        catch (YouTubeNotConfiguredException)
+        {
+            return Results.BadRequest(new { code = "youtube_unconfigured", message = "YouTube API key is not set." });
+        }
+        catch (YouTubeQuotaExceededException ex)
+        {
+            return Results.BadRequest(new { code = "youtube_quota", message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -51,12 +74,28 @@ public static class ArtistRefreshEndpoints
     {
         if (string.IsNullOrWhiteSpace(body.ExternalId))
             return Results.BadRequest(new { code = "external_id_required", message = "ExternalId is required." });
-        if (!string.Equals(body.Source, "Spotify", StringComparison.OrdinalIgnoreCase))
+
+        var normalizedSource = NormalizeSource(body.Source);
+        if (normalizedSource is null)
             return Results.BadRequest(new { code = "unsupported_source", message = $"Unsupported source '{body.Source}'." });
 
-        var artist = await svc.AssignSpotifyMatchAsync(id, body.ExternalId, ct);
-        return Results.Ok(new { id = artist.Id, spotifyArtistId = artist.SpotifyArtistId });
+        var artist = await svc.AssignMatchAsync(id, normalizedSource, body.ExternalId, ct);
+        return Results.Ok(new
+        {
+            id = artist.Id,
+            spotifyArtistId = artist.SpotifyArtistId,
+            discogsArtistId = artist.DiscogsArtistId,
+            youTubeChannelId = artist.YouTubeChannelId,
+        });
     }
+
+    private static string? NormalizeSource(string? raw) => raw?.ToLowerInvariant() switch
+    {
+        "spotify" => CatalogSources.Spotify,
+        "discogs" => CatalogSources.Discogs,
+        "youtube" => CatalogSources.YouTube,
+        _ => null,
+    };
 
     private static async Task<IResult> Refresh(Guid id, ArtistRefreshService svc, CancellationToken ct)
     {
@@ -68,6 +107,14 @@ public static class ArtistRefreshEndpoints
         catch (SpotifyNotConfiguredException)
         {
             return Results.BadRequest(new { code = "spotify_unconfigured", message = "Spotify credentials are not set." });
+        }
+        catch (DiscogsNotConfiguredException)
+        {
+            return Results.BadRequest(new { code = "discogs_unconfigured", message = "Discogs token is not set." });
+        }
+        catch (YouTubeQuotaExceededException ex)
+        {
+            return Results.BadRequest(new { code = "youtube_quota", message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -108,8 +155,17 @@ public static class ArtistRefreshEndpoints
     }
 
     private static async Task<IResult> TestSpotify(SpotifyCatalogClient client, CancellationToken ct)
+        => await TestRunner(client.TestConnectionAsync, ct);
+
+    private static async Task<IResult> TestDiscogs(DiscogsCatalogClient client, CancellationToken ct)
+        => await TestRunner(client.TestConnectionAsync, ct);
+
+    private static async Task<IResult> TestYouTube(YouTubeCatalogClient client, CancellationToken ct)
+        => await TestRunner(client.TestConnectionAsync, ct);
+
+    private static async Task<IResult> TestRunner(Func<CancellationToken, Task<string?>> probe, CancellationToken ct)
     {
-        var error = await client.TestConnectionAsync(ct);
+        var error = await probe(ct);
         return error is null
             ? Results.Ok(new { ok = true })
             : Results.BadRequest(new { ok = false, message = error });

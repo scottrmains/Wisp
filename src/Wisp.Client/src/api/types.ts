@@ -191,13 +191,17 @@ export interface SystemInfo {
   environment: string
 }
 
+export type CatalogSource = 'Spotify' | 'Discogs' | 'YouTube'
+
 export interface ArtistSummary {
   id: string
   name: string
   trackCount: number
   latestLocalYear: number | null
   newReleaseCount: number
-  isMatched: boolean
+  isMatchedSpotify: boolean
+  isMatchedDiscogs: boolean
+  isMatchedYouTube: boolean
   lastCheckedAt: string | null
 }
 
@@ -226,5 +230,7 @@ export interface ExternalRelease {
   matchedLocalTrackId: string | null
   isDismissed: boolean
   isSavedForLater: boolean
+  youTubeVideoId: string | null
+  youTubeUrl: string | null
   fetchedAt: string
 }

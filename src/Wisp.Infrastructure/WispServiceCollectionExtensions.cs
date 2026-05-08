@@ -3,7 +3,9 @@ using Wisp.Core.Cleanup;
 using Wisp.Core.Recommendations;
 using Wisp.Infrastructure.ArtistRefresh;
 using Wisp.Infrastructure.Cleanup;
+using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Spotify;
+using Wisp.Infrastructure.ExternalCatalog.YouTube;
 using Wisp.Infrastructure.FileSystem;
 using Wisp.Infrastructure.Library;
 using Wisp.Infrastructure.Tagging;
@@ -31,8 +33,17 @@ public static class WispServiceCollectionExtensions
 
         services.AddHttpClient("Wisp.Spotify");
         services.AddHttpClient("Wisp.Spotify.Auth");
+        services.AddHttpClient("Wisp.Discogs");
+        services.AddHttpClient("Wisp.YouTube");
+
         services.AddSingleton<SpotifyOptions>();
+        services.AddSingleton<DiscogsOptions>();
+        services.AddSingleton<YouTubeOptions>();
+
         services.AddSingleton<SpotifyCatalogClient>();
+        services.AddSingleton<DiscogsCatalogClient>();
+        services.AddSingleton<YouTubeCatalogClient>();
+
         services.AddScoped<ArtistRefreshService>();
 
         return services;

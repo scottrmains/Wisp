@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Wisp.Core.ArtistRefresh;
 using Wisp.Infrastructure.ExternalCatalog;
+using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Spotify;
+using Wisp.Infrastructure.ExternalCatalog.YouTube;
 using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Infrastructure.ArtistRefresh;
@@ -13,12 +15,24 @@ public sealed record ArtistSummary(
     int TrackCount,
     int? LatestLocalYear,
     int NewReleaseCount,
-    bool IsMatched,
+    bool IsMatchedSpotify,
+    bool IsMatchedDiscogs,
+    bool IsMatchedYouTube,
     DateTime? LastCheckedAt);
+
+/// Source string constants — keep on the wire as strings, but typed inside.
+public static class CatalogSources
+{
+    public const string Spotify = "Spotify";
+    public const string Discogs = "Discogs";
+    public const string YouTube = "YouTube";
+}
 
 public class ArtistRefreshService(
     WispDbContext db,
     SpotifyCatalogClient spotify,
+    DiscogsCatalogClient discogs,
+    YouTubeCatalogClient youTube,
     ILogger<ArtistRefreshService> log)
 {
     /// Idempotently project distinct Track.Artist values into ArtistProfile rows.
@@ -58,7 +72,6 @@ public class ArtistRefreshService(
     {
         await EnsureProfilesFromLibraryAsync(ct);
 
-        // Aggregate library stats per normalized artist name.
         var stats = await db.Tracks.AsNoTracking()
             .Where(t => t.Artist != null && t.Artist != "")
             .Select(t => new { t.Artist, t.ReleaseYear })
@@ -92,7 +105,9 @@ public class ArtistRefreshService(
                     TrackCount: s?.Count ?? 0,
                     LatestLocalYear: s?.LatestYear,
                     NewReleaseCount: releasesByArtist.GetValueOrDefault(p.Id, 0),
-                    IsMatched: !string.IsNullOrEmpty(p.SpotifyArtistId),
+                    IsMatchedSpotify: !string.IsNullOrEmpty(p.SpotifyArtistId),
+                    IsMatchedDiscogs: !string.IsNullOrEmpty(p.DiscogsArtistId),
+                    IsMatchedYouTube: !string.IsNullOrEmpty(p.YouTubeChannelId),
                     LastCheckedAt: p.LastCheckedAt);
             })
             .Where(s => s.TrackCount > 0)
@@ -102,41 +117,93 @@ public class ArtistRefreshService(
     }
 
     public async Task<IReadOnlyList<CatalogArtistCandidate>> GetMatchCandidatesAsync(
-        Guid artistId, CancellationToken ct)
+        Guid artistId, string source, CancellationToken ct)
     {
         var artist = await db.ArtistProfiles.AsNoTracking().FirstOrDefaultAsync(a => a.Id == artistId, ct)
             ?? throw new InvalidOperationException("Artist profile not found.");
 
-        return await spotify.SearchArtistsAsync(artist.Name, limit: 8, ct);
+        return source switch
+        {
+            CatalogSources.Spotify => await spotify.SearchArtistsAsync(artist.Name, limit: 8, ct),
+            CatalogSources.Discogs => await discogs.SearchArtistsAsync(artist.Name, limit: 10, ct),
+            CatalogSources.YouTube => await youTube.SearchTopicChannelsAsync(artist.Name, limit: 5, ct),
+            _ => throw new ArgumentException($"Unknown source '{source}'."),
+        };
     }
 
-    public async Task<ArtistProfile> AssignSpotifyMatchAsync(Guid artistId, string spotifyArtistId, CancellationToken ct)
+    public async Task<ArtistProfile> AssignMatchAsync(
+        Guid artistId, string source, string externalId, CancellationToken ct)
     {
         var artist = await db.ArtistProfiles.FirstOrDefaultAsync(a => a.Id == artistId, ct)
             ?? throw new InvalidOperationException("Artist profile not found.");
-        artist.SpotifyArtistId = spotifyArtistId;
+
+        switch (source)
+        {
+            case CatalogSources.Spotify: artist.SpotifyArtistId = externalId; break;
+            case CatalogSources.Discogs: artist.DiscogsArtistId = externalId; break;
+            case CatalogSources.YouTube: artist.YouTubeChannelId = externalId; break;
+            default: throw new ArgumentException($"Unknown source '{source}'.");
+        }
+
         await db.SaveChangesAsync(ct);
         return artist;
     }
 
-    /// Pull releases for an artist from Spotify and reconcile against local library.
-    /// Idempotent — re-running updates `IsAlreadyInLibrary` flags on existing rows.
+    /// Pull releases from every matched source and reconcile against local library.
+    /// YouTube is treated as an enrichment layer — uploads are matched against existing
+    /// release rows by title, populating YouTubeVideoId/YouTubeUrl when found.
+    /// Returns the count of newly inserted release rows across all sources.
     public async Task<int> RefreshAsync(Guid artistId, CancellationToken ct)
     {
         var artist = await db.ArtistProfiles.FirstOrDefaultAsync(a => a.Id == artistId, ct)
             ?? throw new InvalidOperationException("Artist profile not found.");
-        if (string.IsNullOrEmpty(artist.SpotifyArtistId))
-            throw new InvalidOperationException("Artist has no Spotify match yet.");
 
-        var releases = await spotify.GetArtistAlbumsAsync(artist.SpotifyArtistId, ct);
+        var matched = false;
+        var totalInserted = 0;
 
-        // Pull existing rows for this artist+source so we can update in place.
+        if (!string.IsNullOrEmpty(artist.SpotifyArtistId))
+        {
+            matched = true;
+            var releases = await spotify.GetArtistAlbumsAsync(artist.SpotifyArtistId, ct);
+            totalInserted += await UpsertReleasesAsync(artist, CatalogSources.Spotify, releases, ct);
+        }
+        if (!string.IsNullOrEmpty(artist.DiscogsArtistId))
+        {
+            matched = true;
+            var releases = await discogs.GetArtistReleasesAsync(artist.DiscogsArtistId, ct);
+            totalInserted += await UpsertReleasesAsync(artist, CatalogSources.Discogs, releases, ct);
+        }
+
+        // YouTube enrichment — fetch the Topic channel uploads and match them to existing
+        // releases by title. We persist the inserts/updates from the loop above before this
+        // step so the matcher sees the just-fetched releases too.
+        if (!string.IsNullOrEmpty(artist.YouTubeChannelId))
+        {
+            matched = true;
+            await db.SaveChangesAsync(ct);
+            await EnrichWithYouTubeUploadsAsync(artist, ct);
+        }
+
+        if (!matched)
+            throw new InvalidOperationException("Artist has no source matches yet.");
+
+        artist.LastCheckedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        log.LogInformation("Refreshed {Artist}: {Inserted} new releases across sources", artist.Name, totalInserted);
+        return totalInserted;
+    }
+
+    private async Task<int> UpsertReleasesAsync(
+        ArtistProfile artist,
+        string source,
+        IReadOnlyList<CatalogReleaseSummary> releases,
+        CancellationToken ct)
+    {
         var existingRows = await db.ExternalReleases
-            .Where(r => r.ArtistProfileId == artistId && r.Source == "Spotify")
+            .Where(r => r.ArtistProfileId == artist.Id && r.Source == source)
             .ToListAsync(ct);
         var byId = existingRows.ToDictionary(r => r.ExternalId);
 
-        // Pull library titles by this artist for overlap detection.
         var libraryTitles = await db.Tracks.AsNoTracking()
             .Where(t => t.Artist != null && t.Title != null)
             .Select(t => new { t.Id, t.Artist, t.Title })
@@ -174,8 +241,8 @@ public class ArtistRefreshService(
                 db.ExternalReleases.Add(new ExternalRelease
                 {
                     Id = Guid.NewGuid(),
-                    ArtistProfileId = artistId,
-                    Source = "Spotify",
+                    ArtistProfileId = artist.Id,
+                    Source = source,
                     ExternalId = r.ExternalId,
                     Title = r.Title,
                     ReleaseType = ParseReleaseType(r.ReleaseType),
@@ -190,11 +257,48 @@ public class ArtistRefreshService(
             }
         }
 
-        artist.LastCheckedAt = now;
-        await db.SaveChangesAsync(ct);
-        log.LogInformation("Refreshed {Artist}: {Inserted} new, {Total} total releases tracked",
-            artist.Name, inserted, releases.Count);
         return inserted;
+    }
+
+    private async Task EnrichWithYouTubeUploadsAsync(ArtistProfile artist, CancellationToken ct)
+    {
+        try
+        {
+            var uploads = await youTube.GetTopicChannelUploadsAsync(artist.YouTubeChannelId!, ct);
+            if (uploads.Count == 0) return;
+
+            // Index uploads by normalized title for O(1) lookup against each release.
+            var uploadsByTitle = uploads
+                .Select(u => new { Norm = TitleOverlap.Normalize(u.Title), Upload = u })
+                .Where(x => !string.IsNullOrEmpty(x.Norm))
+                .GroupBy(x => x.Norm)
+                .ToDictionary(g => g.Key, g => g.First().Upload);
+
+            var releases = await db.ExternalReleases
+                .Where(r => r.ArtistProfileId == artist.Id)
+                .ToListAsync(ct);
+
+            var enriched = 0;
+            foreach (var release in releases)
+            {
+                if (!string.IsNullOrEmpty(release.YouTubeVideoId)) continue;
+                var norm = TitleOverlap.Normalize(release.Title);
+                if (string.IsNullOrEmpty(norm)) continue;
+
+                if (uploadsByTitle.TryGetValue(norm, out var upload))
+                {
+                    release.YouTubeVideoId = upload.VideoId;
+                    release.YouTubeUrl = upload.Url;
+                    enriched++;
+                }
+            }
+            log.LogInformation("YouTube: enriched {Count}/{Total} releases for {Artist}",
+                enriched, releases.Count, artist.Name);
+        }
+        catch (YouTubeQuotaExceededException)
+        {
+            log.LogWarning("YouTube quota exceeded while enriching {Artist} — skipping", artist.Name);
+        }
     }
 
     private static ReleaseType ParseReleaseType(string raw) => raw.ToLowerInvariant() switch

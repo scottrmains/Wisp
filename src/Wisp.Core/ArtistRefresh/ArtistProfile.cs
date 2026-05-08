@@ -15,6 +15,11 @@ public class ArtistProfile
     public string? MusicBrainzArtistId { get; set; }
     public string? DiscogsArtistId { get; set; }
 
+    /// YouTube channel id (typically the auto-generated "ARTIST - Topic" channel,
+    /// which aggregates the artist's licensed releases — much cleaner than their
+    /// official channel which mixes interviews + non-music content).
+    public string? YouTubeChannelId { get; set; }
+
     public DateTime? LastCheckedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }

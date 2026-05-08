@@ -52,13 +52,21 @@ export function SettingsPanel({ onClose }: Props) {
             <PathRow label="Logs" path={sys.data?.logsDir} />
           </Section>
 
-          <Section title="Spotify (for Artist Refresh)">
+          <Section title="Spotify (Artist Refresh source)">
             <SpotifySettings />
+          </Section>
+
+          <Section title="Discogs (Artist Refresh — best for old / vinyl-only releases)">
+            <DiscogsSettings />
+          </Section>
+
+          <Section title="YouTube (audition layer for releases)">
+            <YouTubeSettings />
           </Section>
 
           <Section title="Coming soon">
             <p className="text-xs text-[var(--color-muted)]">
-              Recommendation weight overrides, default mix mode, FFmpeg path, audio device selection.
+              Recommendation weight overrides, default mix mode, FFmpeg path, audio device selection, MusicBrainz.
             </p>
           </Section>
         </div>
@@ -204,6 +212,170 @@ function SpotifySettings() {
             className="w-full rounded bg-[var(--color-accent)] px-2 py-1 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {save.isPending ? 'Saving…' : 'Save credentials'}
+          </button>
+        </div>
+      )}
+      {testResult && (
+        <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {testResult.ok ? '✓ Connection OK' : `✗ ${testResult.message}`}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function DiscogsSettings() {
+  return (
+    <SingleTokenSettings
+      statusKey="discogs-status"
+      statusUrl="/api/settings/discogs"
+      saveUrl="/api/settings/discogs"
+      deleteUrl="/api/settings/discogs"
+      testUrl="/api/discogs/test"
+      tokenLabel="Personal access token"
+      tokenField="personalAccessToken"
+      previewField="tokenPreview"
+      docHref="https://www.discogs.com/settings/developers"
+      docLabel="discogs.com/settings/developers"
+      hint="Generate a personal access token under Developer settings — no OAuth flow needed. Stored in plain JSON in your AppData folder."
+    />
+  )
+}
+
+function YouTubeSettings() {
+  return (
+    <SingleTokenSettings
+      statusKey="youtube-status"
+      statusUrl="/api/settings/youtube"
+      saveUrl="/api/settings/youtube"
+      deleteUrl="/api/settings/youtube"
+      testUrl="/api/youtube/test"
+      tokenLabel="API key"
+      tokenField="apiKey"
+      previewField="keyPreview"
+      docHref="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
+      docLabel="Google Cloud Console (YouTube Data API v3)"
+      hint="Free tier is 10,000 units/day. Wisp uses the cheap playlistItems.list path (1 unit per page of 50) for uploads, so a typical day's browsing won't exhaust the quota."
+    />
+  )
+}
+
+interface SingleTokenStatus {
+  isConfigured: boolean
+  [k: string]: string | boolean | null | undefined
+}
+
+function SingleTokenSettings(props: {
+  statusKey: string
+  statusUrl: string
+  saveUrl: string
+  deleteUrl: string
+  testUrl: string
+  tokenLabel: string
+  tokenField: string
+  previewField: string
+  docHref: string
+  docLabel: string
+  hint: string
+}) {
+  const qc = useQueryClient()
+  const status = useQuery({
+    queryKey: [props.statusKey],
+    queryFn: () => apiGet<SingleTokenStatus>(props.statusUrl),
+  })
+  const [token, setToken] = useState('')
+  const [show, setShow] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message?: string } | null>(null)
+
+  const save = useMutation({
+    mutationFn: () => apiPost(props.saveUrl, { [props.tokenField]: token }),
+    onSuccess: () => {
+      setToken('')
+      setTestResult(null)
+      qc.invalidateQueries({ queryKey: [props.statusKey] })
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: () => apiDelete(props.deleteUrl),
+    onSuccess: () => {
+      setTestResult(null)
+      qc.invalidateQueries({ queryKey: [props.statusKey] })
+    },
+  })
+
+  const test = useMutation({
+    mutationFn: async () => {
+      try {
+        await apiPost(props.testUrl)
+        return { ok: true } as const
+      } catch (e) {
+        return { ok: false, message: (e as Error).message } as const
+      }
+    },
+    onSuccess: setTestResult,
+  })
+
+  const preview = status.data?.[props.previewField] as string | null | undefined
+
+  return (
+    <div className="space-y-2">
+      {status.data?.isConfigured ? (
+        <div className="flex items-center justify-between rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm">
+          <span>
+            <span className="text-[var(--color-muted)]">Configured</span>
+            {preview && <span className="ml-2 font-mono text-xs">{preview}</span>}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => test.mutate()}
+              disabled={test.isPending}
+              className="rounded border border-[var(--color-border)] px-2 py-0.5 text-xs hover:bg-white/5 disabled:opacity-40"
+            >
+              {test.isPending ? 'Testing…' : 'Test'}
+            </button>
+            <button
+              onClick={() => remove.mutate()}
+              disabled={remove.isPending}
+              className="rounded border border-red-500/30 px-2 py-0.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--color-muted)]">
+            {props.hint} Get yours at{' '}
+            <button
+              onClick={() => bridgeAvailable() && void bridge.openExternal(props.docHref)}
+              className="text-[var(--color-accent)] hover:underline"
+            >
+              {props.docLabel}
+            </button>
+            .
+          </p>
+          <div className="flex gap-2">
+            <input
+              type={show ? 'text' : 'password'}
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={props.tokenLabel}
+              className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+            />
+            <button
+              onClick={() => setShow((s) => !s)}
+              className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)]"
+            >
+              {show ? 'hide' : 'show'}
+            </button>
+          </div>
+          <button
+            onClick={() => save.mutate()}
+            disabled={!token.trim() || save.isPending}
+            className="w-full rounded bg-[var(--color-accent)] px-2 py-1 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {save.isPending ? 'Saving…' : `Save ${props.tokenLabel.toLowerCase()}`}
           </button>
         </div>
       )}

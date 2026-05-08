@@ -10,11 +10,14 @@ public sealed record ArtistSummaryDto(
     int TrackCount,
     int? LatestLocalYear,
     int NewReleaseCount,
-    bool IsMatched,
+    bool IsMatchedSpotify,
+    bool IsMatchedDiscogs,
+    bool IsMatchedYouTube,
     DateTime? LastCheckedAt)
 {
     public static ArtistSummaryDto From(ArtistSummary s) => new(
-        s.Id, s.Name, s.TrackCount, s.LatestLocalYear, s.NewReleaseCount, s.IsMatched, s.LastCheckedAt);
+        s.Id, s.Name, s.TrackCount, s.LatestLocalYear, s.NewReleaseCount,
+        s.IsMatchedSpotify, s.IsMatchedDiscogs, s.IsMatchedYouTube, s.LastCheckedAt);
 }
 
 public sealed record CandidateDto(
@@ -45,12 +48,14 @@ public sealed record ReleaseDto(
     Guid? MatchedLocalTrackId,
     bool IsDismissed,
     bool IsSavedForLater,
+    string? YouTubeVideoId,
+    string? YouTubeUrl,
     DateTime FetchedAt)
 {
     public static ReleaseDto From(ExternalRelease r) => new(
         r.Id, r.ArtistProfileId, r.Source, r.ExternalId, r.Title, r.ReleaseType, r.ReleaseDate,
         r.Url, r.ArtworkUrl, r.IsAlreadyInLibrary, r.MatchedLocalTrackId,
-        r.IsDismissed, r.IsSavedForLater, r.FetchedAt);
+        r.IsDismissed, r.IsSavedForLater, r.YouTubeVideoId, r.YouTubeUrl, r.FetchedAt);
 }
 
 public sealed record UpdateReleaseRequest(bool? IsDismissed, bool? IsSavedForLater);

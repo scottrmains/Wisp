@@ -387,31 +387,40 @@ Catalog credentials live in `%LOCALAPPDATA%\Wisp\config.json` under `Catalog:Spo
 - [x] Settings panel: Spotify section with Client ID + Secret inputs (show/hide secret), Save / Test / Remove. Configured state shows the first 6 chars of Client ID for confirmation. Bridge link to `developer.spotify.com/dashboard`.
 - [x] Empty state when API keys missing — clean 400 from API with `code: "spotify_unconfigured"` + UI keeps the "Find on Spotify" button visible
 
-### Phase 8b — Catalog breadth + audition (Discogs + YouTube) 🚧 *this iteration*
+### Phase 8b — Catalog breadth + audition (Discogs + YouTube) ✅
 
-**Why this matters now:** Spotify undersells exactly the artists this feature exists to surface — vinyl-only EPs, white labels, deep underground house catalogues from 90s/00s. Discogs has dramatically better coverage of those releases, and YouTube provides the audition layer ("can I actually hear this before deciding to buy?") so the Rediscover flow goes from "list of releases with links" to "listen, then act."
+**Why this mattered:** Spotify undersells exactly the artists this feature exists to surface — vinyl-only EPs, white labels, deep underground house catalogues. Discogs covers them. YouTube gives an audition layer so Rediscover goes from "list of releases with links" to "listen, then act."
 
-**Hard line preserved from Phase 9:** YouTube integration is **discovery + embedded preview only** — official Data API v3, ToS-compliant. No yt-dlp. No audio extraction. No Web Audio of YouTube content. Embedded iframe player only; bought tracks become normal local files via re-scan.
+**Hard line preserved:** YouTube integration is **discovery + embedded preview only** — Data API v3, ToS-compliant. No yt-dlp. No audio extraction. No Web Audio of YouTube content. Embedded iframe player only.
 
 #### Discogs (release source — what's been released)
-- [ ] `DiscogsCatalogClient`: personal access token auth, 60 req/min, polite `User-Agent: Wisp/0.x (+contact)`. Search artists, fetch releases sorted by `year desc`, paginated via `pagination.urls.next`.
-- [ ] `DiscogsArtistId` already exists on `ArtistProfile` — populate via match flow.
-- [ ] Settings panel: paste personal access token, Save / Test / Remove. Bridge link to `discogs.com/settings/developers`.
-- [ ] API: `match-candidates?source=Discogs`, `match` body now accepts `{ source: "Spotify" | "Discogs" }`. `refresh` fetches from **all matched sources** for that artist.
-- [ ] Source badge on release cards (`S` for Spotify, `D` for Discogs, distinct colours).
+- [x] `DiscogsCatalogClient`: personal access token auth, polite UA, search artists + fetch releases sorted `year desc` paginated via `pagination.urls.next`. One-shot 429 retry. Caps at 500 results per artist.
+- [x] `DiscogsArtistId` populated via match flow (column already existed).
+- [x] Settings: paste token, Save / Test (uses `/oauth/identity` — 0 search-quota cost) / Remove. Bridge link to `discogs.com/settings/developers`.
+- [x] API: `match-candidates?source=Discogs|Spotify|YouTube`, `match` body accepts `{ source, externalId }`. `refresh` fetches from **all matched sources** for the artist.
+- [x] Source badges on release cards: `S` (emerald) for Spotify, `D` (orange) for Discogs.
 
 #### YouTube per-artist (audition source — what you can hear right now)
-- [ ] `YouTubeCatalogClient` (Data API v3): resolve artist's auto-generated **Topic channel** via `search.list?type=channel&q="ARTIST - Topic"`, get its `uploads` playlist, page through with `playlistItems.list` (1 unit/page of 50 — much cheaper than `search.list` per query).
-- [ ] Add `YouTubeChannelId` to `ArtistProfile`, `YouTubeVideoId` + `YouTubeUrl` to `ExternalRelease`.
-- [ ] Match Topic channel uploads to existing release rows by title similarity (reuse `TitleOverlap.Normalize`). When matched, persist the YouTube IDs on the release.
-- [ ] Settings panel: paste YouTube Data API v3 key, Test endpoint that does a tiny `videos.list` to confirm.
-- [ ] Frontend: each release card with a YouTube match shows a `▶ YouTube` button that **expands inline** to an embedded iframe player. Releases without a match show `🔍 Search YouTube` (external link via `bridge.openExternal` to a search URL).
-- [ ] Quota awareness — surface a clear error when the API returns `quotaExceeded`. Cache aggressively (uploads list per artist, refresh on demand only).
+- [x] `YouTubeCatalogClient` (Data API v3): resolve **Topic channel** via `search.list?type=channel&q="ARTIST - Topic"` (100 units, only on user-initiated match), then `channels.list` for uploads playlist id, then `playlistItems.list` paged at 1 unit/page of 50.
+- [x] `YouTubeChannelId` on `ArtistProfile`; `YouTubeVideoId` + `YouTubeUrl` on `ExternalRelease` (migration `AddYouTubeFields`).
+- [x] **Enrichment, not standalone source**: `RefreshAsync` fetches Spotify + Discogs releases first, then iterates Topic channel uploads and matches them to existing release rows by `TitleOverlap.Normalize`. Persists YouTube IDs onto matched rows.
+- [x] Settings: paste API key, Save / Test (1-unit `videos.list` against a known-public id) / Remove.
+- [x] Frontend: matched releases get a `▶ YouTube` button that expands inline to an embedded iframe (16:9 responsive). Unmatched releases get `🔍 YT` external link to a YouTube search via `bridge.openExternal`.
+- [x] Quota awareness: 403 with `quotaExceeded` body throws `YouTubeQuotaExceededException`, caught at the API edge as a clean `400 code: youtube_quota`. Enrichment failures don't fail the refresh.
 
-#### Explicitly NOT in this iteration
-- **MusicBrainz** — still on the plan (free, no auth) but less DJ-focused than Discogs. Adds complexity without solving the user's stated problem. Future iteration.
-- **Cross-source release dedupe** (`ReleaseNormalizer`) — same release showing as both `S` + `D`. Rare in practice for old underground catalogues; v1 just shows both and lets user dismiss. Future polish.
-- **Beatport** — gated developer portal, no movement. Still indefinitely deferred.
+#### Frontend UX
+- [x] Per-source dot indicators in the artist list (`S` / `D` / `Y` — green/orange/red when matched, grey when not)
+- [x] Artist detail replaces the old single CTA with a 3-tile source matcher (Spotify / Discogs / YouTube), each showing matched state + a one-line description of what each source is best for
+- [x] Single **Refresh from sources** button pulls from every matched source in one call
+- [x] `ArtistMatchModal` is source-aware — shows source-specific copy (Discogs hint about underground catalogues; YouTube hint about Topic channels)
+
+#### Explicitly NOT in this iteration *(remains on the plan)*
+- **MusicBrainz** — free, no auth, but less DJ-focused than Discogs. Future iteration.
+- **Cross-source release dedupe** (`ReleaseNormalizer`) — rare in practice for old underground catalogues; v1 shows both.
+- **Beatport** — gated developer portal. Indefinitely deferred.
+- **Auto-match across all sources** — manual per-source is fine v1 (respects YouTube's costly 100-unit `search.list`).
+
+**Verified live:** all three settings status endpoints return cleanly; unconfigured-source `match-candidates` calls return correct 400 codes per source (`spotify_unconfigured` / `discogs_unconfigured` / `youtube_unconfigured`). Artist summary exposes `isMatchedSpotify` / `isMatchedDiscogs` / `isMatchedYouTube` flags. 103/103 tests still green.
 - **Auto-match across all sources** — manual per-source match is fine v1 (and respects quota for YouTube's costly `search.list`).
 
 ### Phase 8c — Taste-aware filtering

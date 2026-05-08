@@ -33,6 +33,11 @@ public class ExternalRelease
     public bool IsDismissed { get; set; }
     public bool IsSavedForLater { get; set; }
 
+    /// YouTube enrichment — populated when a Topic-channel upload matches this release.
+    /// Lets the UI embed an inline player on the release card.
+    public string? YouTubeVideoId { get; set; }
+    public string? YouTubeUrl { get; set; }
+
     public DateTime FetchedAt { get; set; }
 
     public ArtistProfile? Artist { get; set; }
