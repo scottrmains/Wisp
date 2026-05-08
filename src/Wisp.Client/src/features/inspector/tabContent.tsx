@@ -88,21 +88,24 @@ export function CuesTab({ track }: { track: Track }) {
     })
   }
 
-  // Header — "Generate phrases" is always available; cue list renders below.
-  // We don't gate the header behind cues.length > 0 because the empty state
-  // is the most common moment the user wants to use generate.
-  const header = track.bpm !== null && (
-    <div className="flex items-center gap-2 border-b border-[var(--color-border)]/40 px-5 py-2 text-xs">
+  // Header is always rendered (so the user always sees the generate-phrases
+  // affordance). When the track has no BPM tag, the button is disabled with a
+  // tooltip explaining why — more discoverable than hiding the whole strip.
+  const noBpm = track.bpm === null
+  const header = (
+    <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)]/40 px-5 py-2 text-xs">
       <span className="text-[var(--color-muted)]">Anchor at</span>
       <span className="tabular-nums text-white">{formatDuration(phraseAnchorTime)}</span>
       <span className="text-[var(--color-muted)]">
-        · {Number(track.bpm).toFixed(0)} BPM · 16-beat phrases
+        {noBpm ? '· no BPM tag' : `· ${Number(track.bpm).toFixed(0)} BPM · 16-beat phrases`}
       </span>
       <button
         onClick={handleGeneratePhrases}
-        disabled={generatePhraseMarkers.isPending}
-        className="ml-auto rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
-        title="Use the current playhead as the first beat; extrapolate phrase markers across the rest of the track using the BPM"
+        disabled={noBpm || generatePhraseMarkers.isPending}
+        className="ml-auto rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
+        title={noBpm
+          ? 'Track has no BPM tag — Wisp can\'t extrapolate phrase positions. Add a BPM via cleanup first.'
+          : 'Use the current playhead as the first beat; extrapolate phrase markers across the rest of the track using the BPM'}
       >
         {generatePhraseMarkers.isPending ? 'Generating…' : '✨ Generate phrases'}
       </button>
@@ -112,20 +115,15 @@ export function CuesTab({ track }: { track: Track }) {
   if (loading) return <p className="px-5 py-6 text-sm text-[var(--color-muted)]">Loading cues…</p>
   if (cues.length === 0) {
     return (
-      <div>
+      <div className="flex h-full min-h-0 flex-col">
         {header}
         <div className="space-y-2 px-5 py-6 text-sm text-[var(--color-muted)]">
           <p>
             No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>＋ Cue</strong> in the action row.
           </p>
-          {track.bpm !== null && (
+          {!noBpm && (
             <p className="text-xs">
               For phrase markers across the whole track: pause at the kick on bar 1, then click <strong>✨ Generate phrases</strong> above — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
-            </p>
-          )}
-          {track.bpm === null && (
-            <p className="text-xs italic">
-              "Generate phrases" needs a BPM tag on this track. Add one via the cleanup flow first.
             </p>
           )}
         </div>
@@ -134,9 +132,14 @@ export function CuesTab({ track }: { track: Track }) {
   }
 
   return (
-    <div>
+    // h-full + min-h-0 + flex-col makes the cue <ul>'s overflow-auto actually
+    // engage when the workspace's max-h-[14rem] container constrains us.
+    // Without h-full the inner ul has no upper bound and the parent's
+    // overflow-hidden silently clips the bottom of the list instead of
+    // letting it scroll.
+    <div className="flex h-full min-h-0 flex-col">
       {header}
-      <ul className="overflow-auto py-1">
+      <ul className="min-h-0 flex-1 overflow-auto py-1">
       {cues.map((c, i) => (
         <li
           key={c.id}
