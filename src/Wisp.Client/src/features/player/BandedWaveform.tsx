@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getCachedBandedPeaks, loadBandedPeaks, type BandedPeaks } from '../../audio/peaks'
-import { beatTicksInRange } from '../../audio/snap'
+import { beatTicksInRange, snapToBeat } from '../../audio/snap'
 
 export interface CueMarker {
   id: string
@@ -407,8 +407,28 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, b
       }
     }
 
+    // Snap target — when BPM + first-beat are known, draw a brighter cyan
+    // line at the beat the cue would actually land on if the user pressed
+    // Q right now. Sits between the dim beat-grid ticks (which mark every
+    // beat) and the white crosshair (which marks the literal cursor): this
+    // line is the answer to "what's about to happen if I commit?".
+    if (bpm && bpm > 0 && firstBeatSec !== null && firstBeatSec !== undefined) {
+      const snapTime = snapToBeat(cursorTime, bpm, firstBeatSec)
+      const snapRatio = (snapTime - startTime) / windowSec
+      if (snapRatio >= 0 && snapRatio <= 1) {
+        const snapX = snapRatio * MAGNIFIER_WIDTH
+        // Soft outer glow first so it reads even at deep zoom where the
+        // line might overlap a tall waveform bar.
+        ctx.fillStyle = 'rgba(74, 222, 128, 0.20)'
+        ctx.fillRect(snapX - 2, 0, 5, MAGNIFIER_HEIGHT)
+        // Bright core line.
+        ctx.fillStyle = 'rgba(74, 222, 128, 0.95)'
+        ctx.fillRect(snapX - 0.5, 0, 1.5, MAGNIFIER_HEIGHT)
+      }
+    }
+
     // Centre crosshair — marks the exact time the cursor is on. Drawn last
-    // so it always sits on top of the beat grid.
+    // so it always sits on top of the beat grid + snap indicator.
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
     ctx.fillRect(MAGNIFIER_WIDTH / 2 - 0.5, 0, 1, MAGNIFIER_HEIGHT)
   }, [peaks, duration, cursorTime, windowSec, bpm, firstBeatSec])
@@ -431,11 +451,36 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, b
       style={{ left, top, width: MAGNIFIER_WIDTH }}
     >
       <canvas ref={canvasRef} className="block" />
-      <div className="border-t border-white/10 px-2 py-0.5 text-center font-mono text-[10px] text-white/80">
-        🔍 {formatTimeFine(cursorTime)} · ±{(windowSec / 2).toFixed(windowSec < 2 ? 2 : 1)}s · scroll to zoom
-      </div>
+      <MagnifierFooter cursorTime={cursorTime} windowSec={windowSec} bpm={bpm} firstBeatSec={firstBeatSec} />
     </div>,
     document.body,
+  )
+}
+
+function MagnifierFooter({
+  cursorTime,
+  windowSec,
+  bpm,
+  firstBeatSec,
+}: {
+  cursorTime: number
+  windowSec: number
+  bpm: number | null
+  firstBeatSec: number | null
+}) {
+  const canSnap = !!bpm && bpm > 0 && firstBeatSec !== null && firstBeatSec !== undefined
+  const snapTime = canSnap ? snapToBeat(cursorTime, bpm, firstBeatSec) : null
+  const snapsTo = snapTime !== null && Math.abs(snapTime - cursorTime) > 0.005
+
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/80">
+      <span>🔍 {formatTimeFine(cursorTime)}</span>
+      {snapsTo ? (
+        <span className="text-[rgb(74,222,128)]">→ {formatTimeFine(snapTime!)}</span>
+      ) : (
+        <span className="text-white/50">±{(windowSec / 2).toFixed(windowSec < 2 ? 2 : 1)}s</span>
+      )}
+    </div>
   )
 }
 

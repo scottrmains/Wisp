@@ -11,7 +11,7 @@ import { BandedWaveform } from '../player/BandedWaveform'
 import { RecommendationsList } from './RecommendationPanel'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
 import { formatDuration } from './format'
-import { detectFirstBeatFromPeaks, loadBandedPeaks } from '../../audio/peaks'
+import { detectDownbeatFromPeaks, detectFirstBeatFromPeaks, loadBandedPeaks } from '../../audio/peaks'
 import { snapToBeat } from '../../audio/snap'
 import { detectStructuralCues } from '../../audio/structure'
 
@@ -183,7 +183,14 @@ export function TrackPrepWorkspace({
     loadBandedPeaks(tid)
       .then((peaks) => {
         if (cancelled) return
-        const detectedFirstBeat = detectFirstBeatFromPeaks(peaks, track.durationSeconds)
+        // Prefer phase-fitted downbeat detection when BPM is known — it
+        // locks the grid against the next 32 kicks instead of just trusting
+        // the first audible low-band hit, so off-grid intro percussion
+        // doesn't poison every snap downstream. Falls back to the naive
+        // first-beat detector when BPM is missing.
+        const detectedFirstBeat = track.bpm
+          ? detectDownbeatFromPeaks(peaks, track.durationSeconds, track.bpm)
+          : detectFirstBeatFromPeaks(peaks, track.durationSeconds)
 
         if (!hasFirstBeat && detectedFirstBeat !== null) {
           cuesHook.create.mutate({

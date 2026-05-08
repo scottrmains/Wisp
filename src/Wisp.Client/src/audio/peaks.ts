@@ -162,6 +162,115 @@ export function detectFirstBeatFromPeaks(peaks: BandedPeaks, durationSeconds: nu
   return null
 }
 
+/// Phase-fitted downbeat detection. Improves on detectFirstBeatFromPeaks for
+/// the snap-to-beat case where mis-locating beat 1 by even half a beat
+/// throws every snapped cue off-grid.
+///
+/// Algorithm:
+///   1. Naive "first kick" gives a starting candidate (the first low-band
+///      sample > 50 % of max).
+///   2. The naive answer often lands on off-grid intro percussion — a
+///      conga, a synth stab, a hi-hat bleeding into the low band. So we
+///      search a ±1-beat window around it: for each candidate phase, count
+///      how many of the next 32 predicted beat positions have a real kick
+///      within ±60 ms tolerance.
+///   3. The phase with the highest hit count = the BPM grid's correct
+///      alignment. Pick the first kick that lives on that grid as the
+///      returned downbeat (so the marker visually sits on a real kick,
+///      not in dead space between hits).
+///
+/// Falls back to the naive answer when BPM is missing / the grid never
+/// locks (acoustic / non-4-on-the-floor music). Pure-JS, no DSP.
+export function detectDownbeatFromPeaks(
+  peaks: BandedPeaks,
+  durationSeconds: number,
+  bpm: number | null | undefined,
+): number | null {
+  if (durationSeconds <= 0) return null
+  if (!bpm || bpm <= 0) return detectFirstBeatFromPeaks(peaks, durationSeconds)
+
+  const low = peaks.low
+  const buckets = low.length
+  if (buckets === 0) return null
+
+  const secondsPerBeat = 60 / bpm
+  const samplesPerSecond = buckets / durationSeconds
+
+  // Search the first 60s of the track — long enough to lock the grid on any
+  // intro shorter than a 32-bar phrase even at 80 BPM, and bounded so we're
+  // not iterating a 10-minute track twice.
+  const searchEndIdx = Math.min(buckets, Math.floor(60 * samplesPerSecond))
+
+  let maxLow = 0
+  for (let i = 0; i < searchEndIdx; i++) if (low[i] > maxLow) maxLow = low[i]
+  if (maxLow <= 0) return null
+  const threshold = maxLow * 0.5
+
+  // Naive starting candidate.
+  let naiveIdx = -1
+  for (let i = 0; i < searchEndIdx; i++) {
+    if (low[i] >= threshold) { naiveIdx = i; break }
+  }
+  if (naiveIdx < 0) return null
+  const naiveTime = naiveIdx / samplesPerSecond
+
+  const tolerance = 0.06 // ±60 ms — tight enough to reject mis-aligned hits,
+                         // loose enough to catch BPMs that drift a bit.
+  const phaseSteps = 21  // search ±0.5 beat in 21 steps (~ms-level resolution)
+  const beatsToCheck = 32
+
+  let bestAnchor = naiveTime
+  let bestScore = -1
+
+  for (let s = 0; s < phaseSteps; s++) {
+    const shiftBeats = (s / (phaseSteps - 1)) - 0.5
+    const candidate = naiveTime + shiftBeats * secondsPerBeat
+    if (candidate < 0) continue
+
+    let score = 0
+    for (let n = 0; n < beatsToCheck; n++) {
+      const expected = candidate + n * secondsPerBeat
+      if (expected >= durationSeconds) break
+
+      const startIdx = Math.max(0, Math.floor((expected - tolerance) * samplesPerSecond))
+      const endIdx = Math.min(buckets - 1, Math.ceil((expected + tolerance) * samplesPerSecond))
+      let foundPeak = 0
+      for (let i = startIdx; i <= endIdx; i++) {
+        if (low[i] > foundPeak) foundPeak = low[i]
+      }
+      // Score weighted by hit strength so a strong kick on-grid scores more
+      // than a weak hi-hat on-grid.
+      if (foundPeak >= threshold) score += foundPeak / maxLow
+    }
+
+    if (score > bestScore) {
+      bestScore = score
+      bestAnchor = candidate
+    }
+  }
+
+  // Snap the returned anchor to the actual peak position of the first kick
+  // on the locked grid — visually feels right (the FirstBeat marker sits on
+  // a real kick, not in silence) and gives downstream snap calls the most
+  // accurate possible reference time.
+  for (let n = 0; n < beatsToCheck; n++) {
+    const expected = bestAnchor + n * secondsPerBeat
+    if (expected >= durationSeconds) break
+    const startIdx = Math.max(0, Math.floor((expected - tolerance) * samplesPerSecond))
+    const endIdx = Math.min(buckets - 1, Math.ceil((expected + tolerance) * samplesPerSecond))
+    let bestKickIdx = -1
+    let bestKickAmp = 0
+    for (let i = startIdx; i <= endIdx; i++) {
+      if (low[i] > bestKickAmp) { bestKickAmp = low[i]; bestKickIdx = i }
+    }
+    if (bestKickIdx >= 0 && bestKickAmp >= threshold) {
+      return bestKickIdx / samplesPerSecond
+    }
+  }
+
+  return bestAnchor
+}
+
 /// Downsample to per-bucket RMS amplitude. Used for the visual waveform —
 /// produces an "envelope" that follows song dynamics rather than every
 /// bucket pegging near max because it caught a single kick.
