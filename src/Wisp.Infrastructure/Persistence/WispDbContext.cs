@@ -8,6 +8,7 @@ using Wisp.Core.MixPlans;
 using Wisp.Core.Playlists;
 using Wisp.Core.Tagging;
 using Wisp.Core.Tracks;
+using Wisp.Core.Wanted;
 
 namespace Wisp.Infrastructure.Persistence;
 
@@ -28,6 +29,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<TrackTag> TrackTags => Set<TrackTag>();
     public DbSet<Playlist> Playlists => Set<Playlist>();
     public DbSet<PlaylistTrack> PlaylistTracks => Set<PlaylistTrack>();
+    public DbSet<WantedTrack> WantedTracks => Set<WantedTrack>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -171,6 +173,23 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
             .WithOne()
             .HasForeignKey(t => t.PlaylistId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        var wanted = b.Entity<WantedTrack>();
+        wanted.HasKey(w => w.Id);
+        wanted.Property(w => w.Source).HasConversion<string>().HasMaxLength(20);
+        wanted.Property(w => w.Artist).IsRequired().HasMaxLength(200);
+        wanted.Property(w => w.Title).IsRequired().HasMaxLength(400);
+        wanted.Property(w => w.SourceVideoId).HasMaxLength(40);
+        // Same artist + title can't be wanted twice. Idempotent POST relies on this.
+        wanted.HasIndex(w => new { w.Artist, w.Title }).IsUnique();
+        wanted.HasIndex(w => w.MatchedLocalTrackId);
+        // Optional FK to the matched local track. SetNull on delete so removing the
+        // local track demotes the wanted row back to "still wanted" rather than
+        // vanishing the wishlist entry.
+        wanted.HasOne(w => w.MatchedLocalTrack)
+            .WithMany()
+            .HasForeignKey(w => w.MatchedLocalTrackId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         var playlistTrack = b.Entity<PlaylistTrack>();
         playlistTrack.HasKey(t => t.Id);

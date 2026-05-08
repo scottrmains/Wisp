@@ -9,6 +9,7 @@ import { ChainDock } from './features/mixchain/ChainDock'
 import { MixPlansPage } from './features/mixchain/MixPlansPage'
 import { MiniPlayer } from './features/player/MiniPlayer'
 import { DiscoverPage } from './features/discover/DiscoverPage'
+import { WantedPage } from './features/wanted/WantedPage'
 import { SettingsPanel } from './features/settings/SettingsPanel'
 import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
@@ -80,6 +81,7 @@ function App() {
           {page === 'library' && <LibraryPage />}
           {page === 'mix-plans' && <MixPlansPage />}
           {page === 'discover' && <DiscoverPage />}
+          {page === 'wanted' && <WantedPage />}
           {page === 'crate-digger' && <CrateDiggerPage />}
         </main>
 

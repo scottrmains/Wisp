@@ -6,6 +6,7 @@ import { useCurrentPage, type AppPage } from '../../state/currentPage'
 import { useUiPrefs } from '../../state/uiPrefs'
 import { confirmDialog, promptDialog } from '../../components/dialog'
 import { CreatePlaylistDialog } from '../library/CreatePlaylistDialog'
+import { useWantedTracks } from '../wanted/useWantedTracks'
 
 interface SectionDef {
   id: AppPage
@@ -17,6 +18,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'library', label: 'Library', icon: '🎵' },
   { id: 'mix-plans', label: 'Mix Plans', icon: '🎚' },
   { id: 'discover', label: 'Discover', icon: '🔁' },
+  { id: 'wanted', label: 'Wanted', icon: '❤️' },
   { id: 'crate-digger', label: 'Crate Digger', icon: '⛏' },
 ]
 
@@ -44,6 +46,10 @@ export function AppSidebar() {
     queryFn: () => playlists.list(),
     staleTime: 30_000,
   })
+  // Count badge for the Wanted entry — reads the same TanStack cache the
+  // Wanted page uses, so a Want from Discover bumps the badge in real time.
+  const wantedTracks = useWantedTracks()
+  const wantedCount = wantedTracks.items.length
 
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => playlists.update(id, { name }),
@@ -112,6 +118,7 @@ export function AppSidebar() {
             collapsed={collapsed}
             icon={s.icon}
             label={s.label}
+            badge={s.id === 'wanted' && wantedCount > 0 ? wantedCount : undefined}
             onClick={() => {
               if (s.id === 'library') setActivePlaylistId(null)
               setPage(s.id)
@@ -193,18 +200,22 @@ function SidebarButton({
   collapsed,
   icon,
   label,
+  badge,
   onClick,
 }: {
   active: boolean
   collapsed: boolean
   icon: string
   label: string
+  /// Optional count badge after the label (e.g. Wanted: N). Only renders
+  /// when expanded; in collapsed mode the count would have nowhere to go.
+  badge?: number
   onClick: () => void
 }) {
   return (
     <button
       onClick={onClick}
-      title={collapsed ? label : undefined}
+      title={collapsed ? `${label}${badge ? ` (${badge})` : ''}` : undefined}
       className={[
         'flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors',
         collapsed ? 'justify-center' : '',
@@ -214,7 +225,16 @@ function SidebarButton({
       ].join(' ')}
     >
       <span aria-hidden className="text-base">{icon}</span>
-      {!collapsed && <span>{label}</span>}
+      {!collapsed && (
+        <>
+          <span className="flex-1 text-left">{label}</span>
+          {badge !== undefined && (
+            <span className="rounded-full bg-[var(--color-accent)]/30 px-1.5 text-[10px] font-medium tabular-nums text-white">
+              {badge}
+            </span>
+          )}
+        </>
+      )}
     </button>
   )
 }

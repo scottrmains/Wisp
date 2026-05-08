@@ -431,3 +431,29 @@ export interface SoulseekTransfer {
   startedAt: string | null
   endedAt: string | null
 }
+
+export type WantedSource = 'Discover' | 'CrateDigger' | 'Manual'
+
+export interface WantedTrack {
+  id: string
+  source: WantedSource
+  artist: string
+  title: string
+  sourceVideoId: string | null
+  sourceUrl: string | null
+  thumbnailUrl: string | null
+  notes: string | null
+  matchedLocalTrackId: string | null
+  matchedAt: string | null
+  addedAt: string
+}
+
+export interface CreateWantedTrackRequest {
+  source: WantedSource
+  artist: string
+  title: string
+  sourceVideoId?: string
+  sourceUrl?: string
+  thumbnailUrl?: string
+  notes?: string
+}

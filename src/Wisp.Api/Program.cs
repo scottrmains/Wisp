@@ -12,6 +12,7 @@ using Wisp.Api.Tagging;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
 using Wisp.Api.Soulseek;
+using Wisp.Api.Wanted;
 using Wisp.Infrastructure;
 using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Soulseek;
@@ -158,6 +159,7 @@ public class Program
             app.MapBlendRatings();
             app.MapTags();
             app.MapPlaylists();
+            app.MapWanted();
 
             // Helper: apply credentials after every save/delete so the catalog clients pick up changes.
             void ReapplyCatalog() => ApplyCatalogCredentials(
