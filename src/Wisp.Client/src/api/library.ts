@@ -27,8 +27,18 @@ export const tracks = {
     return apiGet<TrackPage>(url.pathname + url.search)
   },
   get: (id: string) => apiGet<Track>(`/api/tracks/${id}`),
-  recommendations: (id: string, mode: RecommendationMode = 'Safe', limit = 50) =>
-    apiGet<Recommendation[]>(`/api/tracks/${id}/recommendations`, { mode, limit }),
+  recommendations: (id: string, opts: {
+    mode?: RecommendationMode
+    limit?: number
+    /// Restricts the candidate pool to tracks that are members of the given playlist.
+    /// Set automatically by the Mix Plans page when the active plan has a scope.
+    scopePlaylistId?: string
+  } = {}) =>
+    apiGet<Recommendation[]>(`/api/tracks/${id}/recommendations`, {
+      mode: opts.mode ?? 'Safe',
+      limit: opts.limit ?? 50,
+      scopePlaylistId: opts.scopePlaylistId,
+    }),
   updateNotes: (id: string, notes: string | null) =>
     apiPut<Track>(`/api/tracks/${id}/notes`, { notes }),
   archive: (id: string, reason: string) =>

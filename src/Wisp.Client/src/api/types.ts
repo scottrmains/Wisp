@@ -194,6 +194,9 @@ export interface MixPlan {
   notes: string | null
   createdAt: string
   updatedAt: string
+  /// Playlist that's scoping the recommendation pool when building this plan.
+  /// Null = unconstrained (default).
+  recommendationScopePlaylistId: string | null
   tracks: MixPlanTrack[]
 }
 

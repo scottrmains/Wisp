@@ -55,6 +55,12 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
             .WithOne()
             .HasForeignKey(t => t.MixPlanId)
             .OnDelete(DeleteBehavior.Cascade);
+        // Optional FK to Playlist for recommendation scoping. SetNull on delete so a
+        // deleted playlist drops the scope rather than vanishing the entire mix plan.
+        plan.HasOne<Playlist>()
+            .WithMany()
+            .HasForeignKey(p => p.RecommendationScopePlaylistId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         var mpt = b.Entity<MixPlanTrack>();
         mpt.HasKey(t => t.Id);

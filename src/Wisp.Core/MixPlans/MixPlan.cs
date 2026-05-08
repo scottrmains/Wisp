@@ -10,6 +10,12 @@ public class MixPlan
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    /// Optional FK to a Playlist whose contents constrain the recommendation
+    /// candidate pool when building this plan. Null = unconstrained (default).
+    /// Cleared (set null) when the referenced playlist is deleted — we don't
+    /// cascade-delete the plan itself, which would lose the user's tracks.
+    public Guid? RecommendationScopePlaylistId { get; set; }
+
     public List<MixPlanTrack> Tracks { get; set; } = [];
 }
 

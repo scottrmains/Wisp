@@ -93,5 +93,18 @@ export function useMixPlan(id: string | null) {
     onSuccess: invalidate,
   })
 
-  return { plan: detail.data, loading: detail.isLoading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack }
+  // Recommendation scope (Phase 21d). Null clears it; otherwise points at a playlist.
+  // Also invalidates the recommendations cache so the next request reads the new scope.
+  const setScope = useMutation({
+    mutationFn: (playlistId: string | null) =>
+      mixPlans.update(id!, playlistId === null
+        ? { clearRecommendationScope: true }
+        : { recommendationScopePlaylistId: playlistId }),
+    onSuccess: () => {
+      invalidate()
+      qc.invalidateQueries({ queryKey: ['recommendations'] })
+    },
+  })
+
+  return { plan: detail.data, loading: detail.isLoading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack, setScope }
 }

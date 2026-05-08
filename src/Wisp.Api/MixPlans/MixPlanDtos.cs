@@ -17,6 +17,9 @@ public sealed record MixPlanDto(
     string? Notes,
     DateTime CreatedAt,
     DateTime UpdatedAt,
+    /// Playlist scoping the recommendation pool when building this plan.
+    /// Null = unconstrained (recommendations consider the whole library).
+    Guid? RecommendationScopePlaylistId,
     IReadOnlyList<MixPlanTrackDto> Tracks);
 
 public sealed record MixPlanTrackDto(
@@ -41,7 +44,13 @@ public sealed record MixPlanTrackDto(
 }
 
 public sealed record CreateMixPlanRequest(string Name, string? Notes);
-public sealed record UpdateMixPlanRequest(string? Name, string? Notes);
+public sealed record UpdateMixPlanRequest(
+    string? Name,
+    string? Notes,
+    /// Tri-state: undefined (don't touch), null (clear scope), Guid (set scope to playlist).
+    /// JSON's `null` distinguishes "explicit clear" from "field omitted" when deserialised.
+    Guid? RecommendationScopePlaylistId,
+    bool? ClearRecommendationScope);
 
 public sealed record AddMixPlanTrackRequest(Guid TrackId, Guid? AfterMixPlanTrackId);
 public sealed record UpdateMixPlanTrackRequest(Guid? AfterMixPlanTrackId, string? TransitionNotes, bool? IsAnchor);

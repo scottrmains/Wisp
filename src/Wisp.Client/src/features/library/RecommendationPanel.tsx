@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
+import { playlists as playlistsApi } from '../../api/playlists'
 import type { Recommendation, RecommendationMode, Track } from '../../api/types'
+import { useActivePlan } from '../../state/activePlan'
+import { useMixPlan } from '../mixchain/useMixPlans'
 import { formatBpm } from './format'
 
 const MODES: { value: RecommendationMode; label: string }[] = [
@@ -21,16 +24,47 @@ interface RecommendationsListProps {
 
 /// Mode pills + recommendation rows, no surrounding panel chrome. Used inside the
 /// inspector's Recommendations tab.
+///
+/// Recommendation scoping (Phase 21d): when the user has an active mix plan AND
+/// that plan has a `recommendationScopePlaylistId` set, the candidate pool is
+/// transparently restricted to playlist members. We surface a chip so the user
+/// can see why they're getting fewer results than expected.
 export function RecommendationsList({ seed, onAddToChain }: RecommendationsListProps) {
   const [mode, setMode] = useState<RecommendationMode>('Safe')
+  const { activePlanId } = useActivePlan()
+  const { plan: activePlan } = useMixPlan(activePlanId)
+  const scopePlaylistId = activePlan?.recommendationScopePlaylistId ?? null
+
+  const playlistList = useQuery({
+    queryKey: ['playlists'],
+    queryFn: () => playlistsApi.list(),
+    staleTime: 30_000,
+    enabled: scopePlaylistId !== null,
+  })
+  const scopePlaylist = playlistList.data?.find((p) => p.id === scopePlaylistId) ?? null
 
   const recsQuery = useQuery({
-    queryKey: ['recommendations', seed.id, mode],
-    queryFn: () => tracks.recommendations(seed.id, mode),
+    queryKey: ['recommendations', seed.id, mode, scopePlaylistId],
+    queryFn: () => tracks.recommendations(seed.id, {
+      mode,
+      scopePlaylistId: scopePlaylistId ?? undefined,
+    }),
   })
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {scopePlaylist && (
+        <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 px-5 py-1.5 text-[11px]">
+          <span className="text-[var(--color-muted)]">Scoped to:</span>
+          <span className="font-medium text-white">{scopePlaylist.name}</span>
+          <span className="text-[var(--color-muted)] tabular-nums">
+            ({scopePlaylist.trackCount} {scopePlaylist.trackCount === 1 ? 'track' : 'tracks'})
+          </span>
+          <span className="ml-auto text-[var(--color-muted)]" title="Set by the active mix plan; clear it from the plan header.">
+            via active plan
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap gap-1 border-b border-[var(--color-border)] px-5 py-3">
         {MODES.map((m) => (
           <button

@@ -26,7 +26,14 @@ export const mixPlans = {
   get: (id: string) => apiGet<MixPlan>(`/api/mix-plans/${id}`),
   create: (name: string, notes?: string) =>
     apiPost<MixPlanSummary>('/api/mix-plans', { name, notes: notes ?? null }),
-  update: (id: string, body: { name?: string; notes?: string }) =>
+  update: (id: string, body: {
+    name?: string
+    notes?: string
+    /// Set the recommendation scope to a specific playlist.
+    recommendationScopePlaylistId?: string
+    /// Wins over `recommendationScopePlaylistId` — drops the scope entirely.
+    clearRecommendationScope?: boolean
+  }) =>
     apiSend<MixPlanSummary>('PATCH', `/api/mix-plans/${id}`, body),
   delete: (id: string) => apiSend<void>('DELETE', `/api/mix-plans/${id}`),
 

@@ -124,6 +124,24 @@ public static class MixPlanEndpoints
         }
         if (body.Notes is not null) plan.Notes = body.Notes;
 
+        // Tri-state for the recommendation scope: explicit clear flag wins, then a
+        // non-empty Guid means "set to this playlist". Field omitted = leave alone.
+        // (Ambiguity between "missing" and "JSON null" forces the bool flag pattern;
+        // matches how the frontend's clear-button vs picker-pick split works.)
+        if (body.ClearRecommendationScope == true)
+        {
+            plan.RecommendationScopePlaylistId = null;
+        }
+        else if (body.RecommendationScopePlaylistId is { } scopeId && scopeId != Guid.Empty)
+        {
+            // Validate the playlist exists; otherwise we'd silently accept a dangling FK.
+            var exists = await db.Playlists.AnyAsync(p => p.Id == scopeId, ct);
+            if (!exists)
+                return Results.BadRequest(new { code = "playlist_not_found",
+                    message = "Recommendation scope playlist does not exist." });
+            plan.RecommendationScopePlaylistId = scopeId;
+        }
+
         plan.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
@@ -263,6 +281,10 @@ public static class MixPlanEndpoints
         if (body.GapTracks < 1 || body.GapTracks > 6)
             return Results.BadRequest(new { code = "invalid_gap", message = "GapTracks must be 1..6." });
 
+        // Pull the plan itself so we can read its recommendation scope (if any).
+        var plan = await db.MixPlans.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (plan is null) return Results.NotFound();
+
         var planTracks = await db.MixPlanTracks
             .AsNoTracking()
             .Include(t => t.Track)
@@ -290,12 +312,20 @@ public static class MixPlanEndpoints
             .ToListAsync(ct);
         var blockedSet = new HashSet<Guid>(blockedAgainstFrom.Concat(blockedAgainstTo));
 
-        var candidatePool = await db.Tracks.AsNoTracking()
+        // Candidate pool — same constraints as GetRecommendations plus the recommendation
+        // scope (if the plan has one). When the plan is scoped, bridges only get to use
+        // tracks from the playlist; that's the whole point of the scope.
+        var candidatesQuery = db.Tracks.AsNoTracking()
             .Where(t => !t.IsArchived
                 && t.Id != fromMpt.TrackId
                 && t.Id != toMpt.TrackId
-                && (t.MusicalKey != null || t.Bpm != null))
-            .ToListAsync(ct);
+                && (t.MusicalKey != null || t.Bpm != null));
+        if (plan.RecommendationScopePlaylistId is { } scopeId && scopeId != Guid.Empty)
+        {
+            candidatesQuery = candidatesQuery.Where(t =>
+                db.PlaylistTracks.Any(pt => pt.PlaylistId == scopeId && pt.TrackId == t.Id));
+        }
+        var candidatePool = await candidatesQuery.ToListAsync(ct);
         candidatePool = candidatePool
             .Where(c => !alreadyInPlan.Contains(c.Id) && !blockedSet.Contains(c.Id))
             .ToList();
@@ -401,5 +431,6 @@ public static class MixPlanEndpoints
 
     private static MixPlanDto ToDto(MixPlan plan) => new(
         plan.Id, plan.Name, plan.Notes, plan.CreatedAt, plan.UpdatedAt,
+        plan.RecommendationScopePlaylistId,
         plan.Tracks.Select(MixPlanTrackDto.From).ToList());
 }

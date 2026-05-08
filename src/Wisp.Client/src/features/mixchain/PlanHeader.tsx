@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { playlists as playlistsApi } from '../../api/playlists'
 import type { MixPlan } from '../../api/types'
 import { formatBpm } from '../library/format'
 import { computePlanSummary, formatPlanDuration } from './summary'
@@ -6,14 +8,22 @@ import { computePlanSummary, formatPlanDuration } from './summary'
 interface Props {
   plan: MixPlan
   onRename?: (name: string) => void
+  /// Update the recommendation scope. `null` clears it.
+  onScopeChange?: (playlistId: string | null) => void
   /// Compact version drops the secondary stats row so it fits inside the dock.
   compact?: boolean
 }
 
-export function PlanHeader({ plan, onRename, compact }: Props) {
+export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
   const summary = computePlanSummary(plan)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(plan.name)
+  const playlistList = useQuery({
+    queryKey: ['playlists'],
+    queryFn: () => playlistsApi.list(),
+    staleTime: 30_000,
+    enabled: !!onScopeChange,
+  })
 
   useEffect(() => {
     setDraft(plan.name)
@@ -79,6 +89,29 @@ export function PlanHeader({ plan, onRename, compact }: Props) {
 
       {!compact && plan.notes && (
         <p className="mt-2 text-xs text-[var(--color-muted)]">{plan.notes}</p>
+      )}
+
+      {!compact && onScopeChange && (
+        <div className="mt-2 flex items-center gap-2 text-xs">
+          <span className="text-[var(--color-muted)]">Recommend from:</span>
+          <select
+            value={plan.recommendationScopePlaylistId ?? ''}
+            onChange={(e) => onScopeChange(e.target.value || null)}
+            className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-0.5 text-xs"
+          >
+            <option value="">All tracks (no scope)</option>
+            {(playlistList.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.trackCount})
+              </option>
+            ))}
+          </select>
+          {plan.recommendationScopePlaylistId && (
+            <span className="text-[10px] text-[var(--color-muted)]">
+              ↳ recommendations + suggest-route only consider tracks from this playlist
+            </span>
+          )}
+        </div>
       )}
     </div>
   )

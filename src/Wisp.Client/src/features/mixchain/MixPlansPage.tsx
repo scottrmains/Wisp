@@ -30,7 +30,7 @@ import { useMixPlan, useMixPlans } from './useMixPlans'
 /// layout so the mini-player stays visible at the bottom.
 export function MixPlansPage() {
   const { plans, activePlanId, setActivePlanId, create, remove, rename } = useMixPlans()
-  const { plan, loading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack } = useMixPlan(activePlanId)
+  const { plan, loading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack, setScope } = useMixPlan(activePlanId)
   const [preview, setPreview] = useState<{ a: Track; b: Track } | null>(null)
   const [suggest, setSuggest] = useState<{ from: MixPlanTrack; to: MixPlanTrack } | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
@@ -172,7 +172,11 @@ export function MixPlansPage() {
 
           {plan && (
             <>
-              <PlanHeader plan={plan} onRename={(name) => rename.mutate({ id: plan.id, name })} />
+              <PlanHeader
+                plan={plan}
+                onRename={(name) => rename.mutate({ id: plan.id, name })}
+                onScopeChange={(playlistId) => setScope.mutate(playlistId)}
+              />
               {plan.tracks.length > 0 && <ChainStats tracks={plan.tracks} />}
 
               <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-6 py-4">

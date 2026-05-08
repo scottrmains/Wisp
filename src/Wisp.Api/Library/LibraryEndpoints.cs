@@ -189,6 +189,9 @@ public static class LibraryEndpoints
         RecommendationService svc,
         string? mode = "Safe",
         int limit = 50,
+        // Optional: restrict the candidate pool to tracks in the given playlist.
+        // Set automatically by the Mix Plans page when the active plan has a scope.
+        Guid? scopePlaylistId = null,
         CancellationToken ct = default)
     {
         var seed = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
@@ -220,9 +223,17 @@ public static class LibraryEndpoints
 
         // Candidate pool: tracks with at least a key OR a BPM (so the score can be non-zero).
         // Archived tracks are pulled out so retired material doesn't keep getting recommended.
-        var candidates = await db.Tracks.AsNoTracking()
-            .Where(t => t.Id != id && !t.IsArchived && (t.MusicalKey != null || t.Bpm != null))
-            .ToListAsync(ct);
+        // When scopePlaylistId is set, the candidate pool is further restricted to playlist members
+        // — the user's "build me a House Night set, but only suggest from these candidates" lever.
+        var candidatesQuery = db.Tracks.AsNoTracking()
+            .Where(t => t.Id != id && !t.IsArchived && (t.MusicalKey != null || t.Bpm != null));
+        if (scopePlaylistId.HasValue && scopePlaylistId.Value != Guid.Empty)
+        {
+            var pid = scopePlaylistId.Value;
+            candidatesQuery = candidatesQuery.Where(t =>
+                db.PlaylistTracks.Any(pt => pt.PlaylistId == pid && pt.TrackId == t.Id));
+        }
+        var candidates = await candidatesQuery.ToListAsync(ct);
         candidates = candidates.Where(c => !blockedSet.Contains(c.Id)).ToList();
 
         limit = Math.Clamp(limit, 1, 200);
