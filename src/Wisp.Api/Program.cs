@@ -68,6 +68,10 @@ public class Program
 
             builder.Services.AddSingleton<WispSettingsStore>();
             builder.Services.AddWispLibrary();
+            // Sidecar that owns the bundled slskd.exe lifecycle. Defers cleanly to an
+            // externally-running slskd if port 5030 is taken; respects the
+            // ManageSlskd toggle in settings.
+            builder.Services.AddHostedService<Wisp.Api.Soulseek.SlskdSidecar>();
 
             if (builder.Environment.IsDevelopment())
             {
@@ -257,17 +261,31 @@ public class Program
                     url = creds?.Url,
                     keyPreview = creds?.ApiKey is { Length: > 6 } k ? k[..6] + "…" : null,
                     downloadFolder = creds?.DownloadFolder,
+                    // Surface — but never echo — the actual password.
+                    hasUsername = !string.IsNullOrWhiteSpace(creds?.Username),
+                    hasPassword = !string.IsNullOrWhiteSpace(creds?.Password),
+                    username = creds?.Username,
+                    manageSlskd = creds?.ManageSlskd ?? true,
                 });
             });
 
             app.MapPost("/api/settings/soulseek", (SoulseekCredentials? creds, WispSettingsStore store) =>
             {
-                if (creds is null
-                    || string.IsNullOrWhiteSpace(creds.Url)
-                    || string.IsNullOrWhiteSpace(creds.ApiKey))
+                // When ManageSlskd is on, Wisp generates the URL + API key itself, so the user
+                // only needs to supply Soulseek username + password. When it's off, we revert
+                // to the original Phase 11 contract that requires a manually-entered URL + key.
+                var isManaged = creds?.ManageSlskd ?? true;
+                var hasManualEndpoint = !string.IsNullOrWhiteSpace(creds?.Url) && !string.IsNullOrWhiteSpace(creds?.ApiKey);
+                if (creds is null) return Results.BadRequest(new { code = "credentials_required", message = "Soulseek settings payload required." });
+                if (!isManaged && !hasManualEndpoint)
                 {
                     return Results.BadRequest(new { code = "credentials_required",
-                        message = "Url and ApiKey are required." });
+                        message = "Url and ApiKey are required when not using the bundled slskd." });
+                }
+                if (isManaged && (string.IsNullOrWhiteSpace(creds.Username) || string.IsNullOrWhiteSpace(creds.Password)))
+                {
+                    return Results.BadRequest(new { code = "soulseek_login_required",
+                        message = "Soulseek username + password are required for the bundled slskd to log in to the network." });
                 }
                 store.Update(s => s with
                 {
@@ -380,5 +398,8 @@ public class Program
         soulseek.Url = catalog?.Soulseek?.Url;
         soulseek.ApiKey = catalog?.Soulseek?.ApiKey;
         soulseek.DownloadFolder = catalog?.Soulseek?.DownloadFolder;
+        soulseek.Username = catalog?.Soulseek?.Username;
+        soulseek.Password = catalog?.Soulseek?.Password;
+        soulseek.ManageSlskd = catalog?.Soulseek?.ManageSlskd ?? true;
     }
 }

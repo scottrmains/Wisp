@@ -41,6 +41,17 @@ public sealed class SoulseekClient(
         }
     }
 
+    /// When slskd isn't running, the HTTP attempt either:
+    ///   * gets refused immediately (HttpRequestException — TCP RST), or
+    ///   * hangs until the 3s HttpClient.Timeout fires (TaskCanceledException with an inner TimeoutException).
+    /// Both modes mean "slskd is unavailable", so we map them to SoulseekUnreachableException for a clean
+    /// 400 response rather than letting the request bubble up as a 500 / debugger break. The genuine
+    /// "user cancelled" case is preserved by re-throwing when the caller's CT is the source.
+    private static SoulseekUnreachableException MapTimeout(TaskCanceledException ex) =>
+        new($"slskd did not respond within 3 seconds — is the daemon running?", ex);
+    private static SoulseekUnreachableException MapHttp(HttpRequestException ex) =>
+        new($"Could not reach slskd: {ex.Message}", ex);
+
     /// Kick off a search. Returns the search id slskd assigns. Caller polls `GetSearchAsync`
     /// until `IsComplete` or until they decide it's been long enough.
     public async Task<string> StartSearchAsync(string query, int fileLimit, CancellationToken ct)
@@ -55,10 +66,8 @@ public sealed class SoulseekClient(
             resp.EnsureSuccessStatusCode();
             return id;
         }
-        catch (HttpRequestException ex)
-        {
-            throw new SoulseekUnreachableException($"Could not reach slskd: {ex.Message}", ex);
-        }
+        catch (HttpRequestException ex) { throw MapHttp(ex); }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
     }
 
     public async Task<SoulseekSearchResult> GetSearchAsync(string searchId, CancellationToken ct)
@@ -93,10 +102,8 @@ public sealed class SoulseekClient(
                 ResponseCount: responses.Length,
                 Hits: hits);
         }
-        catch (HttpRequestException ex)
-        {
-            throw new SoulseekUnreachableException($"Could not reach slskd: {ex.Message}", ex);
-        }
+        catch (HttpRequestException ex) { throw MapHttp(ex); }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
     }
 
     public async Task QueueDownloadAsync(string username, string filename, long size, CancellationToken ct)
@@ -115,10 +122,8 @@ public sealed class SoulseekClient(
                     $"slskd refused download ({(int)resp.StatusCode}): {Truncate(error, 200)}");
             }
         }
-        catch (HttpRequestException ex)
-        {
-            throw new SoulseekUnreachableException($"Could not reach slskd: {ex.Message}", ex);
-        }
+        catch (HttpRequestException ex) { throw MapHttp(ex); }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
     }
 
     /// Asks slskd for its currently-configured download folder via `/api/v0/options`.
@@ -183,10 +188,8 @@ public sealed class SoulseekClient(
                     EndedAt: x.File.EndedAt))
                 .ToArray();
         }
-        catch (HttpRequestException ex)
-        {
-            throw new SoulseekUnreachableException($"Could not reach slskd: {ex.Message}", ex);
-        }
+        catch (HttpRequestException ex) { throw MapHttp(ex); }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
     }
 
     // ─── helpers ─────────────────────────────────────────────────────

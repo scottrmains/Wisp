@@ -150,8 +150,13 @@ public class ArtistRefreshService(
     }
 
     /// Pull releases from every matched source and reconcile against local library.
-    /// YouTube is treated as an enrichment layer — uploads are matched against existing
-    /// release rows by title, populating YouTubeVideoId/YouTubeUrl when found.
+    /// YouTube serves two roles:
+    ///   1. **Source of releases** — when the user matches a YouTube Topic channel, each
+    ///      upload becomes its own ExternalRelease (Source = "YouTube", ReleaseType = Single).
+    ///      This is what makes Rediscover work for users who only configured YouTube.
+    ///   2. **Enrichment** — uploads are also cross-matched by title against existing
+    ///      Spotify/Discogs releases, populating their `YouTubeVideoId/YouTubeUrl` so the
+    ///      inline audition player works on those rows too.
     /// Returns the count of newly inserted release rows across all sources.
     public async Task<int> RefreshAsync(Guid artistId, CancellationToken ct)
     {
@@ -173,13 +178,12 @@ public class ArtistRefreshService(
             var releases = await discogs.GetArtistReleasesAsync(artist.DiscogsArtistId, ct);
             totalInserted += await UpsertReleasesAsync(artist, CatalogSources.Discogs, releases, ct);
         }
-
-        // YouTube enrichment — fetch the Topic channel uploads and match them to existing
-        // releases by title. We persist the inserts/updates from the loop above before this
-        // step so the matcher sees the just-fetched releases too.
         if (!string.IsNullOrEmpty(artist.YouTubeChannelId))
         {
             matched = true;
+            // Ingest uploads as YouTube-source releases first…
+            totalInserted += await UpsertYouTubeUploadsAsync(artist, ct);
+            // …then persist + cross-enrich Spotify/Discogs releases by title-overlap with the uploads.
             await db.SaveChangesAsync(ct);
             await EnrichWithYouTubeUploadsAsync(artist, ct);
         }
@@ -191,6 +195,93 @@ public class ArtistRefreshService(
         await db.SaveChangesAsync(ct);
         log.LogInformation("Refreshed {Artist}: {Inserted} new releases across sources", artist.Name, totalInserted);
         return totalInserted;
+    }
+
+    /// Upsert YouTube channel uploads as ExternalRelease rows (Source = "YouTube").
+    /// Each upload is a Single with the video id baked in. Library-match logic
+    /// is identical to the Spotify/Discogs upsert path so `IsAlreadyInLibrary`
+    /// + `MatchedLocalTrackId` still light up.
+    private async Task<int> UpsertYouTubeUploadsAsync(ArtistProfile artist, CancellationToken ct)
+    {
+        IReadOnlyList<YouTubeUpload> uploads;
+        try
+        {
+            uploads = await youTube.GetTopicChannelUploadsAsync(artist.YouTubeChannelId!, ct);
+        }
+        catch (YouTubeQuotaExceededException)
+        {
+            log.LogWarning("YouTube quota exceeded fetching uploads for {Artist} — skipping ingest", artist.Name);
+            return 0;
+        }
+        if (uploads.Count == 0) return 0;
+
+        var existingRows = await db.ExternalReleases
+            .Where(r => r.ArtistProfileId == artist.Id && r.Source == CatalogSources.YouTube)
+            .ToListAsync(ct);
+        var byId = existingRows.ToDictionary(r => r.ExternalId);
+
+        var libraryTitles = await db.Tracks.AsNoTracking()
+            .Where(t => t.Artist != null && t.Title != null)
+            .Select(t => new { t.Id, t.Artist, t.Title })
+            .ToListAsync(ct);
+
+        var artistLibTitles = libraryTitles
+            .Where(t => ArtistNormalizer.Normalize(t.Artist!) == artist.NormalizedName)
+            .Select(t => new { t.Id, NormTitle = TitleOverlap.Normalize(t.Title!) })
+            .Where(t => !string.IsNullOrEmpty(t.NormTitle))
+            .ToList();
+
+        var inserted = 0;
+        var now = DateTime.UtcNow;
+
+        foreach (var u in uploads)
+        {
+            var matched = artistLibTitles.FirstOrDefault(t => t.NormTitle == TitleOverlap.Normalize(u.Title));
+            var (alreadyInLibrary, matchedTrackId) = matched is not null
+                ? (true, (Guid?)matched.Id)
+                : (false, (Guid?)null);
+
+            // Convert the published timestamp to a DateOnly for the release-date field.
+            var releaseDate = DateOnly.FromDateTime(u.PublishedAt.UtcDateTime);
+
+            if (byId.TryGetValue(u.VideoId, out var row))
+            {
+                row.Title = u.Title;
+                row.ReleaseDate = releaseDate;
+                row.Url = u.Url;
+                row.ArtworkUrl = u.ThumbnailUrl;
+                row.YouTubeVideoId = u.VideoId;
+                row.YouTubeUrl = u.Url;
+                row.IsAlreadyInLibrary = alreadyInLibrary;
+                row.MatchedLocalTrackId = matchedTrackId;
+                row.FetchedAt = now;
+            }
+            else
+            {
+                db.ExternalReleases.Add(new ExternalRelease
+                {
+                    Id = Guid.NewGuid(),
+                    ArtistProfileId = artist.Id,
+                    Source = CatalogSources.YouTube,
+                    ExternalId = u.VideoId,
+                    Title = u.Title,
+                    ReleaseType = ReleaseType.Single,
+                    ReleaseDate = releaseDate,
+                    Url = u.Url,
+                    ArtworkUrl = u.ThumbnailUrl,
+                    YouTubeVideoId = u.VideoId,
+                    YouTubeUrl = u.Url,
+                    IsAlreadyInLibrary = alreadyInLibrary,
+                    MatchedLocalTrackId = matchedTrackId,
+                    FetchedAt = now,
+                });
+                inserted++;
+            }
+        }
+
+        log.LogInformation("YouTube: ingested {Total} uploads ({New} new) for {Artist}",
+            uploads.Count, inserted, artist.Name);
+        return inserted;
     }
 
     private async Task<int> UpsertReleasesAsync(

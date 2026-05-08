@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { artists } from '../../api/artists'
 import type { ArtistSummary, CatalogSource, ExternalRelease } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { ArtistMatchModal } from './ArtistMatchModal'
 
-interface Props {
-  onClose: () => void
-}
-
-export function RediscoverScreen({ onClose }: Props) {
+/// Rediscover is now routed at the App level — no `fixed inset-0` overlay,
+/// no internal Esc handler. The shell owns the back-out path via the top nav.
+export function RediscoverScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [matchTarget, setMatchTarget] = useState<{ artist: ArtistSummary; source: CatalogSource } | null>(null)
 
@@ -18,18 +16,10 @@ export function RediscoverScreen({ onClose }: Props) {
     queryFn: () => artists.list(),
   })
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   const selected = list.data?.find((a) => a.id === selectedId) ?? null
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-[var(--color-bg)]">
+    <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Rediscover</h1>
@@ -37,9 +27,6 @@ export function RediscoverScreen({ onClose }: Props) {
             See what your favourite artists released since you last checked. Match across Spotify, Discogs, and YouTube.
           </p>
         </div>
-        <button onClick={onClose} className="text-[var(--color-muted)] hover:text-white" aria-label="Close">
-          ×
-        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -180,6 +167,15 @@ function SourceChip({
   )
 }
 
+type ReleaseFilter = 'new' | 'saved' | 'dismissed' | 'library'
+
+const FILTERS: { value: ReleaseFilter; label: string }[] = [
+  { value: 'new', label: 'New' },
+  { value: 'saved', label: 'Wanted' },
+  { value: 'library', label: 'In library' },
+  { value: 'dismissed', label: 'Dismissed' },
+]
+
 function ArtistDetail({
   artist,
   onMatch,
@@ -189,10 +185,11 @@ function ArtistDetail({
 }) {
   const qc = useQueryClient()
   const anyMatched = artist.isMatchedSpotify || artist.isMatchedDiscogs || artist.isMatchedYouTube
+  const [filter, setFilter] = useState<ReleaseFilter>('new')
 
   const releases = useQuery({
-    queryKey: ['releases', artist.id, 'new'],
-    queryFn: () => artists.releases(artist.id, 'new'),
+    queryKey: ['releases', artist.id, filter],
+    queryFn: () => artists.releases(artist.id, filter),
     enabled: anyMatched,
   })
 
@@ -244,11 +241,38 @@ function ArtistDetail({
         </div>
       )}
 
+      {anyMatched && (
+        <div className="mt-4 flex items-center gap-1 border-b border-[var(--color-border)] pb-1">
+          {FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={[
+                'rounded-md px-3 py-1 text-xs',
+                filter === f.value
+                  ? 'bg-[var(--color-accent)]/20 text-white'
+                  : 'text-[var(--color-muted)] hover:text-white',
+              ].join(' ')}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {anyMatched && releases.isLoading && (
         <p className="mt-6 text-sm text-[var(--color-muted)]">Loading releases…</p>
       )}
 
-      {anyMatched && releases.data && releases.data.length === 0 && (
+      {anyMatched && releases.data && releases.data.length === 0 && filter !== 'new' && (
+        <p className="mt-6 text-sm text-[var(--color-muted)]">
+          {filter === 'saved' && 'No wanted tracks yet. Mark releases on the New tab as Want to collect them here.'}
+          {filter === 'dismissed' && 'No dismissed tracks for this artist.'}
+          {filter === 'library' && 'No fetched releases match anything in your local library yet.'}
+        </p>
+      )}
+
+      {anyMatched && releases.data && releases.data.length === 0 && filter === 'new' && (
         <div className="mt-6 space-y-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
           <p className="text-white">No new releases since {artist.latestLocalYear ?? 'your latest local track'}.</p>
           <p>
@@ -266,7 +290,7 @@ function ArtistDetail({
       {releases.data && releases.data.length > 0 && (
         <ul className="mt-4 space-y-2">
           {releases.data.map((r) => (
-            <ReleaseRow key={r.id} release={r} artistName={artist.name} />
+            <ReleaseRow key={r.id} release={r} artistName={artist.name} filter={filter} />
           ))}
         </ul>
       )}
@@ -345,12 +369,22 @@ function SourceMatchTile({
   )
 }
 
-function ReleaseRow({ release, artistName }: { release: ExternalRelease; artistName: string }) {
+function ReleaseRow({
+  release,
+  artistName,
+  filter,
+}: {
+  release: ExternalRelease
+  artistName: string
+  filter: ReleaseFilter
+}) {
   const qc = useQueryClient()
   const [ytExpanded, setYtExpanded] = useState(false)
   const update = useMutation({
     mutationFn: (body: { isDismissed?: boolean; isSavedForLater?: boolean }) =>
       artists.updateRelease(release.id, body),
+    // Invalidate every filter view of this artist's releases — moving a row between
+    // status buckets needs to refresh both the source and destination tabs.
     onSuccess: () => qc.invalidateQueries({ queryKey: ['releases', release.artistProfileId] }),
   })
 
@@ -415,18 +449,45 @@ function ReleaseRow({ release, artistName }: { release: ExternalRelease; artistN
               ↗
             </button>
           )}
-          <button
-            onClick={() => update.mutate({ isSavedForLater: true })}
-            className="rounded border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
-          >
-            Want
-          </button>
-          <button
-            onClick={() => update.mutate({ isDismissed: true })}
-            className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
-          >
-            Dismiss
-          </button>
+          {/* Action buttons swap based on which tab the row is rendered in.
+              `library` tab is read-only — the row's already in the user's library,
+              there's nothing to want/dismiss. */}
+          {filter === 'new' && (
+            <>
+              <button
+                onClick={() => update.mutate({ isSavedForLater: true })}
+                className="rounded border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
+                title="Move to Wanted tab"
+              >
+                Want
+              </button>
+              <button
+                onClick={() => update.mutate({ isDismissed: true })}
+                className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
+                title="Move to Dismissed tab"
+              >
+                Dismiss
+              </button>
+            </>
+          )}
+          {filter === 'saved' && (
+            <button
+              onClick={() => update.mutate({ isSavedForLater: false })}
+              className="rounded border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
+              title="Remove from Wanted (back to New)"
+            >
+              ✓ Wanted
+            </button>
+          )}
+          {filter === 'dismissed' && (
+            <button
+              onClick={() => update.mutate({ isDismissed: false })}
+              className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
+              title="Restore to New"
+            >
+              Restore
+            </button>
+          )}
         </div>
       </div>
       {ytExpanded && release.youTubeVideoId && (

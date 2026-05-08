@@ -17,6 +17,7 @@
     </PackageReference>
     <PackageReference Include="Photino.NET" Version="4.0.16" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="YamlDotNet" Version="16.2.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,7 @@
   <PropertyGroup>
     <SpaRoot>..\Wisp.Client\</SpaRoot>
     <SpaDist>wwwroot\</SpaDist>
+    <SlskdRoot>..\..\slskd-0.25.1-win-x64\</SlskdRoot>
   </PropertyGroup>
 
   <Target Name="BuildSpa" BeforeTargets="Publish">
@@ -34,5 +36,16 @@
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm install --no-audit --no-fund" Condition="!Exists('$(SpaRoot)node_modules')" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
   </Target>
+
+  <!--
+    Bundle slskd as a sidecar binary so SlskdSidecar can spawn it without requiring the user
+    to install slskd separately. The whole folder is required (slskd is a self-contained .NET
+    app — slskd.exe + its full runtime). Copies on every build into bin/.../slskd/ and on
+    publish into the publish output. Skipped silently if the source folder isn't present so
+    builds still work on machines that haven't downloaded slskd locally.
+  -->
+  <ItemGroup Condition="Exists('$(SlskdRoot)')">
+    <None Include="$(SlskdRoot)**\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="slskd\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" />
+  </ItemGroup>
 
 </Project>

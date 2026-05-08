@@ -13,6 +13,16 @@ public sealed class SoulseekOptions
     /// downloaded files appear in the library automatically.
     public string? DownloadFolder { get; set; }
 
+    /// Soulseek network credentials. Required by slskd to log in to the P2P network.
+    /// When the bundled-slskd sidecar is in charge of the daemon, these are written
+    /// into the generated slskd.yml each time it starts.
+    public string? Username { get; set; }
+    public string? Password { get; set; }
+
+    /// True when Wisp owns the slskd lifecycle (spawns + manages it as a child process).
+    /// False when the user runs slskd themselves — in which case the sidecar stays out.
+    public bool ManageSlskd { get; set; } = true;
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(ApiKey);
 }

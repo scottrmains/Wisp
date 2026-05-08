@@ -274,6 +274,10 @@ interface SoulseekStatus {
   url: string | null
   keyPreview: string | null
   downloadFolder: string | null
+  hasUsername: boolean
+  hasPassword: boolean
+  username: string | null
+  manageSlskd: boolean
 }
 
 function SoulseekSettings() {
@@ -286,16 +290,35 @@ function SoulseekSettings() {
   const [apiKey, setApiKey] = useState('')
   const [downloadFolder, setDownloadFolder] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [manageSlskd, setManageSlskd] = useState(true)
   const [testResult, setTestResult] = useState<{ ok: boolean; message?: string } | null>(null)
+
+  // Hydrate the local form state from the persisted settings the first time they load.
+  // We only fill what's safe to echo back (URL, username, manage toggle) — never the
+  // saved password or API key, which the user has to retype to change.
+  useEffect(() => {
+    if (!status.data) return
+    if (status.data.url) setUrl(status.data.url)
+    if (status.data.username) setUsername(status.data.username)
+    setManageSlskd(status.data.manageSlskd)
+  }, [status.data])
 
   const save = useMutation({
     mutationFn: () => apiPost('/api/settings/soulseek', {
       url: url.trim(),
       apiKey,
       downloadFolder: downloadFolder.trim() || null,
+      username: username.trim() || null,
+      // Sending null for password = "leave existing password unchanged"; sending a value = update it.
+      password: password ? password : null,
+      manageSlskd,
     }),
     onSuccess: () => {
       setApiKey('')
+      setPassword('')
       setTestResult(null)
       qc.invalidateQueries({ queryKey: ['soulseek-status'] })
     },
@@ -368,38 +391,91 @@ function SoulseekSettings() {
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-[var(--color-muted)]">
-            Run{' '}
-            <button
-              onClick={() => bridgeAvailable() && void bridge.openExternal('https://github.com/slskd/slskd')}
-              className="text-[var(--color-accent)] hover:underline"
-            >
-              slskd
-            </button>{' '}
-            locally as a daemon, generate an API key in its <code>slskd.yml</code>, and paste it here. Wisp doesn't bundle slskd — install + run it separately. The default URL is <code>http://localhost:5030</code>.
-          </p>
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="slskd URL"
-            className="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
-          />
-          <div className="flex gap-2">
+          {/* Manage toggle determines which fields are required below. Bundled-mode is the default. */}
+          <label className="flex items-start gap-2 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs">
             <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="API key"
-              className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+              type="checkbox"
+              checked={manageSlskd}
+              onChange={(e) => setManageSlskd(e.target.checked)}
+              className="mt-0.5"
             />
-            <button
-              onClick={() => setShowKey((s) => !s)}
-              className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)]"
-            >
-              {showKey ? 'hide' : 'show'}
-            </button>
-          </div>
+            <span>
+              <span className="font-medium text-white">Manage slskd automatically</span>
+              <span className="block mt-0.5 text-[var(--color-muted)]">
+                Wisp launches the bundled slskd as a child process when it starts and shuts it down with the app.
+                Defers automatically if you've already got slskd running on port 5030.
+              </span>
+            </span>
+          </label>
+
+          {manageSlskd ? (
+            // Bundled mode — only Soulseek username + password are required; URL + API key are auto-generated.
+            <>
+              <p className="text-xs text-[var(--color-muted)]">
+                Bundled slskd needs your Soulseek network login (the username + password you'd use on Nicotine+ /
+                slskd's web UI). Wisp writes them into the generated config and never sends them anywhere else.
+              </p>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Soulseek username"
+                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+              />
+              <div className="flex gap-2">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Soulseek password"
+                  className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+                />
+                <button
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)]"
+                >
+                  {showPassword ? 'hide' : 'show'}
+                </button>
+              </div>
+            </>
+          ) : (
+            // Manual mode — original Phase 11 contract: paste in a URL + API key for an externally-running slskd.
+            <>
+              <p className="text-xs text-[var(--color-muted)]">
+                Pointing Wisp at an{' '}
+                <button
+                  onClick={() => bridgeAvailable() && void bridge.openExternal('https://github.com/slskd/slskd')}
+                  className="text-[var(--color-accent)] hover:underline"
+                >
+                  slskd
+                </button>{' '}
+                you run yourself. Generate an API key in its <code>slskd.yml</code> and paste it below.
+              </p>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="slskd URL"
+                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+              />
+              <div className="flex gap-2">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="API key"
+                  className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm font-mono"
+                />
+                <button
+                  onClick={() => setShowKey((s) => !s)}
+                  className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)]"
+                >
+                  {showKey ? 'hide' : 'show'}
+                </button>
+              </div>
+            </>
+          )}
+
           <div className="flex gap-2">
             <input
               type="text"
@@ -418,10 +494,15 @@ function SoulseekSettings() {
           </div>
           <button
             onClick={() => save.mutate()}
-            disabled={!url.trim() || !apiKey.trim() || save.isPending}
+            disabled={
+              save.isPending
+              || (manageSlskd
+                ? !username.trim() || !password.trim()
+                : !url.trim() || !apiKey.trim())
+            }
             className="w-full rounded bg-[var(--color-accent)] px-2 py-1 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {save.isPending ? 'Saving…' : 'Save slskd connection'}
+            {save.isPending ? 'Saving…' : manageSlskd ? 'Save and start bundled slskd' : 'Save slskd connection'}
           </button>
         </div>
       )}

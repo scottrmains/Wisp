@@ -11,10 +11,6 @@ import { DiscoveredTrackList } from './DiscoveredTrackList'
 import { DiscoveredTrackDetail } from './DiscoveredTrackDetail'
 import { useDiscoveryScans } from './useDiscoveryScans'
 
-interface Props {
-  onClose: () => void
-}
-
 const STATUS_FILTERS: { label: string; value: DiscoveryStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
   { label: 'New', value: 'New' },
@@ -27,7 +23,10 @@ const STATUS_FILTERS: { label: string; value: DiscoveryStatus | 'all' }[] = [
   { label: 'Ignored', value: 'Ignore' },
 ]
 
-export function CrateDiggerPage({ onClose }: Props) {
+/// Crate Digger as a routed peer page — no `fixed inset-0`, no onClose.
+/// Top-nav handles back-out; the only Esc handler that remains is inside
+/// the per-track detail modal, which closes that modal not the page.
+export function CrateDiggerPage() {
   const qc = useQueryClient()
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<DiscoveryStatus | 'all'>('all')
@@ -46,14 +45,6 @@ export function CrateDiggerPage({ onClose }: Props) {
       setActiveSourceId(sources.data[0].id)
     }
   }, [activeSourceId, sources.data])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !selectedTrack) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, selectedTrack])
 
   const tracks = useQuery({
     queryKey: ['discovery-tracks', activeSourceId, statusFilter, search],
@@ -92,7 +83,7 @@ export function CrateDiggerPage({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-[var(--color-bg)]">
+    <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Crate Digger</h1>
@@ -100,9 +91,6 @@ export function CrateDiggerPage({ onClose }: Props) {
             Import metadata from curated YouTube channels. Discovery + audition only — no downloads.
           </p>
         </div>
-        <button onClick={onClose} className="text-[var(--color-muted)] hover:text-white" aria-label="Close">
-          ×
-        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">

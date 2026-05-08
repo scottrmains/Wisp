@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -25,14 +25,10 @@ import { TransitionGap } from './TransitionGap'
 import { computePlanSummary, indexWarningsByTransition } from './summary'
 import { useMixPlan, useMixPlans } from './useMixPlans'
 
-interface Props {
-  onClose: () => void
-}
-
-/// Full-screen Mix Plans workspace — list of plans on the left, the active plan
-/// on the right with the same chain/cards/preview affordances as the dock but
-/// with more breathing room.
-export function MixPlansPage({ onClose }: Props) {
+/// Mix Plans workspace as a routed peer page — list of plans on the left,
+/// active plan on the right. No `fixed inset-0` overlay; lives inside the App
+/// layout so the mini-player stays visible at the bottom.
+export function MixPlansPage() {
   const { plans, activePlanId, setActivePlanId, create, remove, rename } = useMixPlans()
   const { plan, loading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack } = useMixPlan(activePlanId)
   const [preview, setPreview] = useState<{ a: Track; b: Track } | null>(null)
@@ -65,14 +61,6 @@ export function MixPlansPage({ onClose }: Props) {
       console.error('Drop failed', err)
     }
   }
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -107,7 +95,7 @@ export function MixPlansPage({ onClose }: Props) {
   const warningsByTransition = indexWarningsByTransition(summary.warnings)
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-[var(--color-bg)]">
+    <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Mix Plans</h1>
@@ -115,9 +103,6 @@ export function MixPlansPage({ onClose }: Props) {
             Build, preview and tune sets. Drag to reorder, click between cards to audition the transition.
           </p>
         </div>
-        <button onClick={onClose} className="text-[var(--color-muted)] hover:text-white" aria-label="Close">
-          ×
-        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">

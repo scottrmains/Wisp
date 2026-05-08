@@ -27,7 +27,20 @@ public sealed record CatalogCredentials
 public sealed record SpotifyCredentials(string ClientId, string ClientSecret);
 public sealed record DiscogsCredentials(string PersonalAccessToken);
 public sealed record YouTubeCredentials(string ApiKey);
-public sealed record SoulseekCredentials(string Url, string ApiKey, string? DownloadFolder = null);
+public sealed record SoulseekCredentials(
+    string Url,
+    string ApiKey,
+    string? DownloadFolder = null,
+    /// Soulseek network login. Required for slskd to log in to the P2P network at all.
+    /// Used both by the bundled-slskd sidecar and surfaced read-only when migrating from
+    /// an existing user-managed slskd config.
+    string? Username = null,
+    string? Password = null,
+    /// When true, Wisp spawns + manages the bundled slskd.exe as a child process. When false,
+    /// Wisp connects to whatever slskd the user runs separately (the original Phase 11 model).
+    /// Defaults to true for fresh installs; the sidecar additionally probes port 5030 at startup
+    /// and defers to an externally-running slskd if one is already listening.
+    bool ManageSlskd = true);
 
 public sealed class WispSettingsStore
 {
