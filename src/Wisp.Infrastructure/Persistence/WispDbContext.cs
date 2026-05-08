@@ -5,6 +5,7 @@ using Wisp.Core.Cues;
 using Wisp.Core.Discovery;
 using Wisp.Core.Feedback;
 using Wisp.Core.MixPlans;
+using Wisp.Core.Playlists;
 using Wisp.Core.Tagging;
 using Wisp.Core.Tracks;
 
@@ -25,6 +26,8 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<DigitalMatch> DigitalMatches => Set<DigitalMatch>();
     public DbSet<BlendRating> BlendRatings => Set<BlendRating>();
     public DbSet<TrackTag> TrackTags => Set<TrackTag>();
+    public DbSet<Playlist> Playlists => Set<Playlist>();
+    public DbSet<PlaylistTrack> PlaylistTracks => Set<PlaylistTrack>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -153,6 +156,25 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         tag.HasOne(t => t.Track)
             .WithMany()
             .HasForeignKey(t => t.TrackId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var playlist = b.Entity<Playlist>();
+        playlist.HasKey(p => p.Id);
+        playlist.Property(p => p.Name).IsRequired().HasMaxLength(200);
+        playlist.HasMany(p => p.Tracks)
+            .WithOne()
+            .HasForeignKey(t => t.PlaylistId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var playlistTrack = b.Entity<PlaylistTrack>();
+        playlistTrack.HasKey(t => t.Id);
+        // Same track can't appear twice in the same playlist — adds become idempotent.
+        playlistTrack.HasIndex(t => new { t.PlaylistId, t.TrackId }).IsUnique();
+        playlistTrack.HasIndex(t => t.TrackId); // for "which playlists is this track in?" lookups
+        playlistTrack.HasOne(t => t.Track)
+            .WithMany()
+            .HasForeignKey(t => t.TrackId)
+            // Removing a track from the library also removes it from any playlists.
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

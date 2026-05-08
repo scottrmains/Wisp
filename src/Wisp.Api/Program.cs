@@ -7,6 +7,7 @@ using Wisp.Api.Cues;
 using Wisp.Api.Discovery;
 using Wisp.Api.Feedback;
 using Wisp.Api.Library;
+using Wisp.Api.Playlists;
 using Wisp.Api.Tagging;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
@@ -137,6 +138,7 @@ public class Program
             app.MapSoulseek();
             app.MapBlendRatings();
             app.MapTags();
+            app.MapPlaylists();
 
             // Helper: apply credentials after every save/delete so the catalog clients pick up changes.
             void ReapplyCatalog() => ApplyCatalogCredentials(
