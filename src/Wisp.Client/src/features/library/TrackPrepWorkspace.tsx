@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Track } from '../../api/types'
 import { tracks as tracksApi } from '../../api/library'
@@ -11,6 +11,7 @@ import { BandedWaveform } from '../player/BandedWaveform'
 import { RecommendationsList } from './RecommendationPanel'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
 import { formatDuration } from './format'
+import { detectFirstBeatFromPeaks, loadBandedPeaks } from '../../audio/peaks'
 
 interface Props {
   /// Drives off the App-level player state — workspace appears whenever a track
@@ -133,6 +134,51 @@ export function TrackPrepWorkspace({
     if (!trackId || liveTime <= 0) return
     cuesHook.create.mutate({ timeSeconds: liveTime, type: 'Custom' })
   }
+
+  // Auto-drop a FirstBeat cue the first time we see a track in the workspace.
+  // Walks the cached banded peaks (loading them if needed) and finds the first
+  // low-band sample exceeding 50% of the loudest kick — typically lands on bar 1
+  // for produced dance music. Marker renders as the amber "auto-suggested" tone
+  // so the user knows to verify it; clicking edits demote it via PATCH.
+  //
+  // Tracks attempts in a ref keyed by trackId so we don't re-create the cue if
+  // the user deletes it. Skips when a FirstBeat cue already exists (manual or
+  // prior auto-suggest), or when cues haven't loaded yet, or peaks fail.
+  const autoFirstBeatAttemptedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!trackId || !track) return
+    if (cuesHook.loading) return
+    if (autoFirstBeatAttemptedRef.current.has(trackId)) return
+    if (cuesHook.cues.some((c) => c.type === 'FirstBeat')) {
+      // Already has one — record the attempt so we don't keep checking.
+      autoFirstBeatAttemptedRef.current.add(trackId)
+      return
+    }
+    let cancelled = false
+    const tid = trackId
+    loadBandedPeaks(tid)
+      .then((peaks) => {
+        if (cancelled) return
+        if (autoFirstBeatAttemptedRef.current.has(tid)) return
+        const detected = detectFirstBeatFromPeaks(peaks, track.durationSeconds)
+        if (detected === null) return
+        autoFirstBeatAttemptedRef.current.add(tid)
+        cuesHook.create.mutate({
+          timeSeconds: detected,
+          type: 'FirstBeat',
+          isAutoSuggested: true,
+          label: 'First beat (auto)',
+        })
+      })
+      .catch(() => {
+        // Peaks compute failed — give up silently. Don't poison the ref so
+        // a later page reload could retry.
+      })
+    return () => {
+      cancelled = true
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackId, cuesHook.loading, cuesHook.cues.length])
 
   // Hotkeys: Q adds a cue at playhead, 1-8 jump to the Nth cue.
   // Skipped while the user is typing in inputs (notes textarea, tag input, etc.)

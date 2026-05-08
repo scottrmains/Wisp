@@ -39,7 +39,7 @@ public static class CueEndpoints
             TimeSeconds = body.TimeSeconds,
             Type = body.Type,
             Label = string.IsNullOrWhiteSpace(body.Label) ? body.Type.ToString() : body.Label.Trim(),
-            IsAutoSuggested = false,
+            IsAutoSuggested = body.IsAutoSuggested,
             CreatedAt = DateTime.UtcNow,
         };
         db.CuePoints.Add(cue);

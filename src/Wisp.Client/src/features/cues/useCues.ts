@@ -15,7 +15,7 @@ export function useCues(trackId: string | null) {
   const invalidate = () => qc.invalidateQueries({ queryKey })
 
   const create = useMutation({
-    mutationFn: (body: { timeSeconds: number; type: CuePointType; label?: string }) =>
+    mutationFn: (body: { timeSeconds: number; type: CuePointType; label?: string; isAutoSuggested?: boolean }) =>
       api.create(trackId!, body),
     onSuccess: invalidate,
   })

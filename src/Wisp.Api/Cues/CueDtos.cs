@@ -18,7 +18,8 @@ public sealed record CuePointDto(
 public sealed record CreateCueRequest(
     double TimeSeconds,
     string? Label,
-    CuePointType Type);
+    CuePointType Type,
+    bool IsAutoSuggested = false);
 
 public sealed record UpdateCueRequest(
     double? TimeSeconds,

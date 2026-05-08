@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { getCachedBandedPeaks, loadBandedPeaks, type BandedPeaks } from '../../audio/peaks'
 
 export interface CueMarker {
@@ -38,8 +39,10 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   // Cursor tracking for the precise-time tooltip + magnifier popover. Set on
-  // mousemove, cleared on mouseleave. `time` is the timestamp under the cursor.
-  const [cursor, setCursor] = useState<{ x: number; time: number } | null>(null)
+  // mousemove, cleared on mouseleave. `x` is local to the canvas (drives the
+  // in-canvas guide line); `clientX/clientY` are viewport coords for the
+  // portal-rendered magnifier. `time` is the timestamp under the cursor.
+  const [cursor, setCursor] = useState<{ x: number; clientX: number; clientY: number; time: number } | null>(null)
   // Tracks the container's measured width so the canvas redraws when the
   // wrapper toggles visibility (display:none → block goes 0 → realW, which
   // ResizeObserver reports as a resize). Without this, the canvas stays at
@@ -171,7 +174,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
     const rect = e.currentTarget.getBoundingClientRect()
     const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
     const time = (x / rect.width) * duration
-    setCursor({ x, time })
+    setCursor({ x, clientX: e.clientX, clientY: e.clientY, time })
   }
 
   const handleMouseLeave = () => setCursor(null)
@@ -184,7 +187,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
       onClick={handleClick}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="relative w-full cursor-crosshair overflow-visible rounded bg-[var(--color-bg)]"
+      className="relative w-full cursor-crosshair overflow-hidden rounded bg-[var(--color-bg)]"
       style={{ height }}
       role="slider"
       aria-label="Seek"
@@ -287,16 +290,17 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           draws a zoomed window of the same banded peaks. Pixel-to-time
           mapping inside the magnifier is much finer than the main waveform
           (typical ~0.04s/px vs ~0.3s/px), so the user can pinpoint exactly
-          where to seek/place a cue. Pointer-events:none so it never steals
-          clicks from the waveform underneath. */}
-      {cursor && peaks && containerWidth > 0 && duration > 0 && (
+          where to seek/place a cue. Rendered via a portal into document.body
+          so parent overflow:hidden chains (the workspace card, page scroll
+          container, etc.) can't clip it. Pointer-events:none so it never
+          steals clicks from the waveform underneath. */}
+      {cursor && peaks && duration > 0 && (
         <Magnifier
           peaks={peaks}
           duration={duration}
           cursorTime={cursor.time}
-          cursorX={cursor.x}
-          containerWidth={containerWidth}
-          waveformHeight={height}
+          clientX={cursor.clientX}
+          clientY={cursor.clientY}
         />
       )}
     </div>
@@ -307,16 +311,15 @@ interface MagnifierProps {
   peaks: BandedPeaks
   duration: number
   cursorTime: number
-  cursorX: number
-  containerWidth: number
-  waveformHeight: number
+  clientX: number
+  clientY: number
 }
 
 const MAGNIFIER_WIDTH = 280
 const MAGNIFIER_HEIGHT = 70
 const MAGNIFIER_WINDOW_SECONDS = 6
 
-function Magnifier({ peaks, duration, cursorTime, cursorX, containerWidth, waveformHeight }: MagnifierProps) {
+function Magnifier({ peaks, duration, cursorTime, clientX, clientY }: MagnifierProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -373,21 +376,29 @@ function Magnifier({ peaks, duration, cursorTime, cursorX, containerWidth, wavef
     ctx.fillRect(MAGNIFIER_WIDTH / 2 - 0.5, 0, 1, MAGNIFIER_HEIGHT)
   }, [peaks, duration, cursorTime])
 
-  // Clamp the popover so it doesn't slide off the left/right edge of the
-  // waveform. Centre it on the cursor where there's room.
+  // Position the popover via fixed coords on the viewport. Place it just
+  // above the cursor; flip to below when the cursor is near the top of the
+  // viewport so the magnifier never gets cut off by the window chrome.
+  // Clamp horizontally so the right edge doesn't overflow the viewport.
+  const verticalOffset = 22 // gap between cursor and popover edge
+  const popoverHeight = MAGNIFIER_HEIGHT + 18 // canvas + footer
+  const preferTop = clientY - popoverHeight - verticalOffset
+  const top = preferTop >= 4 ? preferTop : clientY + verticalOffset
   const half = MAGNIFIER_WIDTH / 2
-  const left = Math.max(0, Math.min(containerWidth - MAGNIFIER_WIDTH, cursorX - half))
+  const viewportW = typeof window !== 'undefined' ? window.innerWidth : MAGNIFIER_WIDTH
+  const left = Math.max(4, Math.min(viewportW - MAGNIFIER_WIDTH - 4, clientX - half))
 
-  return (
+  return createPortal(
     <div
-      className="pointer-events-none absolute z-10 rounded border border-white/10 bg-black/90 shadow-lg"
-      style={{ left, bottom: waveformHeight + 6, width: MAGNIFIER_WIDTH }}
+      className="pointer-events-none fixed z-[1000] rounded border border-white/15 bg-black/95 shadow-2xl"
+      style={{ left, top, width: MAGNIFIER_WIDTH }}
     >
       <canvas ref={canvasRef} className="block" />
       <div className="border-t border-white/10 px-2 py-0.5 text-center font-mono text-[10px] text-white/80">
-        {formatTimeFine(cursorTime)} · ±{(MAGNIFIER_WINDOW_SECONDS / 2).toFixed(1)}s
+        🔍 {formatTimeFine(cursorTime)} · ±{(MAGNIFIER_WINDOW_SECONDS / 2).toFixed(1)}s
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

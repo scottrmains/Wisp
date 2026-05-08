@@ -4,8 +4,10 @@ import type { CuePoint, CuePointType } from './types'
 export const cues = {
   list: (trackId: string) => apiGet<CuePoint[]>(`/api/tracks/${trackId}/cues`),
 
-  create: (trackId: string, body: { timeSeconds: number; type: CuePointType; label?: string }) =>
-    apiPost<CuePoint>(`/api/tracks/${trackId}/cues`, body),
+  create: (
+    trackId: string,
+    body: { timeSeconds: number; type: CuePointType; label?: string; isAutoSuggested?: boolean },
+  ) => apiPost<CuePoint>(`/api/tracks/${trackId}/cues`, body),
 
   update: (
     id: string,
