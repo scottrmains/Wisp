@@ -18,8 +18,14 @@ import { CSS } from '@dnd-kit/utilities'
 import type { MixPlanTrack, Track } from '../../api/types'
 import { formatBpm } from '../library/format'
 import { PreviewDialog } from '../preview/PreviewDialog'
-import { useMixPlan } from './useMixPlans'
+import { useMixPlan, useMixPlans } from './useMixPlans'
 import { ChainStats } from './ChainStats'
+import { PlanHeader } from './PlanHeader'
+import { TransitionGap } from './TransitionGap'
+import {
+  computePlanSummary,
+  indexWarningsByTransition,
+} from './summary'
 
 interface Props {
   planId: string
@@ -28,8 +34,43 @@ interface Props {
 }
 
 export function ChainDock({ planId, collapsed, onToggle }: Props) {
-  const { plan, loading, moveTrack, updateNotes, removeTrack } = useMixPlan(planId)
+  const { plan, loading, addTrack, moveTrack, updateNotes, removeTrack } = useMixPlan(planId)
+  const { rename } = useMixPlans()
   const [preview, setPreview] = useState<{ a: Track; b: Track } | null>(null)
+  const [isDropTarget, setIsDropTarget] = useState(false)
+  const summary = computePlanSummary(plan)
+  const warningsByTransition = indexWarningsByTransition(summary.warnings)
+
+  // Library → chain drag-and-drop. The library writes the wisp track-ids payload on dragstart;
+  // we accept here and append each track to the active plan in selection order.
+  const isWispDrag = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes('application/x-wisp-track-ids')
+  const onDragOver = (e: React.DragEvent) => {
+    if (!isWispDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    if (!isDropTarget) setIsDropTarget(true)
+  }
+  const onDragLeave = (e: React.DragEvent) => {
+    // Only clear when leaving the entire dock — `dragleave` fires for child traversals too.
+    if (e.currentTarget === e.target) setIsDropTarget(false)
+  }
+  const onDrop = async (e: React.DragEvent) => {
+    if (!isWispDrag(e)) return
+    e.preventDefault()
+    setIsDropTarget(false)
+    try {
+      const ids = JSON.parse(e.dataTransfer.getData('application/x-wisp-track-ids')) as string[]
+      // Sequential addTrack chain: each call's result feeds the next as `after` so order is preserved.
+      let after: string | null = null
+      for (const trackId of ids) {
+        const created = await addTrack.mutateAsync({ trackId, after })
+        after = created.id
+      }
+    } catch (err) {
+      console.error('Drop failed', err)
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -59,7 +100,17 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
   }
 
   return (
-    <section className="flex max-h-[26rem] flex-col border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+    <section
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={[
+        'flex max-h-[26rem] flex-col border-t bg-[var(--color-surface)] transition-colors',
+        isDropTarget
+          ? 'border-[var(--color-accent)] ring-2 ring-inset ring-[var(--color-accent)]/40'
+          : 'border-[var(--color-border)]',
+      ].join(' ')}
+    >
       <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2">
         <div className="flex items-center gap-3">
           <button
@@ -78,6 +129,13 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
 
       {!collapsed && (
         <>
+          {plan && (
+            <PlanHeader
+              plan={plan}
+              compact
+              onRename={(name) => rename.mutate({ id: plan.id, name })}
+            />
+          )}
           {plan && plan.tracks.length > 0 && <ChainStats tracks={plan.tracks} />}
 
           <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4">
@@ -95,20 +153,19 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
                       <Fragment key={mpt.id}>
                         <SortableCard
                           mpt={mpt}
+                          order={i + 1}
                           onRemove={() => removeTrack.mutate(mpt.id)}
                           onNotesChange={(notes) => updateNotes.mutate({ mptId: mpt.id, notes })}
                         />
                         {i < plan.tracks.length - 1 && (
-                          <button
-                            onClick={() =>
+                          <TransitionGap
+                            warnings={
+                              warningsByTransition.get(`${mpt.id}|${plan.tracks[i + 1].id}`) ?? []
+                            }
+                            onPreview={() =>
                               setPreview({ a: mpt.track, b: plan.tracks[i + 1].track })
                             }
-                            title="Preview transition"
-                            aria-label="Preview transition"
-                            className="self-stretch px-1 text-[var(--color-muted)] hover:text-[var(--color-accent)]"
-                          >
-                            ▶
-                          </button>
+                          />
                         )}
                       </Fragment>
                     ))}
@@ -133,10 +190,12 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
 
 function SortableCard({
   mpt,
+  order,
   onRemove,
   onNotesChange,
 }: {
   mpt: MixPlanTrack
+  order: number
   onRemove: () => void
   onNotesChange: (notes: string) => void
 }) {
@@ -156,14 +215,19 @@ function SortableCard({
       className="flex w-52 shrink-0 flex-col rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-2"
     >
       <div className="flex items-start justify-between gap-1">
-        <button
-          {...attributes}
-          {...listeners}
-          className="cursor-grab text-[var(--color-muted)] hover:text-white active:cursor-grabbing"
-          aria-label="Drag to reorder"
-        >
-          ⋮⋮
-        </button>
+        <div className="flex items-center gap-1">
+          <span className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded bg-[var(--color-accent)]/20 px-1 text-[10px] font-semibold text-[var(--color-accent)] tabular-nums">
+            {order.toString().padStart(2, '0')}
+          </span>
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab text-[var(--color-muted)] hover:text-white active:cursor-grabbing"
+            aria-label="Drag to reorder"
+          >
+            ⋮⋮
+          </button>
+        </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium" title={mpt.track.title ?? ''}>
             {mpt.track.title ?? mpt.track.fileName}

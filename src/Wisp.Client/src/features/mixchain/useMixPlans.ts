@@ -82,10 +82,16 @@ export function useMixPlan(id: string | null) {
     onSuccess: invalidate,
   })
 
+  const setAnchor = useMutation({
+    mutationFn: ({ mptId, isAnchor }: { mptId: string; isAnchor: boolean }) =>
+      mixPlans.setAnchor(id!, mptId, isAnchor),
+    onSuccess: invalidate,
+  })
+
   const removeTrack = useMutation({
     mutationFn: (mptId: string) => mixPlans.removeTrack(id!, mptId),
     onSuccess: invalidate,
   })
 
-  return { plan: detail.data, loading: detail.isLoading, addTrack, moveTrack, updateNotes, removeTrack }
+  return { plan: detail.data, loading: detail.isLoading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack }
 }

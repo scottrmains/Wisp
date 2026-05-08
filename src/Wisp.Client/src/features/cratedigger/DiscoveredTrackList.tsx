@@ -33,45 +33,45 @@ export function DiscoveredTrackList({ tracks, loading, onSelect }: Props) {
         <li
           key={t.id}
           onClick={() => onSelect(t)}
-          className="grid cursor-pointer grid-cols-[5rem_1fr_auto] items-center gap-3 border-b border-[var(--color-border)]/40 px-4 py-2.5 text-sm hover:bg-white/5"
+          className="grid cursor-pointer grid-cols-[4rem_1fr_auto] items-center gap-3 border-b border-[var(--color-border)]/40 px-4 py-2 text-sm hover:bg-white/5"
         >
           {t.thumbnailUrl ? (
-            <img src={t.thumbnailUrl} alt="" className="h-12 w-20 rounded object-cover" loading="lazy" />
+            <img src={t.thumbnailUrl} alt="" className="h-9 w-16 rounded object-cover" loading="lazy" />
           ) : (
-            <div className="h-12 w-20 rounded bg-[var(--color-surface)]" />
+            <div className="h-9 w-16 rounded bg-[var(--color-surface)]" />
           )}
           <div className="min-w-0">
             {t.parsedArtist && t.parsedTitle ? (
-              <p className="truncate text-sm font-medium">
+              <p className="truncate text-sm font-medium leading-tight">
                 {t.parsedArtist} — {t.parsedTitle}
                 {t.mixVersion && (
-                  <span className="ml-1 text-[var(--color-muted)]">({t.mixVersion})</span>
+                  <span className="ml-1 font-normal text-[var(--color-muted)]">({t.mixVersion})</span>
                 )}
               </p>
             ) : (
-              <p className="truncate text-sm font-medium text-amber-300/90" title="Low-confidence parse — click to fix">
+              <p className="truncate text-sm font-medium text-amber-300/90 leading-tight" title="Low-confidence parse — click to fix">
                 {t.rawTitle}
               </p>
             )}
-            <p className="truncate text-xs text-[var(--color-muted)]">
+            <p className="mt-0.5 truncate text-[11px] text-[var(--color-muted)]/70">
               {t.parsedArtist && t.parsedTitle ? (
-                <>
-                  raw: <span className="opacity-80">{t.rawTitle}</span>
-                </>
+                <span className="truncate" title={t.rawTitle}>{t.rawTitle}</span>
               ) : (
                 <span className="text-amber-400/80">needs review</span>
               )}
               {t.releaseYear && <span> · {t.releaseYear}</span>}
-              {t.isAlreadyInLibrary && (
-                <span className="ml-2 rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300">
-                  in library
-                </span>
-              )}
             </p>
           </div>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL[t.status].tone}`}>
-            {STATUS_PILL[t.status].label}
-          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {t.isAlreadyInLibrary && (
+              <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300" title="Matched against your local library">
+                ✓ owned
+              </span>
+            )}
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL[t.status].tone}`}>
+              {STATUS_PILL[t.status].label}
+            </span>
+          </div>
         </li>
       ))}
     </ul>

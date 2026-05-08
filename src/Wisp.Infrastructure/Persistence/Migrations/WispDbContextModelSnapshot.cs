@@ -386,6 +386,37 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.ToTable("DiscoverySources");
                 });
 
+            modelBuilder.Entity("Wisp.Core.Feedback.BlendRating", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContextNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Rating")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TrackAId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TrackBId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrackAId", "TrackBId");
+
+                    b.ToTable("BlendRatings");
+                });
+
             modelBuilder.Entity("Wisp.Core.MixPlans.MixPlan", b =>
                 {
                     b.Property<Guid>("Id")
@@ -423,6 +454,9 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.Property<double?>("CueOutSeconds")
                         .HasColumnType("REAL");
 
+                    b.Property<bool>("IsAnchor")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid>("MixPlanId")
                         .HasColumnType("TEXT");
 
@@ -442,6 +476,38 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.HasIndex("MixPlanId", "Order");
 
                     b.ToTable("MixPlanTracks");
+                });
+
+            modelBuilder.Entity("Wisp.Core.Tagging.TrackTag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("TrackId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TrackTags");
                 });
 
             modelBuilder.Entity("Wisp.Core.Tracks.ScanJob", b =>
@@ -503,6 +569,13 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.Property<string>("Album")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ArchiveReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Artist")
                         .HasColumnType("TEXT");
 
@@ -531,6 +604,9 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.Property<string>("Genre")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsDirtyName")
                         .HasColumnType("INTEGER");
 
@@ -541,6 +617,9 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("MusicalKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("ReleaseYear")
@@ -558,6 +637,8 @@ namespace Wisp.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FilePath")
                         .IsUnique();
+
+                    b.HasIndex("IsArchived");
 
                     b.HasIndex("Artist", "Title");
 
@@ -616,6 +697,17 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Wisp.Core.Tracks.Track", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("Wisp.Core.Tagging.TrackTag", b =>
+                {
                     b.HasOne("Wisp.Core.Tracks.Track", "Track")
                         .WithMany()
                         .HasForeignKey("TrackId")

@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client'
+import { apiGet, apiPost, apiPut } from './client'
 import type {
   Recommendation,
   RecommendationMode,
@@ -15,10 +15,26 @@ export const library = {
 }
 
 export const tracks = {
-  list: (q: TrackQuery = {}) => apiGet<TrackPage>('/api/tracks', q as Record<string, unknown>),
+  list: (q: TrackQuery = {}) => {
+    // `tag` is an array — apiGet's query-string helper only handles scalars, so flatten manually.
+    const { tag, ...rest } = q
+    const url = new URL('/api/tracks', window.location.origin)
+    for (const [k, v] of Object.entries(rest)) {
+      if (v === undefined || v === null || v === '') continue
+      url.searchParams.set(k, String(v))
+    }
+    if (tag) for (const t of tag) url.searchParams.append('tag', t)
+    return apiGet<TrackPage>(url.pathname + url.search)
+  },
   get: (id: string) => apiGet<Track>(`/api/tracks/${id}`),
   recommendations: (id: string, mode: RecommendationMode = 'Safe', limit = 50) =>
     apiGet<Recommendation[]>(`/api/tracks/${id}/recommendations`, { mode, limit }),
+  updateNotes: (id: string, notes: string | null) =>
+    apiPut<Track>(`/api/tracks/${id}/notes`, { notes }),
+  archive: (id: string, reason: string) =>
+    apiPost<Track>(`/api/tracks/${id}/archive`, { reason }),
+  restore: (id: string) =>
+    apiPost<Track>(`/api/tracks/${id}/restore`),
 }
 
 /// EventSource wrapper that surfaces typed scan progress events.

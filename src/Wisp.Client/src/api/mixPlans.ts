@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from './client'
-import type { MixPlan, MixPlanSummary, MixPlanTrack } from './types'
+import type { MixPlan, MixPlanSummary, MixPlanTrack, SuggestedRoute } from './types'
 
 async function apiSend<T>(method: 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -44,6 +44,18 @@ export const mixPlans = {
     apiSend<MixPlanTrack>('PATCH', `/api/mix-plans/${planId}/tracks/${mptId}`, {
       transitionNotes,
     }),
+  setAnchor: (planId: string, mptId: string, isAnchor: boolean) =>
+    apiSend<MixPlanTrack>('PATCH', `/api/mix-plans/${planId}/tracks/${mptId}`, {
+      isAnchor,
+    }),
   removeTrack: (planId: string, mptId: string) =>
     apiSend<void>('DELETE', `/api/mix-plans/${planId}/tracks/${mptId}`),
+  /// Asks the server to suggest filler tracks between two anchored cards.
+  /// Returns up to 5 candidate routes, each `gapTracks` long, ranked by score.
+  suggestRoute: (planId: string, fromMptId: string, toMptId: string, gapTracks: number) =>
+    apiPost<SuggestedRoute[]>(`/api/mix-plans/${planId}/suggest-route`, {
+      fromMptId,
+      toMptId,
+      gapTracks,
+    }),
 }

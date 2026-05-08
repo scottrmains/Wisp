@@ -82,34 +82,42 @@ export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
           </div>
 
           <div className="flex min-h-0 flex-col">
+            {/* Status — mutually exclusive trio. Want/Have/Ignore as a tight segmented control,
+                Reset breaks out as a tertiary link so it doesn't compete with the primary three. */}
             <div className="border-b border-[var(--color-border)] p-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-                Status
-              </h3>
-              <div className="flex flex-wrap gap-1.5">
-                {(['Want', 'AlreadyHave', 'Ignore'] as DiscoveryStatus[]).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setStatus.mutate(s)}
-                    disabled={setStatus.isPending}
-                    className={[
-                      'rounded border px-2.5 py-1 text-xs',
-                      detail.data?.track.status === s
-                        ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/20 text-[var(--color-accent)]'
-                        : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-white',
-                    ].join(' ')}
-                  >
-                    {s === 'AlreadyHave' ? 'Already have' : s}
-                  </button>
-                ))}
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                  Status
+                </h3>
                 {detail.data?.track.status !== 'New' && (
                   <button
                     onClick={() => setStatus.mutate('New')}
-                    className="rounded border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-muted)] hover:text-white"
+                    className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] hover:text-white"
+                    title="Clear status back to New"
                   >
-                    Reset
+                    reset
                   </button>
                 )}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(['Want', 'AlreadyHave', 'Ignore'] as DiscoveryStatus[]).map((s) => {
+                  const active = detail.data?.track.status === s
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setStatus.mutate(s)}
+                      disabled={setStatus.isPending}
+                      className={[
+                        'rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
+                        active
+                          ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/20 text-white'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white',
+                      ].join(' ')}
+                    >
+                      {s === 'AlreadyHave' ? 'Already have' : s}
+                    </button>
+                  )
+                })}
               </div>
               {detail.data?.track.isAlreadyInLibrary && (
                 <p className="mt-2 text-[11px] text-blue-300">
@@ -118,30 +126,38 @@ export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
               )}
             </div>
 
+            {/* Find this track — actions block. Soulseek panel sits inline (per design call:
+                stays grouped with the rest of Crate Digger; not split into a separate header). */}
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-                  Digital availability
-                </h3>
-                <button
-                  onClick={() => runMatch.mutate()}
-                  disabled={runMatch.isPending || !detail.data?.track.parsedArtist}
-                  className="rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] hover:bg-white/5 disabled:opacity-40"
-                  title={!detail.data?.track.parsedArtist ? 'Set artist + title first' : 'Run availability check'}
-                >
-                  {runMatch.isPending ? 'Searching…' : 'Check availability'}
-                </button>
-              </div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                Find this track
+              </h3>
 
-              {!detail.data?.matches?.length ? (
-                <p className="text-xs text-[var(--color-muted)]">
-                  Click <strong>Check availability</strong> to query Discogs and build search links for Beatport / Juno / Bandcamp / Traxsource.
-                </p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {detail.data.matches.map((m) => <MatchRow key={m.id} match={m} />)}
-                </ul>
-              )}
+              <section className="mb-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <h4 className="text-[11px] font-medium text-[var(--color-muted)]">
+                    Digital availability
+                  </h4>
+                  <button
+                    onClick={() => runMatch.mutate()}
+                    disabled={runMatch.isPending || !detail.data?.track.parsedArtist}
+                    className="rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] hover:bg-white/5 disabled:opacity-40"
+                    title={!detail.data?.track.parsedArtist ? 'Set artist + title first' : 'Run availability check'}
+                  >
+                    {runMatch.isPending ? 'Searching…' : 'Check availability'}
+                  </button>
+                </div>
+
+                {!detail.data?.matches?.length ? (
+                  <p className="text-xs text-[var(--color-muted)]">
+                    Click <strong>Check availability</strong> to query Discogs and build search links for Beatport / Juno / Bandcamp / Traxsource.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {detail.data.matches.map((m) => <MatchRow key={m.id} match={m} />)}
+                  </ul>
+                )}
+              </section>
 
               {detail.data && (
                 <SoulseekPanel

@@ -10,7 +10,7 @@ public class RecommendationService
         var reasons = new List<string>();
 
         var keyScore = ScoreKey(seed, candidate, reasons);
-        var bpmScore = ScoreBpm(seed, candidate, reasons);
+        var bpmScore = ScoreBpm(seed, candidate, mode, reasons);
         var energyScore = ScoreEnergy(seed, candidate, mode, reasons);
         var genreScore = ScoreGenre(seed, candidate, mode, reasons);
         var penalties = Penalties(seed, candidate, reasons);
@@ -58,12 +58,24 @@ public class RecommendationService
 
     // --- bpm ---
 
-    private static int ScoreBpm(Track seed, Track candidate, List<string> reasons)
+    private static int ScoreBpm(Track seed, Track candidate, RecommendationMode mode, List<string> reasons)
     {
         if (seed.Bpm is not { } sBpm || candidate.Bpm is not { } cBpm) return 0;
 
+        // Party mode: hard cap at ±4 BPM. Anything beyond that gets 0 even if normally compatible —
+        // big jumps are unsafe in front of a non-DJ crowd. Half/double time is also out for parties.
+        if (mode == RecommendationMode.Party)
+        {
+            var diff = Math.Abs((double)(cBpm - sBpm));
+            if (diff > 4) return 0;
+        }
+
         var bpmScore = BpmCompatibility.Score(sBpm, cBpm);
         if (bpmScore.Points == 0) return 0;
+
+        // Party mode also rejects half/double-time matches — too disorienting for crowd dancing.
+        if (mode == RecommendationMode.Party && bpmScore.Relation is BpmRelation.Half or BpmRelation.Double)
+            return 0;
 
         var reason = bpmScore.Relation switch
         {
@@ -122,6 +134,14 @@ public class RecommendationService
                 _ => 4,
             },
             RecommendationMode.Wildcard => 5,
+            // Party mode: only accept ±1 energy moves. Anything beyond is an energy cliff
+            // for a crowd. Same energy is rewarded most heavily (consistent dancefloor).
+            RecommendationMode.Party => delta switch
+            {
+                0 => 22,
+                1 or -1 => 16,
+                _ => 0,
+            },
             _ => 0,
         };
 

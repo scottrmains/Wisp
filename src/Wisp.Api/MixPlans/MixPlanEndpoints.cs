@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Wisp.Api.Library;
 using Wisp.Core.MixPlans;
+using Wisp.Core.Recommendations;
+using Wisp.Core.Tracks;
 using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Api.MixPlans;
@@ -21,6 +24,7 @@ public static class MixPlanEndpoints
         g.MapDelete("{id:guid}/tracks/{mptId:guid}", RemoveTrack);
 
         g.MapGet("{id:guid}/export", Export);
+        g.MapPost("{id:guid}/suggest-route", SuggestRoute);
 
         return app;
     }
@@ -186,6 +190,7 @@ public static class MixPlanEndpoints
         if (mpt is null) return Results.NotFound();
 
         if (body.TransitionNotes is not null) mpt.TransitionNotes = body.TransitionNotes;
+        if (body.IsAnchor is { } anchorFlag) mpt.IsAnchor = anchorFlag;
 
         // The "afterTrackId" key may also be the literal "head" (passed as Guid.Empty by convention).
         if (body.AfterMixPlanTrackId is { } anchor)
@@ -242,6 +247,149 @@ public static class MixPlanEndpoints
         var before = sortedSiblings[idx];
         var after = idx + 1 < sortedSiblings.Count ? sortedSiblings[idx + 1] : null;
         return FractionalOrder.Between(before.Order, after?.Order);
+    }
+
+    /// Bounded beam search between two anchored mix-plan tracks. Returns up to 5 short routes
+    /// (each `gapTracks` long), ranked by accumulated `RecommendationService.Score(prev, next)`.
+    /// Excludes archived tracks, blocked-pair (Bad-rated) candidates, and tracks already in the plan.
+    /// Caps branching at top-K=8 per step and depth at gapTracks so big libraries don't blow up.
+    private static async Task<IResult> SuggestRoute(
+        Guid id,
+        SuggestRouteRequest body,
+        WispDbContext db,
+        RecommendationService svc,
+        CancellationToken ct)
+    {
+        if (body.GapTracks < 1 || body.GapTracks > 6)
+            return Results.BadRequest(new { code = "invalid_gap", message = "GapTracks must be 1..6." });
+
+        var planTracks = await db.MixPlanTracks
+            .AsNoTracking()
+            .Include(t => t.Track)
+            .Where(t => t.MixPlanId == id)
+            .ToListAsync(ct);
+
+        var fromMpt = planTracks.FirstOrDefault(t => t.Id == body.FromMptId);
+        var toMpt = planTracks.FirstOrDefault(t => t.Id == body.ToMptId);
+        if (fromMpt is null || toMpt is null) return Results.NotFound();
+        if (fromMpt.Track is null || toMpt.Track is null)
+            return Results.BadRequest(new { code = "track_missing", message = "Anchor tracks must exist." });
+
+        var alreadyInPlan = planTracks.Select(t => t.TrackId).ToHashSet();
+
+        // Block-pair filter from 15c — never bridge through a Bad-rated pair against either anchor.
+        var blockedAgainstFrom = await db.BlendRatings.AsNoTracking()
+            .Where(r => r.Rating == Wisp.Core.Feedback.BlendRatingValue.Bad
+                && (r.TrackAId == fromMpt.TrackId || r.TrackBId == fromMpt.TrackId))
+            .Select(r => r.TrackAId == fromMpt.TrackId ? r.TrackBId : r.TrackAId)
+            .ToListAsync(ct);
+        var blockedAgainstTo = await db.BlendRatings.AsNoTracking()
+            .Where(r => r.Rating == Wisp.Core.Feedback.BlendRatingValue.Bad
+                && (r.TrackAId == toMpt.TrackId || r.TrackBId == toMpt.TrackId))
+            .Select(r => r.TrackAId == toMpt.TrackId ? r.TrackBId : r.TrackAId)
+            .ToListAsync(ct);
+        var blockedSet = new HashSet<Guid>(blockedAgainstFrom.Concat(blockedAgainstTo));
+
+        var candidatePool = await db.Tracks.AsNoTracking()
+            .Where(t => !t.IsArchived
+                && t.Id != fromMpt.TrackId
+                && t.Id != toMpt.TrackId
+                && (t.MusicalKey != null || t.Bpm != null))
+            .ToListAsync(ct);
+        candidatePool = candidatePool
+            .Where(c => !alreadyInPlan.Contains(c.Id) && !blockedSet.Contains(c.Id))
+            .ToList();
+
+        const int topK = 8;        // candidates kept per step
+        const int routesKept = 16; // partial routes carried forward each level
+
+        // Beam search: at each level, expand each partial route by the top-K next tracks
+        // (by single-step score from the route's tail), keep the best `routesKept` partials,
+        // recurse. After `gapTracks` levels, score each completed route by the closing
+        // transition into the To anchor and pick the top 5.
+        var partials = new List<RoutePartial> { new(new List<Track>(), 0, fromMpt.Track) };
+
+        for (var step = 0; step < body.GapTracks; step++)
+        {
+            var next = new List<RoutePartial>();
+            foreach (var partial in partials)
+            {
+                var ranked = svc.Rank(partial.Tail, candidatePool, RecommendationMode.Safe, topK);
+                foreach (var cand in ranked)
+                {
+                    if (partial.UsedTrackIds.Contains(cand.Track.Id)) continue;
+                    var newPath = new List<Track>(partial.Path) { cand.Track };
+                    next.Add(new RoutePartial(newPath, partial.Score + cand.Score.Total, cand.Track));
+                }
+            }
+            partials = next
+                .OrderByDescending(p => p.Score)
+                .Take(routesKept)
+                .ToList();
+            if (partials.Count == 0) break;
+        }
+
+        // Score the closing transition into the To anchor and rank.
+        var routes = partials
+            .Select(p =>
+            {
+                // Single-track rank pass to get the score from p.Tail → toMpt.Track.
+                var closingScore = svc.Score(p.Tail, toMpt.Track, RecommendationMode.Safe).Total;
+                return new
+                {
+                    Path = p.Path,
+                    TotalScore = p.Score + closingScore,
+                };
+            })
+            .OrderByDescending(r => r.TotalScore)
+            .Take(5)
+            .ToList();
+
+        if (routes.Count == 0)
+            return Results.Ok(Array.Empty<SuggestedRouteDto>());
+
+        var dtos = routes.Select(r => new SuggestedRouteDto(
+            Tracks: r.Path.Select(TrackDto.From).ToList(),
+            TotalScore: r.TotalScore,
+            // Warnings are computed client-side from the existing summary helper; for the
+            // server response we only ship a count of likely-rough transitions (BPM jump > 8).
+            WarningCount: CountRoughTransitions(fromMpt.Track, r.Path, toMpt.Track),
+            Summary: BuildRouteSummary(fromMpt.Track, r.Path, toMpt.Track)
+        )).ToList();
+        return Results.Ok(dtos);
+    }
+
+    private sealed record RoutePartial(List<Track> Path, int Score, Track Tail)
+    {
+        public HashSet<Guid> UsedTrackIds => Path.Select(t => t.Id).ToHashSet();
+    }
+
+    private static int CountRoughTransitions(Track from, IList<Track> middle, Track to)
+    {
+        var seq = new List<Track> { from };
+        seq.AddRange(middle);
+        seq.Add(to);
+        var rough = 0;
+        for (var i = 1; i < seq.Count; i++)
+        {
+            var a = seq[i - 1].Bpm;
+            var b = seq[i].Bpm;
+            if (a is not null && b is not null && Math.Abs((double)(b.Value - a.Value)) > 8) rough++;
+        }
+        return rough;
+    }
+
+    private static string BuildRouteSummary(Track from, IList<Track> middle, Track to)
+    {
+        var allBpms = new[] { from }.Concat(middle).Concat(new[] { to })
+            .Select(t => t.Bpm).Where(b => b is not null).Select(b => (double)b!.Value).ToList();
+        var avgBpm = allBpms.Count > 0 ? allBpms.Average() : 0;
+        var allEnergies = new[] { from }.Concat(middle).Concat(new[] { to })
+            .Select(t => t.Energy).Where(e => e is not null).Select(e => e!.Value).ToList();
+        var energySpread = allEnergies.Count > 0
+            ? $"E{allEnergies.First()} → E{allEnergies.Last()}"
+            : "energy unknown";
+        return $"avg {avgBpm:0} BPM · {energySpread}";
     }
 
     private static async Task<MixPlan?> LoadPlan(WispDbContext db, Guid id, CancellationToken ct)

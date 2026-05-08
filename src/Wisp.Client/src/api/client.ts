@@ -61,3 +61,13 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
 export async function apiDelete<T = void>(path: string): Promise<T> {
   return handle<T>(await fetch(path, { method: 'DELETE' }))
 }
+
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  return handle<T>(
+    await fetch(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  )
+}

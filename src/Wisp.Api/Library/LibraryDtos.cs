@@ -41,14 +41,19 @@ public sealed record TrackDto(
     bool IsMissingMetadata,
     bool IsDirtyName,
     DateTime AddedAt,
-    DateTime? LastScannedAt)
+    DateTime? LastScannedAt,
+    string? Notes,
+    bool IsArchived,
+    DateTime? ArchivedAt,
+    string? ArchiveReason)
 {
     public static TrackDto From(Track t) => new(
         t.Id, t.FilePath, t.FileName,
         t.Artist, t.Title, t.Version, t.Album, t.Genre,
         t.Bpm, t.MusicalKey, t.Energy, t.ReleaseYear,
         t.Duration.TotalSeconds, t.IsMissingMetadata, t.IsDirtyName,
-        t.AddedAt, t.LastScannedAt);
+        t.AddedAt, t.LastScannedAt, t.Notes,
+        t.IsArchived, t.ArchivedAt, t.ArchiveReason?.ToString());
 }
 
 public sealed record TrackPageDto(IReadOnlyList<TrackDto> Items, int Total, int Page, int Size);
@@ -73,4 +78,8 @@ public sealed record RecommendationDto(
     int EnergyScore,
     int GenreScore,
     int Penalties,
-    IReadOnlyList<string> Reasons);
+    IReadOnlyList<string> Reasons,
+    /// User's previous BlendRating for this seed→candidate pair (or vice versa), if any.
+    /// Null means no rating; "Maybe" surfaces as a chip in the UI. "Bad"-rated pairs never
+    /// appear in this list (filtered out upstream); "Great"-rated still rank normally.
+    string? PreviousRating);

@@ -5,7 +5,9 @@ using Wisp.Api.ArtistRefresh;
 using Wisp.Api.Cleanup;
 using Wisp.Api.Cues;
 using Wisp.Api.Discovery;
+using Wisp.Api.Feedback;
 using Wisp.Api.Library;
+using Wisp.Api.Tagging;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
 using Wisp.Api.Soulseek;
@@ -129,6 +131,8 @@ public class Program
             app.MapArtistRefresh();
             app.MapDiscovery();
             app.MapSoulseek();
+            app.MapBlendRatings();
+            app.MapTags();
 
             // Helper: apply credentials after every save/delete so the catalog clients pick up changes.
             void ReapplyCatalog() => ApplyCatalogCredentials(

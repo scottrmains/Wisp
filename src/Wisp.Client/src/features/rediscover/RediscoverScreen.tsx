@@ -83,42 +83,67 @@ function ArtistList({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
+  if (loading) {
+    return (
+      <aside className="w-[24rem] shrink-0 overflow-y-auto">
+        <p className="p-4 text-sm text-[var(--color-muted)]">Loading artists…</p>
+      </aside>
+    )
+  }
+  if (list.length === 0) {
+    return (
+      <aside className="w-[24rem] shrink-0 overflow-y-auto">
+        <div className="space-y-2 p-6 text-sm text-[var(--color-muted)]">
+          <p className="font-medium text-white">No artists in your library yet.</p>
+          <p>Scan a folder first — Rediscover pulls from whatever artists are in your tagged tracks.</p>
+        </div>
+      </aside>
+    )
+  }
+
+  // Surface artists with new releases at the top so the screen leads with what's actionable.
+  const sorted = [...list].sort((a, b) => {
+    if (b.newReleaseCount !== a.newReleaseCount) return b.newReleaseCount - a.newReleaseCount
+    return a.name.localeCompare(b.name)
+  })
+
   return (
-    <aside className="w-[22rem] shrink-0 overflow-y-auto">
-      {loading && <p className="p-4 text-sm text-[var(--color-muted)]">Loading artists…</p>}
-      {!loading && list.length === 0 && (
-        <p className="p-4 text-sm text-[var(--color-muted)]">
-          No artists in your library yet. Scan a folder first.
-        </p>
-      )}
+    <aside className="w-[24rem] shrink-0 overflow-y-auto">
       <ul>
-        {list.map((a) => (
+        {sorted.map((a) => (
           <li
             key={a.id}
             className={[
-              'cursor-pointer border-b border-[var(--color-border)]/40 px-4 py-2.5 text-sm hover:bg-white/5',
+              'cursor-pointer border-b border-[var(--color-border)]/40 px-4 py-3 text-sm hover:bg-white/5',
               selectedId === a.id ? 'bg-[var(--color-accent)]/10' : '',
             ].join(' ')}
             onClick={() => onSelect(a.id)}
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-medium">{a.name}</span>
-              <div className="flex items-center gap-1">
-                <SourceDots
-                  spotify={a.isMatchedSpotify}
-                  discogs={a.isMatchedDiscogs}
-                  youTube={a.isMatchedYouTube}
-                />
-                {a.newReleaseCount > 0 && (
-                  <span className="ml-1 rounded-full bg-[var(--color-accent)]/20 px-2 py-0.5 text-[10px] font-medium text-[var(--color-accent)]">
-                    +{a.newReleaseCount}
-                  </span>
-                )}
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{a.name}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-muted)]">
+                  <span>{a.trackCount} local</span>
+                  {a.latestLocalYear !== null && (
+                    <span>latest {a.latestLocalYear}</span>
+                  )}
+                  {a.newReleaseCount > 0 && (
+                    <span className="font-medium text-[var(--color-accent)]">
+                      {a.newReleaseCount} new
+                    </span>
+                  )}
+                </div>
               </div>
+              {a.newReleaseCount > 0 && (
+                <span className="shrink-0 rounded-md bg-[var(--color-accent)] px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums">
+                  +{a.newReleaseCount}
+                </span>
+              )}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-muted)]">
-              <span>{a.trackCount} local</span>
-              {a.latestLocalYear !== null && <span>· latest {a.latestLocalYear}</span>}
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              <SourceChip name="Spotify" matched={a.isMatchedSpotify} tone="emerald" />
+              <SourceChip name="Discogs" matched={a.isMatchedDiscogs} tone="orange" />
+              <SourceChip name="YouTube" matched={a.isMatchedYouTube} tone="red" />
             </div>
           </li>
         ))}
@@ -127,26 +152,30 @@ function ArtistList({
   )
 }
 
-function SourceDots({ spotify, discogs, youTube }: { spotify: boolean; discogs: boolean; youTube: boolean }) {
-  return (
-    <div className="flex items-center gap-0.5 text-[9px] font-bold">
-      <Dot label="S" on={spotify} colour="bg-emerald-500/70" />
-      <Dot label="D" on={discogs} colour="bg-orange-400/70" />
-      <Dot label="Y" on={youTube} colour="bg-red-500/70" />
-    </div>
-  )
-}
-
-function Dot({ label, on, colour }: { label: string; on: boolean; colour: string }) {
+function SourceChip({
+  name,
+  matched,
+  tone,
+}: {
+  name: string
+  matched: boolean
+  tone: 'emerald' | 'orange' | 'red'
+}) {
+  const matchedCls = tone === 'emerald'
+    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+    : tone === 'orange'
+      ? 'border-orange-400/40 bg-orange-400/10 text-orange-200'
+      : 'border-red-500/40 bg-red-500/10 text-red-200'
   return (
     <span
       className={[
-        'inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-white',
-        on ? colour : 'bg-white/10 text-white/30',
+        'rounded border px-1.5 py-0.5 text-[10px]',
+        matched ? matchedCls : 'border-[var(--color-border)] bg-transparent text-[var(--color-muted)]/60',
       ].join(' ')}
-      title={`${label === 'S' ? 'Spotify' : label === 'D' ? 'Discogs' : 'YouTube'} ${on ? 'matched' : 'not matched'}`}
+      title={`${name} ${matched ? 'matched' : 'not matched'}`}
     >
-      {label}
+      {name}
+      {!matched && ' —'}
     </span>
   )
 }
@@ -204,9 +233,15 @@ function ArtistDetail({
       )}
 
       {!anyMatched && (
-        <p className="mt-6 text-sm text-[var(--color-muted)]">
-          Match this artist on at least one source above to start fetching releases. Discogs is best for old / vinyl-only catalogues; YouTube enriches matched releases with an inline player.
-        </p>
+        <div className="mt-6 space-y-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
+          <p className="text-white">No source matched yet.</p>
+          <p>Pick a source above to identify this artist. Different sources cover different ground:</p>
+          <ul className="ml-4 list-disc text-[12px]">
+            <li><strong className="text-white">Spotify</strong> — broad streaming catalogue, fast for current/active artists</li>
+            <li><strong className="text-white">Discogs</strong> — vinyl + underground, best for old white-label material</li>
+            <li><strong className="text-white">YouTube</strong> — enriches matched releases with an inline audition player</li>
+          </ul>
+        </div>
       )}
 
       {anyMatched && releases.isLoading && (
@@ -214,9 +249,18 @@ function ArtistDetail({
       )}
 
       {anyMatched && releases.data && releases.data.length === 0 && (
-        <p className="mt-6 text-sm text-[var(--color-muted)]">
-          No new releases tracked yet. Click <strong>Refresh from sources</strong> to fetch.
-        </p>
+        <div className="mt-6 space-y-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
+          <p className="text-white">No new releases since {artist.latestLocalYear ?? 'your latest local track'}.</p>
+          <p>
+            Click <strong className="text-white">Refresh from sources</strong> to re-poll. To broaden the search,
+            match additional sources (you currently have:
+            {[
+              artist.isMatchedSpotify && ' Spotify',
+              artist.isMatchedDiscogs && ' Discogs',
+              artist.isMatchedYouTube && ' YouTube',
+            ].filter(Boolean).join(', ')}).
+          </p>
+        </div>
       )}
 
       {releases.data && releases.data.length > 0 && (

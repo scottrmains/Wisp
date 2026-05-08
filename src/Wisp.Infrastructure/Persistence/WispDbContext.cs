@@ -3,7 +3,9 @@ using Wisp.Core.ArtistRefresh;
 using Wisp.Core.Cleanup;
 using Wisp.Core.Cues;
 using Wisp.Core.Discovery;
+using Wisp.Core.Feedback;
 using Wisp.Core.MixPlans;
+using Wisp.Core.Tagging;
 using Wisp.Core.Tracks;
 
 namespace Wisp.Infrastructure.Persistence;
@@ -21,6 +23,8 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<DiscoverySource> DiscoverySources => Set<DiscoverySource>();
     public DbSet<DiscoveredTrack> DiscoveredTracks => Set<DiscoveredTrack>();
     public DbSet<DigitalMatch> DigitalMatches => Set<DigitalMatch>();
+    public DbSet<BlendRating> BlendRatings => Set<BlendRating>();
+    public DbSet<TrackTag> TrackTags => Set<TrackTag>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -124,6 +128,31 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         match.HasOne(m => m.DiscoveredTrack)
             .WithMany()
             .HasForeignKey(m => m.DiscoveredTrackId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var blend = b.Entity<BlendRating>();
+        blend.HasKey(r => r.Id);
+        blend.Property(r => r.Rating).HasConversion<string>().HasMaxLength(10);
+        blend.Property(r => r.ContextNotes).HasMaxLength(500);
+        // Look up rating by transition pair quickly so the modal can preselect a previous score.
+        blend.HasIndex(r => new { r.TrackAId, r.TrackBId });
+        // No FK to Track — keep ratings if either track is removed (analytics value > referential cleanliness).
+
+        // Track.IsArchived flag — index it so the default `WHERE IsArchived = 0` filter is fast.
+        track.HasIndex(t => t.IsArchived);
+        track.Property(t => t.ArchiveReason).HasConversion<string>().HasMaxLength(20);
+
+        var tag = b.Entity<TrackTag>();
+        tag.HasKey(t => t.Id);
+        tag.Property(t => t.Name).IsRequired().HasMaxLength(60);
+        tag.Property(t => t.Type).HasConversion<string>().HasMaxLength(10);
+        // Same tag can't be applied twice to the same track. Case-insensitive collation
+        // means "Warm-up" and "warm-up" collide on insert, which matches user intuition.
+        tag.HasIndex(t => new { t.TrackId, t.Name }).IsUnique();
+        tag.HasIndex(t => t.Name); // for library-wide tag listing + filter
+        tag.HasOne(t => t.Track)
+            .WithMany()
+            .HasForeignKey(t => t.TrackId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

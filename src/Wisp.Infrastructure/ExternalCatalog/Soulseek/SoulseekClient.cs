@@ -121,6 +121,41 @@ public sealed class SoulseekClient(
         }
     }
 
+    /// Asks slskd for its currently-configured download folder via `/api/v0/options`.
+    /// Cached for the life of the process — slskd would need a restart to change it anyway.
+    /// Returns null on any failure so callers can fall back to user-supplied settings.
+    public async Task<string?> GetEffectiveDownloadFolderAsync(CancellationToken ct)
+    {
+        if (!options.IsConfigured) return null;
+        if (_downloadFolderCache is not null) return _downloadFolderCache;
+
+        try
+        {
+            using var resp = await Client().GetAsync(Url("options"), ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            using var doc = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonDocument>(ct);
+            if (doc is null) return null;
+            if (doc.RootElement.TryGetProperty("directories", out var dirs) &&
+                dirs.TryGetProperty("downloads", out var downloads) &&
+                downloads.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var path = downloads.GetString();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    _downloadFolderCache = path;
+                    _log.LogInformation("Soulseek: discovered slskd download folder via options API: {Path}", path);
+                    return path;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogDebug(ex, "Could not read slskd options for download folder");
+        }
+        return null;
+    }
+    private string? _downloadFolderCache;
+
     public async Task<IReadOnlyList<SoulseekTransfer>> ListDownloadsAsync(CancellationToken ct)
     {
         if (!options.IsConfigured) throw new SoulseekNotConfiguredException();

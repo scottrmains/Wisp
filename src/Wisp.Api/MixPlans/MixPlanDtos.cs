@@ -26,6 +26,7 @@ public sealed record MixPlanTrackDto(
     double? CueInSeconds,
     double? CueOutSeconds,
     string? TransitionNotes,
+    bool IsAnchor,
     TrackDto Track)
 {
     public static MixPlanTrackDto From(MixPlanTrack mpt) => new(
@@ -35,6 +36,7 @@ public sealed record MixPlanTrackDto(
         mpt.CueInSeconds,
         mpt.CueOutSeconds,
         mpt.TransitionNotes,
+        mpt.IsAnchor,
         TrackDto.From(mpt.Track!));
 }
 
@@ -42,4 +44,14 @@ public sealed record CreateMixPlanRequest(string Name, string? Notes);
 public sealed record UpdateMixPlanRequest(string? Name, string? Notes);
 
 public sealed record AddMixPlanTrackRequest(Guid TrackId, Guid? AfterMixPlanTrackId);
-public sealed record UpdateMixPlanTrackRequest(Guid? AfterMixPlanTrackId, string? TransitionNotes);
+public sealed record UpdateMixPlanTrackRequest(Guid? AfterMixPlanTrackId, string? TransitionNotes, bool? IsAnchor);
+
+/// Request to suggest a route between two anchored tracks. `GapTracks` is the desired number
+/// of fillers to insert; the suggester will return at most a handful of candidate sequences.
+public sealed record SuggestRouteRequest(Guid FromMptId, Guid ToMptId, int GapTracks);
+
+public sealed record SuggestedRouteDto(
+    IReadOnlyList<TrackDto> Tracks,
+    int TotalScore,
+    int WarningCount,
+    string Summary);

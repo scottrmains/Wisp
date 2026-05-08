@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Wisp.Core.Cleanup;
 using Wisp.Core.Recommendations;
 using Wisp.Infrastructure.ArtistRefresh;
+using Wisp.Infrastructure.Audio;
 using Wisp.Infrastructure.Cleanup;
 using Wisp.Infrastructure.Discovery;
 using Wisp.Infrastructure.ExternalCatalog.Discogs;
@@ -29,6 +30,7 @@ public static class WispServiceCollectionExtensions
         services.AddHostedService<ScanWorker>();
 
         services.AddSingleton<RecommendationService>();
+        services.AddSingleton<AiffTranscoder>();
 
         services.AddScoped<CleanupSuggestionService>();
         services.AddScoped<CleanupApplier>();

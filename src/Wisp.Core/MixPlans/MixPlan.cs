@@ -26,5 +26,10 @@ public class MixPlanTrack
     public double? CueOutSeconds { get; set; }
     public string? TransitionNotes { get; set; }
 
+    /// "Must include" anchor — the route suggester treats anchored cards as fixed
+    /// waypoints and only fills the gaps between them. Default false; toggled via the
+    /// PATCH endpoint. Pure positional metadata, doesn't affect playback / scoring.
+    public bool IsAnchor { get; set; }
+
     public Track? Track { get; set; }
 }

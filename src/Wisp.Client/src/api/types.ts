@@ -18,6 +18,44 @@ export interface Track {
   isDirtyName: boolean
   addedAt: string
   lastScannedAt: string | null
+  notes: string | null
+  isArchived: boolean
+  archivedAt: string | null
+  archiveReason: string | null
+}
+
+export type ArchiveReason =
+  | 'Outdated'
+  | 'LowQuality'
+  | 'Duplicate'
+  | 'BadMetadata'
+  | 'NotMyVibe'
+  | 'KeepForMemory'
+  | 'Other'
+
+export type TagType = 'Role' | 'Vibe' | 'Vocal' | 'Era' | 'Custom'
+
+export interface TrackTag {
+  id: string
+  name: string
+  type: TagType
+}
+
+export interface TagSummary {
+  name: string
+  type: TagType
+  useCount: number
+}
+
+export type BlendRatingValue = 'Bad' | 'Maybe' | 'Good' | 'Great'
+
+export interface BlendRating {
+  id: string
+  trackAId: string
+  trackBId: string
+  rating: BlendRatingValue
+  contextNotes: string | null
+  ratedAt: string
 }
 
 export interface TrackPage {
@@ -63,6 +101,12 @@ export interface TrackQuery {
   energyMax?: number
   missing?: boolean
   sort?: string
+  /// Pulls archived tracks back into the result set (default: archived hidden).
+  includeArchived?: boolean
+  /// Returns ONLY archived tracks. Wins over includeArchived when both set.
+  archivedOnly?: boolean
+  /// Repeat per tag for AND-intersection.
+  tag?: string[]
   page?: number
   size?: number
 }
@@ -74,6 +118,7 @@ export type RecommendationMode =
   | 'SameVibe'
   | 'Creative'
   | 'Wildcard'
+  | 'Party'
 
 export interface Recommendation {
   track: Track
@@ -84,6 +129,9 @@ export interface Recommendation {
   genreScore: number
   penalties: number
   reasons: string[]
+  /// User's previous BlendRating against this candidate (for the seed) — null when no prior rating.
+  /// "Maybe" is the only value surfaced; "Bad" pairs are filtered out upstream.
+  previousRating: string | null
 }
 
 export interface MixPlanSummary {
@@ -102,7 +150,15 @@ export interface MixPlanTrack {
   cueInSeconds: number | null
   cueOutSeconds: number | null
   transitionNotes: string | null
+  isAnchor: boolean
   track: Track
+}
+
+export interface SuggestedRoute {
+  tracks: Track[]
+  totalScore: number
+  warningCount: number
+  summary: string
 }
 
 export interface MixPlan {
