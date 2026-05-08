@@ -47,3 +47,6 @@ src/Wisp.Api/wwwroot/
 TestResults/
 coverage/
 *.trx
+/WISP_BACKLOG_FEATURES.md
+/WISP_IMPLEMENTATION_PLAN.md
+

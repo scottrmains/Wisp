@@ -387,13 +387,32 @@ Catalog credentials live in `%LOCALAPPDATA%\Wisp\config.json` under `Catalog:Spo
 - [x] Settings panel: Spotify section with Client ID + Secret inputs (show/hide secret), Save / Test / Remove. Configured state shows the first 6 chars of Client ID for confirmation. Bridge link to `developer.spotify.com/dashboard`.
 - [x] Empty state when API keys missing — clean 400 from API with `code: "spotify_unconfigured"` + UI keeps the "Find on Spotify" button visible
 
-### Phase 8b — Catalog breadth
+### Phase 8b — Catalog breadth + audition (Discogs + YouTube) 🚧 *this iteration*
 
-- [ ] MusicBrainz client (free, no auth — but requires polite `User-Agent: Wisp/1.0 (contact-email)` and 1 req/sec rate limit)
-- [ ] Discogs client (personal access token; much better than Spotify for 90s/00s house, vinyl-only EPs, remixes)
-- [ ] `ReleaseNormalizer` cross-source dedupe (same release on Spotify + Discogs collapses into one card)
-- [ ] Source badges per release (S / MB / D)
-- [ ] **Beatport — deferred indefinitely.** Their developer portal is gated and access is awkward; don't block the feature on it. Track separately.
+**Why this matters now:** Spotify undersells exactly the artists this feature exists to surface — vinyl-only EPs, white labels, deep underground house catalogues from 90s/00s. Discogs has dramatically better coverage of those releases, and YouTube provides the audition layer ("can I actually hear this before deciding to buy?") so the Rediscover flow goes from "list of releases with links" to "listen, then act."
+
+**Hard line preserved from Phase 9:** YouTube integration is **discovery + embedded preview only** — official Data API v3, ToS-compliant. No yt-dlp. No audio extraction. No Web Audio of YouTube content. Embedded iframe player only; bought tracks become normal local files via re-scan.
+
+#### Discogs (release source — what's been released)
+- [ ] `DiscogsCatalogClient`: personal access token auth, 60 req/min, polite `User-Agent: Wisp/0.x (+contact)`. Search artists, fetch releases sorted by `year desc`, paginated via `pagination.urls.next`.
+- [ ] `DiscogsArtistId` already exists on `ArtistProfile` — populate via match flow.
+- [ ] Settings panel: paste personal access token, Save / Test / Remove. Bridge link to `discogs.com/settings/developers`.
+- [ ] API: `match-candidates?source=Discogs`, `match` body now accepts `{ source: "Spotify" | "Discogs" }`. `refresh` fetches from **all matched sources** for that artist.
+- [ ] Source badge on release cards (`S` for Spotify, `D` for Discogs, distinct colours).
+
+#### YouTube per-artist (audition source — what you can hear right now)
+- [ ] `YouTubeCatalogClient` (Data API v3): resolve artist's auto-generated **Topic channel** via `search.list?type=channel&q="ARTIST - Topic"`, get its `uploads` playlist, page through with `playlistItems.list` (1 unit/page of 50 — much cheaper than `search.list` per query).
+- [ ] Add `YouTubeChannelId` to `ArtistProfile`, `YouTubeVideoId` + `YouTubeUrl` to `ExternalRelease`.
+- [ ] Match Topic channel uploads to existing release rows by title similarity (reuse `TitleOverlap.Normalize`). When matched, persist the YouTube IDs on the release.
+- [ ] Settings panel: paste YouTube Data API v3 key, Test endpoint that does a tiny `videos.list` to confirm.
+- [ ] Frontend: each release card with a YouTube match shows a `▶ YouTube` button that **expands inline** to an embedded iframe player. Releases without a match show `🔍 Search YouTube` (external link via `bridge.openExternal` to a search URL).
+- [ ] Quota awareness — surface a clear error when the API returns `quotaExceeded`. Cache aggressively (uploads list per artist, refresh on demand only).
+
+#### Explicitly NOT in this iteration
+- **MusicBrainz** — still on the plan (free, no auth) but less DJ-focused than Discogs. Adds complexity without solving the user's stated problem. Future iteration.
+- **Cross-source release dedupe** (`ReleaseNormalizer`) — same release showing as both `S` + `D`. Rare in practice for old underground catalogues; v1 just shows both and lets user dismiss. Future polish.
+- **Beatport** — gated developer portal, no movement. Still indefinitely deferred.
+- **Auto-match across all sources** — manual per-source match is fine v1 (and respects quota for YouTube's costly `search.list`).
 
 ### Phase 8c — Taste-aware filtering
 
