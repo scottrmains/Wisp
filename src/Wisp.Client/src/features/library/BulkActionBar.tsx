@@ -4,13 +4,14 @@ interface Props {
   onAddToMix: () => void
   onArchive: () => void
   onTag: () => void
+  onAddToPlaylist: () => void
   onClear: () => void
 }
 
 /// Renders above the library table whenever multi-selection is active.
 /// Hidden when only a single row is selected — single-row actions live in the
 /// inspector + the right-click menu.
-export function BulkActionBar({ count, hasActivePlan, onAddToMix, onArchive, onTag, onClear }: Props) {
+export function BulkActionBar({ count, hasActivePlan, onAddToMix, onArchive, onTag, onAddToPlaylist, onClear }: Props) {
   return (
     <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/10 px-4 py-1.5 text-sm">
       <span className="font-medium tabular-nums text-white">
@@ -29,6 +30,9 @@ export function BulkActionBar({ count, hasActivePlan, onAddToMix, onArchive, onT
       </BarButton>
       <BarButton onClick={onTag} title="Apply a tag to every selected track">
         🏷 Tag…
+      </BarButton>
+      <BarButton onClick={onAddToPlaylist} title="Add the selection to a playlist (or create a new one)">
+        🎶 Add to playlist…
       </BarButton>
       <button
         onClick={onClear}

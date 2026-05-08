@@ -107,8 +107,35 @@ export interface TrackQuery {
   archivedOnly?: boolean
   /// Repeat per tag for AND-intersection.
   tag?: string[]
+  /// Restrict to tracks that are members of the given playlist.
+  playlistId?: string
   page?: number
   size?: number
+}
+
+export interface PlaylistSummary {
+  id: string
+  name: string
+  notes: string | null
+  trackCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PlaylistTrack {
+  id: string
+  trackId: string
+  addedAt: string
+  track: Track
+}
+
+export interface Playlist {
+  id: string
+  name: string
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  tracks: PlaylistTrack[]
 }
 
 export type RecommendationMode =

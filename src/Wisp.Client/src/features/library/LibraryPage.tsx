@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
+import { playlists as playlistsApi } from '../../api/playlists'
 import type { Track, TrackQuery } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useActivePlan } from '../../state/activePlan'
+import { useActivePlaylist } from '../../state/activePlaylist'
 import { useCurrentPage } from '../../state/currentPage'
 import { usePlayer } from '../../state/player'
 import type { InspectorTab } from '../../state/uiPrefs'
@@ -12,6 +14,7 @@ import { CleanupModal } from '../cleanup/CleanupModal'
 import { UndoToast } from '../cleanup/UndoToast'
 import { TrackInspector } from '../inspector/TrackInspector'
 import { useMixPlan } from '../mixchain/useMixPlans'
+import { AddToPlaylistDialog } from './AddToPlaylistDialog'
 import { BulkActionBar } from './BulkActionBar'
 import { BulkTagDialog } from './BulkTagDialog'
 import { LibraryFilters } from './LibraryFilters'
@@ -34,10 +37,20 @@ export function LibraryPage() {
   const [archiveTarget, setArchiveTarget] = useState<Track | null>(null)
   const [bulkArchiveIds, setBulkArchiveIds] = useState<string[] | null>(null)
   const [bulkTagIds, setBulkTagIds] = useState<string[] | null>(null)
+  const [addToPlaylistIds, setAddToPlaylistIds] = useState<string[] | null>(null)
   const [contextMenu, setContextMenu] = useState<{ track: Track; x: number; y: number } | null>(null)
 
   const qc = useQueryClient()
   const setPage = useCurrentPage((s) => s.setPage)
+  const activePlaylistId = useActivePlaylist((s) => s.activePlaylistId)
+  const setActivePlaylistId = useActivePlaylist((s) => s.setActivePlaylistId)
+  // Playlist metadata (for the scope banner). Cheap — already cached by the sidebar.
+  const playlistList = useQuery({
+    queryKey: ['playlists'],
+    queryFn: () => playlistsApi.list(),
+    staleTime: 30_000,
+  })
+  const activePlaylist = playlistList.data?.find((p) => p.id === activePlaylistId) ?? null
   const restore = useMutation({
     mutationFn: (id: string) => tracks.restore(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tracks'] }),
@@ -57,9 +70,16 @@ export function LibraryPage() {
     activePlan.addTrack.mutate({ trackId })
   }
 
+  // Apply the active playlist scope to the query before sending. We don't bake
+  // it into `query` state because the scope is owned by the sidebar (Zustand) —
+  // the local `query` object should only carry library-page-owned filters.
+  const effectiveQuery: TrackQuery = activePlaylistId
+    ? { ...query, playlistId: activePlaylistId }
+    : query
+
   const tracksQuery = useQuery({
-    queryKey: ['tracks', query],
-    queryFn: () => tracks.list(query),
+    queryKey: ['tracks', effectiveQuery],
+    queryFn: () => tracks.list(effectiveQuery),
   })
   const total = tracksQuery.data?.total ?? 0
   const items = tracksQuery.data?.items ?? []
@@ -164,6 +184,11 @@ export function LibraryPage() {
         },
       },
       {
+        id: 'playlist', icon: '🎶',
+        label: isMulti ? `Add ${opIds.length} to playlist…` : 'Add to playlist…',
+        onSelect: () => setAddToPlaylistIds(opIds),
+      },
+      {
         id: 'notes', icon: '📝', label: 'Notes',
         disabled: isMulti, disabledReason: 'Single track only',
         onSelect: () => {
@@ -216,6 +241,7 @@ export function LibraryPage() {
   }
   const bulkArchive = () => setBulkArchiveIds(Array.from(selectedIds))
   const bulkTag = () => setBulkTagIds(Array.from(selectedIds))
+  const bulkAddToPlaylist = () => setAddToPlaylistIds(Array.from(selectedIds))
 
   // Keyboard shortcuts. Skipped while typing in inputs / textareas.
   useEffect(() => {
@@ -302,6 +328,22 @@ export function LibraryPage() {
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {activePlaylist && (
+          <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 px-4 py-2 text-xs">
+            <span className="text-[var(--color-muted)]">Scoped to playlist:</span>
+            <span className="font-medium text-white">{activePlaylist.name}</span>
+            <span className="text-[var(--color-muted)] tabular-nums">
+              ({activePlaylist.trackCount} {activePlaylist.trackCount === 1 ? 'track' : 'tracks'})
+            </span>
+            <button
+              onClick={() => setActivePlaylistId(null)}
+              className="ml-auto rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] hover:text-white"
+              title="Clear playlist scope"
+            >
+              ✕ clear scope
+            </button>
+          </div>
+        )}
         <LibraryFilters query={query} onChange={setQuery} total={total} />
         {selectedIds.size > 1 && (
           <BulkActionBar
@@ -310,6 +352,7 @@ export function LibraryPage() {
             onAddToMix={bulkAddToMix}
             onArchive={bulkArchive}
             onTag={bulkTag}
+            onAddToPlaylist={bulkAddToPlaylist}
             onClear={clearSelection}
           />
         )}
@@ -383,6 +426,14 @@ export function LibraryPage() {
             clearSelection()
             setBulkTagIds(null)
           }}
+        />
+      )}
+
+      {addToPlaylistIds && (
+        <AddToPlaylistDialog
+          trackIds={addToPlaylistIds}
+          onClose={() => setAddToPlaylistIds(null)}
+          onAdded={() => clearSelection()}
         />
       )}
 

@@ -335,6 +335,8 @@ public static class LibraryEndpoints
         bool archivedOnly = false,
         // Tag filter — repeat ?tag=warm-up&tag=vocal for AND across multiple tags.
         string[]? tag = null,
+        // Playlist scope — restrict to tracks that belong to the given playlist.
+        Guid? playlistId = null,
         int page = 1,
         int size = 100,
         CancellationToken ct = default)
@@ -358,6 +360,14 @@ public static class LibraryEndpoints
                 var trimmed = name.Trim();
                 q = q.Where(t => db.TrackTags.Any(tt => tt.TrackId == t.Id && tt.Name == trimmed));
             }
+        }
+
+        // Playlist scope — restrict to tracks that are members of the given playlist.
+        // EXISTS subquery via the join table; composes cleanly with the other filters.
+        if (playlistId.HasValue && playlistId.Value != Guid.Empty)
+        {
+            var pid = playlistId.Value;
+            q = q.Where(t => db.PlaylistTracks.Any(pt => pt.PlaylistId == pid && pt.TrackId == t.Id));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
