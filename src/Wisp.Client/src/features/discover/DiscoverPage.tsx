@@ -1,18 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { artists } from '../../api/artists'
-import type { ArtistSummary, CatalogSource, ExternalRelease } from '../../api/types'
+import { discover } from '../../api/discover'
+import type {
+  ArtistSummary,
+  CatalogSource,
+  DiscoverArtistHit,
+  DiscoverQuotaInfo,
+  DiscoverVideoHit,
+  ExternalRelease,
+} from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
+import { useUiPrefs } from '../../state/uiPrefs'
 import { SoulseekPanel } from '../cratedigger/SoulseekPanel'
+import { useWantedTracks } from '../wanted/useWantedTracks'
 import { ArtistMatchModal } from './ArtistMatchModal'
 
-/// Discover is routed at the App level — no `fixed inset-0` overlay, no
-/// internal Esc handler. The shell owns the back-out path via the sidebar.
+/// Discover (Phase 22) — search-first UI. Replaces the long scroll list with
+/// a search bar + two scopes:
+///   - **My artists**: client-side filter over the existing library artist
+///     list. Same per-artist detail flow (match / refresh / releases).
+///   - **Anywhere**: Spotify (artists) + YouTube (videos), default-on, with
+///     a YouTube quota meter so the user sees what they're spending.
 ///
-/// Phase 22a only renames Rediscover → Discover. The search-driven UI
-/// (library artist search + Anywhere search via Spotify/YouTube + per-result
-/// Watch / Soulseek / Want / Follow) lands in 22b–f.
+/// Per-result Watch / Soulseek / Want lives on the result cards. Spotify
+/// artist cards offer Follow → creates an ArtistProfile so the artist
+/// enters the My-artists list with the existing refresh flow (Phase 8a).
 export function DiscoverPage() {
+  const [query, setQuery] = useState('')
+  const [mode, setMode] = useState<'my' | 'anywhere'>('my')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [matchTarget, setMatchTarget] = useState<{ artist: ArtistSummary; source: CatalogSource } | null>(null)
 
@@ -21,35 +37,65 @@ export function DiscoverPage() {
     queryFn: () => artists.list(),
   })
 
-  const selected = list.data?.find((a) => a.id === selectedId) ?? null
+  // My-artists filter: case-insensitive substring on name. ~1000 artists is
+  // fine to filter client-side; promote to backend `?q=` if it ever bites.
+  const filteredArtists = useMemo(() => {
+    const all = list.data ?? []
+    if (mode !== 'my' || !query.trim()) return all
+    const needle = query.trim().toLowerCase()
+    return all.filter((a) => a.name.toLowerCase().includes(needle))
+  }, [list.data, query, mode])
+
+  const selected = filteredArtists.find((a) => a.id === selectedId) ?? null
+
+  // Switching the selected artist as the user types keeps the detail panel
+  // showing something relevant. If the current selection drops out of the
+  // filtered list, clear it.
+  useEffect(() => {
+    if (selectedId && !filteredArtists.some((a) => a.id === selectedId)) {
+      setSelectedId(null)
+    }
+  }, [filteredArtists, selectedId])
+
+  const flipToAnywhere = () => setMode('anywhere')
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
-        <div>
+      <header className="border-b border-[var(--color-border)] px-6 py-3">
+        <div className="flex items-baseline gap-3">
           <h1 className="text-lg font-semibold tracking-tight">Discover</h1>
           <p className="text-xs text-[var(--color-muted)]">
-            See what your favourite artists released since you last checked. Match across Spotify, Discogs, and YouTube.
+            Search your library or anywhere. Watch on YouTube, find on Soulseek, mark Want.
           </p>
         </div>
+        <SearchBar query={query} setQuery={setQuery} mode={mode} setMode={setMode} />
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <ArtistList
-          artists={list.data ?? []}
-          loading={list.isLoading}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
-        <div className="min-h-0 flex-1 overflow-y-auto border-l border-[var(--color-border)]">
-          {selected ? (
-            <ArtistDetail artist={selected} onMatch={(source) => setMatchTarget({ artist: selected, source })} />
-          ) : (
-            <p className="p-8 text-sm text-[var(--color-muted)]">
-              Pick an artist on the left to see what they've released.
-            </p>
-          )}
-        </div>
+        {mode === 'my' ? (
+          <>
+            <ArtistList
+              artists={filteredArtists}
+              totalCount={list.data?.length ?? 0}
+              loading={list.isLoading}
+              query={query}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onSearchAnywhere={flipToAnywhere}
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto border-l border-[var(--color-border)]">
+              {selected ? (
+                <ArtistDetail artist={selected} onMatch={(source) => setMatchTarget({ artist: selected, source })} />
+              ) : (
+                <p className="p-8 text-sm text-[var(--color-muted)]">
+                  {query ? 'Pick an artist on the left to see what they\'ve released.' : 'Search above or pick an artist on the left.'}
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+          <AnywhereView query={query} />
+        )}
       </div>
 
       {matchTarget && (
@@ -64,16 +110,75 @@ export function DiscoverPage() {
   )
 }
 
+function SearchBar({
+  query,
+  setQuery,
+  mode,
+  setMode,
+}: {
+  query: string
+  setQuery: (q: string) => void
+  mode: 'my' | 'anywhere'
+  setMode: (m: 'my' | 'anywhere') => void
+}) {
+  return (
+    <div className="mt-3 flex items-center gap-3">
+      <div className="relative min-w-0 flex-1">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]">
+          🔍
+        </span>
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={mode === 'my' ? 'Filter your library artists…' : 'Search Spotify + YouTube…'}
+          className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] py-2 pl-9 pr-3 text-sm focus:border-[var(--color-accent)] focus:outline-none"
+        />
+      </div>
+      <div className="flex shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-0.5 text-xs">
+        <button
+          onClick={() => setMode('my')}
+          className={[
+            'rounded px-3 py-1.5 transition-colors',
+            mode === 'my'
+              ? 'bg-[var(--color-accent)] text-white'
+              : 'text-[var(--color-muted)] hover:text-white',
+          ].join(' ')}
+        >
+          My artists
+        </button>
+        <button
+          onClick={() => setMode('anywhere')}
+          className={[
+            'rounded px-3 py-1.5 transition-colors',
+            mode === 'anywhere'
+              ? 'bg-[var(--color-accent)] text-white'
+              : 'text-[var(--color-muted)] hover:text-white',
+          ].join(' ')}
+        >
+          Anywhere
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function ArtistList({
   artists: list,
+  totalCount,
   loading,
+  query,
   selectedId,
   onSelect,
+  onSearchAnywhere,
 }: {
   artists: ArtistSummary[]
+  totalCount: number
   loading: boolean
+  query: string
   selectedId: string | null
   onSelect: (id: string) => void
+  onSearchAnywhere: () => void
 }) {
   if (loading) {
     return (
@@ -82,12 +187,28 @@ function ArtistList({
       </aside>
     )
   }
-  if (list.length === 0) {
+  if (totalCount === 0) {
     return (
       <aside className="w-[24rem] shrink-0 overflow-y-auto">
         <div className="space-y-2 p-6 text-sm text-[var(--color-muted)]">
           <p className="font-medium text-white">No artists in your library yet.</p>
           <p>Scan a folder first — Discover pulls from whatever artists are in your tagged tracks.</p>
+        </div>
+      </aside>
+    )
+  }
+  // Filtered to nothing — leave the user a clear next step (flip to Anywhere).
+  if (list.length === 0 && query.trim()) {
+    return (
+      <aside className="w-[24rem] shrink-0 overflow-y-auto">
+        <div className="space-y-3 p-6 text-sm text-[var(--color-muted)]">
+          <p className="font-medium text-white">No matches for "{query}" in your library.</p>
+          <button
+            onClick={onSearchAnywhere}
+            className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
+          >
+            Search anywhere instead →
+          </button>
         </div>
       </aside>
     )
@@ -142,6 +263,358 @@ function ArtistList({
       </ul>
     </aside>
   )
+}
+
+/// "Anywhere" search results — Spotify artists + YouTube videos, fetched
+/// in parallel by the backend. Source toggles + quota meter live in the
+/// header strip.
+function AnywhereView({ query }: { query: string }) {
+  const spotifyEnabled = useUiPrefs((s) => s.discoverSpotifyEnabled)
+  const youtubeEnabled = useUiPrefs((s) => s.discoverYouTubeEnabled)
+  const toggleSource = useUiPrefs((s) => s.toggleDiscoverSource)
+
+  const sources = useMemo(() => {
+    const parts: string[] = []
+    if (spotifyEnabled) parts.push('spotify')
+    if (youtubeEnabled) parts.push('youtube')
+    return parts.join(',')
+  }, [spotifyEnabled, youtubeEnabled])
+
+  // Debounced query — typing one character per ~30ms shouldn't fire the
+  // network call until the user pauses. 350ms is the standard "feels
+  // responsive but not chatty" window.
+  const [debounced, setDebounced] = useState(query)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 350)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const enabled = debounced.trim().length >= 2 && sources.length > 0
+  const search = useQuery({
+    queryKey: ['discover-search', debounced.trim(), sources],
+    queryFn: () => discover.search(debounced.trim(), sources),
+    enabled,
+    staleTime: 60_000,
+  })
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] px-6 py-2 text-xs">
+        <SourceToggle
+          label="🟢 Spotify"
+          enabled={spotifyEnabled}
+          onToggle={() => toggleSource('spotify')}
+        />
+        <SourceToggle
+          label="🎬 YouTube"
+          enabled={youtubeEnabled}
+          onToggle={() => toggleSource('youtube')}
+        />
+        {search.data?.youTubeQuota && (
+          <QuotaMeter info={search.data.youTubeQuota} />
+        )}
+        {!enabled && debounced.trim().length < 2 && (
+          <span className="ml-auto text-[var(--color-muted)]">
+            Type at least 2 characters to search
+          </span>
+        )}
+        {!enabled && sources.length === 0 && (
+          <span className="ml-auto text-amber-300/80">
+            Enable a source to search
+          </span>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        {search.isLoading && enabled && (
+          <p className="text-sm text-[var(--color-muted)]">Searching…</p>
+        )}
+        {search.error && (
+          <p className="text-sm text-red-400">{(search.error as Error).message}</p>
+        )}
+        {search.data && (
+          <SearchResultsBlocks data={search.data} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SourceToggle({
+  label,
+  enabled,
+  onToggle,
+}: {
+  label: string
+  enabled: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={[
+        'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+        enabled
+          ? 'border-[var(--color-accent)]/50 bg-[var(--color-accent)]/15 text-white'
+          : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-white',
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  )
+}
+
+function QuotaMeter({ info }: { info: DiscoverQuotaInfo }) {
+  const remaining = info.dailyBudget - info.searchesToday
+  const lowSoftCap = info.dailyBudget * 0.2 // 20% — start warning
+  const tone = info.exhausted
+    ? 'text-red-400'
+    : remaining <= lowSoftCap
+      ? 'text-amber-300'
+      : 'text-[var(--color-muted)]'
+  const reset = new Date(info.resetUtc)
+  return (
+    <span
+      className={`ml-auto ${tone}`}
+      title={`YouTube search.list quota. Resets ${reset.toLocaleString()}`}
+    >
+      🎬 {info.exhausted ? 'YouTube quota exhausted' : `${remaining}/${info.dailyBudget} searches left today`}
+    </span>
+  )
+}
+
+function SearchResultsBlocks({ data }: { data: import('../../api/types').DiscoverSearchResponse }) {
+  const hasArtists = data.artists.length > 0
+  const hasVideos = data.videos.length > 0
+
+  if (!hasArtists && !hasVideos && data.errors.length === 0) {
+    return <p className="text-sm text-[var(--color-muted)]">No results.</p>
+  }
+
+  return (
+    <div className="space-y-6">
+      {data.errors.includes('spotify_unconfigured') && (
+        <ErrorBanner>Spotify isn't configured. Add credentials in Settings to enable artist search.</ErrorBanner>
+      )}
+      {data.errors.includes('youtube_unconfigured') && (
+        <ErrorBanner>YouTube isn't configured. Add an API key in Settings to enable video search.</ErrorBanner>
+      )}
+      {data.errors.includes('spotify_failed') && (
+        <ErrorBanner>Spotify search failed. Try again or check your credentials.</ErrorBanner>
+      )}
+      {data.errors.includes('youtube_failed') && (
+        <ErrorBanner>YouTube search failed. Try again or check your credentials.</ErrorBanner>
+      )}
+      {data.errors.includes('youtube_quota_exhausted') && (
+        <ErrorBanner tone="warn">
+          YouTube quota exhausted for today. Spotify search continues; video results return after midnight UTC.
+        </ErrorBanner>
+      )}
+
+      {hasArtists && (
+        <section>
+          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+            Artists · Spotify
+          </h2>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {data.artists.map((a) => (
+              <ArtistResultCard key={a.externalId} hit={a} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {hasVideos && (
+        <section>
+          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+            Videos · YouTube
+          </h2>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {data.videos.map((v) => (
+              <VideoResultCard key={v.videoId} hit={v} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function ErrorBanner({ children, tone = 'error' }: { children: React.ReactNode; tone?: 'error' | 'warn' }) {
+  const cls = tone === 'error'
+    ? 'border-red-500/30 bg-red-500/10 text-red-200'
+    : 'border-amber-400/30 bg-amber-400/10 text-amber-200'
+  return (
+    <div className={`rounded-md border px-3 py-2 text-xs ${cls}`}>{children}</div>
+  )
+}
+
+/// One Spotify artist hit — image + name + follower count + genres + Follow.
+/// Wired in 22d (Follow creates an ArtistProfile + matches it). For now the
+/// button is a placeholder so the layout is locked.
+function ArtistResultCard({ hit }: { hit: DiscoverArtistHit }) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+      {hit.imageUrl ? (
+        <img src={hit.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />
+      ) : (
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg)] text-lg text-[var(--color-muted)]">
+          {hit.name[0]?.toUpperCase()}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{hit.name}</p>
+        <p className="truncate text-[11px] text-[var(--color-muted)]">
+          {hit.followers !== null && `${hit.followers.toLocaleString()} followers`}
+          {hit.genres.length > 0 && ` · ${hit.genres.slice(0, 3).join(', ')}`}
+        </p>
+      </div>
+      <FollowButton hit={hit} />
+    </div>
+  )
+}
+
+/// Stub Follow button — the real thing (creates ArtistProfile + matches +
+/// triggers an initial RefreshAsync) lands in 22d.
+function FollowButton({ hit: _hit }: { hit: DiscoverArtistHit }) {
+  return (
+    <button
+      disabled
+      title="Follow lands in Phase 22d"
+      className="shrink-0 rounded-md border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] disabled:cursor-not-allowed"
+    >
+      + Follow
+    </button>
+  )
+}
+
+/// One YouTube video hit. Inline iframe expands on Watch; Soulseek expands
+/// inline; Want POSTs a WantedTrack via the existing useWantedTracks hook.
+function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
+  const [expandWatch, setExpandWatch] = useState(false)
+  const [expandSlskd, setExpandSlskd] = useState(false)
+  const wanted = useWantedTracks()
+
+  // Crudely split the YouTube title into artist/title for the Want payload
+  // and Soulseek search. Title parsing belongs in a real parser (see the
+  // YouTubeTitleParser server-side); for now an em-dash / dash split gets
+  // us 80% of cases. The Want row's freeform Notes can hold the original.
+  const { artist, title } = parseYouTubeTitle(hit.title, hit.channelTitle)
+
+  const onWant = () => {
+    wanted.create.mutate({
+      source: 'Discover',
+      artist,
+      title,
+      sourceVideoId: hit.videoId,
+      sourceUrl: hit.url,
+      thumbnailUrl: hit.thumbnailUrl ?? undefined,
+    })
+  }
+
+  // Reflect whether the same artist+title is already on the wishlist so the
+  // button stops being clickable after the first add. The check is local
+  // (just iterates the cached items) — cheap.
+  const alreadyWanted = wanted.items.some(
+    (w) => w.artist.toLowerCase() === artist.toLowerCase() && w.title.toLowerCase() === title.toLowerCase(),
+  )
+
+  return (
+    <div className="flex flex-col rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex gap-3 p-3">
+        {hit.thumbnailUrl ? (
+          <img src={hit.thumbnailUrl} alt="" className="h-16 w-24 shrink-0 rounded object-cover" />
+        ) : (
+          <div className="h-16 w-24 shrink-0 rounded bg-[var(--color-bg)]" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-sm font-medium" title={hit.title}>{hit.title}</p>
+          <p className="mt-0.5 truncate text-[11px] text-[var(--color-muted)]" title={hit.channelTitle}>
+            {hit.channelTitle}
+            {hit.publishedAt && ` · ${new Date(hit.publishedAt).toLocaleDateString()}`}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1 border-t border-[var(--color-border)]/40 px-3 py-2">
+        <button
+          onClick={() => setExpandWatch((e) => !e)}
+          className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
+          title="Watch on YouTube (embedded)"
+        >
+          {expandWatch ? '▾ Watch' : '▶ Watch'}
+        </button>
+        <button
+          onClick={() => setExpandSlskd((e) => !e)}
+          className="rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+          title="Search Soulseek for this track"
+        >
+          {expandSlskd ? '▾ Soulseek' : '🎼 Soulseek'}
+        </button>
+        <button
+          onClick={onWant}
+          disabled={alreadyWanted || wanted.create.isPending}
+          className={[
+            'rounded border px-2 py-1 text-xs',
+            alreadyWanted
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 cursor-default'
+              : 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10',
+          ].join(' ')}
+          title={alreadyWanted ? 'Already on your Wanted list' : 'Add to Wanted'}
+        >
+          {alreadyWanted ? '✓ Wanted' : '❤ Want'}
+        </button>
+        {bridgeAvailable() && (
+          <button
+            onClick={() => bridge.openExternal(hit.url)}
+            className="ml-auto rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
+            title="Open on YouTube"
+          >
+            ↗
+          </button>
+        )}
+      </div>
+      {expandWatch && (
+        <div className="border-t border-[var(--color-border)] p-3">
+          <div className="aspect-video w-full overflow-hidden rounded bg-black">
+            <iframe
+              src={`https://www.youtube.com/embed/${hit.videoId}`}
+              title={hit.title}
+              className="h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
+      {expandSlskd && (
+        <div className="border-t border-[var(--color-border)] px-3 pb-3">
+          <SoulseekPanel artist={artist} title={title} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function parseYouTubeTitle(rawTitle: string, channelTitle: string): { artist: string; title: string } {
+  // Quick heuristic — split on en-dash, em-dash, or first hyphen surrounded
+  // by spaces. If the channel looks like an artist's Topic channel, prefer
+  // that as the artist and use the full title as the track name.
+  const topicMatch = channelTitle.match(/^(.+?)\s*-\s*Topic$/)
+  if (topicMatch) return { artist: topicMatch[1], title: stripBrackets(rawTitle) }
+
+  const sepIdx = rawTitle.search(/\s[-–—]\s/)
+  if (sepIdx > 0) {
+    return {
+      artist: rawTitle.slice(0, sepIdx).trim(),
+      title: stripBrackets(rawTitle.slice(sepIdx + 3).trim()),
+    }
+  }
+  // Fallback: channel = artist, title = video title.
+  return { artist: channelTitle, title: stripBrackets(rawTitle) }
+}
+
+function stripBrackets(s: string): string {
+  return s.replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s+/g, ' ').trim()
 }
 
 function SourceChip({

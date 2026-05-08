@@ -29,6 +29,18 @@ public sealed record YouTubePlaylistInfo(
     string? Description,
     string? ChannelTitle);
 
+/// One result row from `search.list?type=video`. Discover's "Anywhere" tab
+/// shows a card per hit. PublishedAt drives the secondary "x months ago"
+/// label; ThumbnailUrl drives the artwork.
+public sealed record YouTubeVideoHit(
+    string VideoId,
+    string Title,
+    string ChannelTitle,
+    string Url,
+    string? ThumbnailUrl,
+    DateTimeOffset? PublishedAt,
+    string? Description);
+
 public sealed class YouTubeCatalogClient(
     IHttpClientFactory httpFactory,
     YouTubeOptions options,
@@ -91,6 +103,40 @@ public sealed class YouTubeCatalogClient(
                 Followers: null,
                 Genres: [],
                 ImageUrl: i.Snippet?.Thumbnails?.Default?.Url ?? i.Snippet?.Thumbnails?.Medium?.Url))
+            .ToArray();
+    }
+
+    /// Free-text video search used by Discover ("Anywhere" mode). 100 quota
+    /// units per call — same shape as SearchTopicChannelsAsync, just with
+    /// `type=video`. Caller (DiscoverEndpoints + YouTubeQuotaTracker) is
+    /// responsible for caching + budgeting; this method just talks to the
+    /// API and shapes the result.
+    public async Task<IReadOnlyList<YouTubeVideoHit>> SearchVideosAsync(
+        string query, int limit, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+        var url = $"{ApiBase}/search?part=snippet&type=video&maxResults={Math.Clamp(limit, 1, 25)}" +
+                  $"&q={Uri.EscapeDataString(query)}&key={Uri.EscapeDataString(options.ApiKey!)}";
+
+        using var resp = await http.GetAsync(url, ct);
+        await ThrowOnQuota(resp, ct);
+        resp.EnsureSuccessStatusCode();
+
+        var body = await resp.Content.ReadFromJsonAsync<YouTubeSearchResponse>(ct);
+        var items = body?.Items ?? [];
+
+        return items
+            .Where(i => !string.IsNullOrEmpty(i.Id?.VideoId))
+            .Select(i => new YouTubeVideoHit(
+                VideoId: i.Id!.VideoId!,
+                Title: i.Snippet?.Title ?? "(untitled)",
+                ChannelTitle: i.Snippet?.ChannelTitle ?? "(unknown channel)",
+                Url: $"https://www.youtube.com/watch?v={i.Id.VideoId}",
+                ThumbnailUrl: i.Snippet?.Thumbnails?.Medium?.Url ?? i.Snippet?.Thumbnails?.Default?.Url,
+                PublishedAt: i.Snippet?.PublishedAt,
+                Description: i.Snippet?.Description))
             .ToArray();
     }
 
@@ -313,7 +359,8 @@ public sealed class YouTubeCatalogClient(
 
     private sealed record YouTubeSearchItemId(
         [property: JsonPropertyName("kind")] string? Kind,
-        [property: JsonPropertyName("channelId")] string? ChannelId);
+        [property: JsonPropertyName("channelId")] string? ChannelId,
+        [property: JsonPropertyName("videoId")] string? VideoId);
 
     private sealed record YouTubeSnippet(
         [property: JsonPropertyName("title")] string? Title,

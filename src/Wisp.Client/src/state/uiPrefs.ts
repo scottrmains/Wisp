@@ -22,6 +22,13 @@ interface UiPrefsState {
   /// Whether the App-level sidebar is collapsed to icons-only.
   sidebarCollapsed: boolean
   toggleSidebarCollapsed: () => void
+
+  /// Discover "Anywhere" search source toggles. Persisted so power users
+  /// who want Spotify-only (saves YouTube quota) keep that pref across
+  /// sessions.
+  discoverSpotifyEnabled: boolean
+  discoverYouTubeEnabled: boolean
+  toggleDiscoverSource: (source: 'spotify' | 'youtube') => void
 }
 
 const MIN_WIDTH = 280
@@ -46,6 +53,17 @@ export const useUiPrefs = create<UiPrefsState>()(
       sidebarCollapsed: false,
       toggleSidebarCollapsed: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+
+      // YouTube default-on per Phase 22 decision; quota meter signals when
+      // it's running low so the user knows whether to flip it off.
+      discoverSpotifyEnabled: true,
+      discoverYouTubeEnabled: true,
+      toggleDiscoverSource: (source) =>
+        set((s) =>
+          source === 'spotify'
+            ? { discoverSpotifyEnabled: !s.discoverSpotifyEnabled }
+            : { discoverYouTubeEnabled: !s.discoverYouTubeEnabled },
+        ),
     }),
     {
       name: 'wisp.uiPrefs',

@@ -4,6 +4,7 @@ using Serilog;
 using Wisp.Api.ArtistRefresh;
 using Wisp.Api.Cleanup;
 using Wisp.Api.Cues;
+using Wisp.Api.Discover;
 using Wisp.Api.Discovery;
 using Wisp.Api.Feedback;
 using Wisp.Api.Library;
@@ -160,6 +161,7 @@ public class Program
             app.MapTags();
             app.MapPlaylists();
             app.MapWanted();
+            app.MapDiscover();
 
             // Helper: apply credentials after every save/delete so the catalog clients pick up changes.
             void ReapplyCatalog() => ApplyCatalogCredentials(

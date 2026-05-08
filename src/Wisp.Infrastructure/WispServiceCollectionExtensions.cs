@@ -51,6 +51,7 @@ public static class WispServiceCollectionExtensions
         services.AddSingleton<SpotifyCatalogClient>();
         services.AddSingleton<DiscogsCatalogClient>();
         services.AddSingleton<YouTubeCatalogClient>();
+        services.AddSingleton<YouTubeQuotaTracker>();
         services.AddSingleton<SoulseekClient>();
 
         services.AddScoped<ArtistRefreshService>();

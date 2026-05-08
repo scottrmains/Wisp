@@ -432,6 +432,40 @@ export interface SoulseekTransfer {
   endedAt: string | null
 }
 
+export interface DiscoverArtistHit {
+  source: 'Spotify'
+  externalId: string
+  name: string
+  followers: number | null
+  genres: string[]
+  imageUrl: string | null
+}
+
+export interface DiscoverVideoHit {
+  source: 'YouTube'
+  videoId: string
+  title: string
+  channelTitle: string
+  url: string
+  thumbnailUrl: string | null
+  publishedAt: string | null
+}
+
+export interface DiscoverQuotaInfo {
+  searchesToday: number
+  dailyBudget: number
+  resetUtc: string
+  exhausted: boolean
+}
+
+export interface DiscoverSearchResponse {
+  query: string
+  artists: DiscoverArtistHit[]
+  videos: DiscoverVideoHit[]
+  youTubeQuota: DiscoverQuotaInfo | null
+  errors: string[]
+}
+
 export type WantedSource = 'Discover' | 'CrateDigger' | 'Manual'
 
 export interface WantedTrack {
