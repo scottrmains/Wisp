@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { playlists } from '../../api/playlists'
 import { useActivePlaylist } from '../../state/activePlaylist'
 import { useCurrentPage, type AppPage } from '../../state/currentPage'
 import { useUiPrefs } from '../../state/uiPrefs'
+import { CreatePlaylistDialog } from '../library/CreatePlaylistDialog'
 
 interface SectionDef {
   id: AppPage
@@ -18,9 +19,14 @@ const SECTIONS: SectionDef[] = [
   { id: 'crate-digger', label: 'Crate Digger', icon: '⛏' },
 ]
 
+const WISP_DRAG_TYPE = 'application/x-wisp-track-ids'
+
 /// Left-rail navigation. Owns the cross-page section switcher AND (since 21b) the
 /// Playlists tree. Clicking a playlist scopes the Library view to it via
 /// `useActivePlaylist`. Right-click a playlist to rename / delete.
+///
+/// Drag-and-drop (this commit): library rows can be dragged onto a playlist
+/// entry to bulk-add via the existing /tracks/bulk endpoint.
 export function AppSidebar() {
   const page = useCurrentPage((s) => s.page)
   const setPage = useCurrentPage((s) => s.setPage)
@@ -30,21 +36,12 @@ export function AppSidebar() {
   const setActivePlaylistId = useActivePlaylist((s) => s.setActivePlaylistId)
   const qc = useQueryClient()
   const [contextMenu, setContextMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const playlistList = useQuery({
     queryKey: ['playlists'],
     queryFn: () => playlists.list(),
     staleTime: 30_000,
-  })
-
-  const create = useMutation({
-    mutationFn: (name: string) => playlists.create(name),
-    onSuccess: (created) => {
-      qc.invalidateQueries({ queryKey: ['playlists'] })
-      // Auto-select the new playlist + jump to library so the user can start adding to it.
-      setActivePlaylistId(created.id)
-      setPage('library')
-    },
   })
 
   const rename = useMutation({
@@ -61,13 +58,9 @@ export function AppSidebar() {
     },
   })
 
-  const handleCreate = () => {
-    const name = window.prompt('Playlist name')
-    if (!name?.trim()) return
-    create.mutate(name.trim())
-  }
-
   const handleRename = (id: string, currentName: string) => {
+    // Inline prompt is fine for rename — small, well-known target. If this becomes
+    // a workflow tax we'll promote it to the same modal pattern as Create.
     const name = window.prompt('Rename playlist', currentName)
     if (!name?.trim() || name.trim() === currentName) return
     rename.mutate({ id, name: name.trim() })
@@ -111,24 +104,18 @@ export function AppSidebar() {
             icon={s.icon}
             label={s.label}
             onClick={() => {
-              // Clicking a section button always clears the playlist scope so the section
-              // shows its full content. Otherwise switching from a scoped Library to
-              // Mix Plans and back would silently keep the scope.
               if (s.id === 'library') setActivePlaylistId(null)
               setPage(s.id)
             }}
           />
         ))}
 
-        {/* Playlists section — only shown when the sidebar is expanded.
-            Collapsed sidebar would crowd; users can still create/manage from the
-            expanded view and the scope stays applied even after collapsing. */}
         {!collapsed && (
           <>
             <div className="mt-3 flex items-center justify-between px-2 pt-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
               <span>Playlists</span>
               <button
-                onClick={handleCreate}
+                onClick={() => setCreateOpen(true)}
                 className="text-base leading-none text-[var(--color-muted)] hover:text-white"
                 title="New playlist"
                 aria-label="New playlist"
@@ -142,42 +129,25 @@ export function AppSidebar() {
               )}
               {playlistList.data && playlistList.data.length === 0 && (
                 <li className="px-2 py-1 text-[11px] text-[var(--color-muted)]">
-                  No playlists yet — click + to create one.
+                  No playlists yet — click + or drag tracks here.
                 </li>
               )}
-              {(playlistList.data ?? []).map((p) => {
-                const active = page === 'library' && activePlaylistId === p.id
-                return (
-                  <li key={p.id}>
-                    <button
-                      onClick={() => onPlaylistClick(p.id)}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        setContextMenu({ id: p.id, name: p.name, x: e.clientX, y: e.clientY })
-                      }}
-                      className={[
-                        'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors',
-                        active
-                          ? 'bg-[var(--color-accent)]/20 text-white'
-                          : 'text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
-                      ].join(' ')}
-                      title={`Scope library to "${p.name}"`}
-                    >
-                      <span className="truncate">{p.name}</span>
-                      <span className="shrink-0 text-[10px] tabular-nums text-[var(--color-muted)]">
-                        {p.trackCount}
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
+              {(playlistList.data ?? []).map((p) => (
+                <PlaylistRow
+                  key={p.id}
+                  id={p.id}
+                  name={p.name}
+                  trackCount={p.trackCount}
+                  active={page === 'library' && activePlaylistId === p.id}
+                  onClick={() => onPlaylistClick(p.id)}
+                  onContextMenu={(x, y) => setContextMenu({ id: p.id, name: p.name, x, y })}
+                />
+              ))}
             </ul>
           </>
         )}
       </nav>
 
-      {/* Tiny inline "right-click menu" — purposely minimal (rename / delete only)
-          to avoid pulling in the heavier RowContextMenu pattern for two actions. */}
       {contextMenu && (
         <PlaylistContextMenu
           x={contextMenu.x}
@@ -191,6 +161,18 @@ export function AppSidebar() {
             setContextMenu(null)
           }}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {createOpen && (
+        <CreatePlaylistDialog
+          onClose={() => setCreateOpen(false)}
+          onCreated={(created) => {
+            // Auto-select the new playlist + jump to library so the user can start
+            // adding to it (or drag tracks straight onto it).
+            setActivePlaylistId(created.id)
+            setPage('library')
+          }}
         />
       )}
     </aside>
@@ -228,6 +210,98 @@ function SidebarButton({
   )
 }
 
+/// Single playlist entry. Drop target for `application/x-wisp-track-ids` payloads
+/// from the library table — bulk-adds the dragged selection. Visual feedback while
+/// dragging over (accent border) and a brief "+N" badge after a successful drop.
+function PlaylistRow({
+  id,
+  name,
+  trackCount,
+  active,
+  onClick,
+  onContextMenu,
+}: {
+  id: string
+  name: string
+  trackCount: number
+  active: boolean
+  onClick: () => void
+  onContextMenu: (x: number, y: number) => void
+}) {
+  const qc = useQueryClient()
+  const [isDropTarget, setIsDropTarget] = useState(false)
+  const [recentlyAdded, setRecentlyAdded] = useState<number | null>(null)
+
+  // Auto-clear the "+N" indicator after 2.5s.
+  useEffect(() => {
+    if (recentlyAdded === null) return
+    const t = setTimeout(() => setRecentlyAdded(null), 2_500)
+    return () => clearTimeout(t)
+  }, [recentlyAdded])
+
+  const isWispDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(WISP_DRAG_TYPE)
+
+  const onDragOver = (e: React.DragEvent) => {
+    if (!isWispDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    if (!isDropTarget) setIsDropTarget(true)
+  }
+  const onDragLeave = (e: React.DragEvent) => {
+    // Only clear when leaving the row entirely — child traversals fire dragleave too.
+    if (e.currentTarget === e.target) setIsDropTarget(false)
+  }
+  const onDrop = async (e: React.DragEvent) => {
+    if (!isWispDrag(e)) return
+    e.preventDefault()
+    setIsDropTarget(false)
+    try {
+      const ids = JSON.parse(e.dataTransfer.getData(WISP_DRAG_TYPE)) as string[]
+      const res = await playlists.addTracksBulk(id, ids)
+      // Bump the recently-added count for the indicator. If the user drops twice in
+      // quick succession, accumulate so they see the running total instead of a flicker.
+      setRecentlyAdded((prev) => (prev ?? 0) + res.added)
+      qc.invalidateQueries({ queryKey: ['playlists'] })
+      qc.invalidateQueries({ queryKey: ['tracks'] })
+    } catch (err) {
+      console.error('Drop on playlist failed', err)
+    }
+  }
+
+  return (
+    <li>
+      <button
+        onClick={onClick}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onContextMenu(e.clientX, e.clientY)
+        }}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        className={[
+          'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+          active
+            ? 'bg-[var(--color-accent)]/20 text-white'
+            : 'text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
+          isDropTarget ? 'ring-1 ring-inset ring-[var(--color-accent)]' : '',
+        ].join(' ')}
+        title={`Scope library to "${name}" — or drop tracks here to add them`}
+      >
+        <span className="truncate">{name}</span>
+        <span className="flex shrink-0 items-center gap-1">
+          {recentlyAdded !== null && recentlyAdded > 0 && (
+            <span className="rounded bg-emerald-500/30 px-1 text-[9px] font-semibold text-emerald-200">
+              +{recentlyAdded}
+            </span>
+          )}
+          <span className="text-[10px] tabular-nums text-[var(--color-muted)]">{trackCount}</span>
+        </span>
+      </button>
+    </li>
+  )
+}
+
 function PlaylistContextMenu({
   x,
   y,
@@ -241,8 +315,6 @@ function PlaylistContextMenu({
   onDelete: () => void
   onClose: () => void
 }) {
-  // Click-outside dismiss. Using window mousedown with capture so we beat any
-  // child handler.
   return (
     <>
       <div className="fixed inset-0 z-50" onMouseDown={onClose} />
