@@ -93,12 +93,17 @@ async function computeBandedPeaks(trackId: string): Promise<BandedPeaks> {
   const probe = new OfflineAudioContext({ numberOfChannels: 1, length: 1, sampleRate: 44100 })
   const audioBuffer = await probe.decodeAudioData(arrayBuffer.slice(0))
 
-  // Unfiltered envelope first — that's what we render. Cheap (no filter pass).
-  const full = downsample(audioBuffer)
-  // Three filtered renders against the same decoded buffer. Run sequentially —
-  // running them in parallel triples the memory footprint with no real gain on
-  // the user's typical machine. These now feed the structural detector only;
-  // the visual waveform comes from `full`.
+  // Unfiltered RMS envelope — that's what we render. RMS (not peak) is the
+  // key reason MiK's waveform reads with structure: peak-per-bucket pegs to
+  // near-max wherever any kick lands, washing out the dynamics. RMS averages
+  // the squared samples across the bucket window so quiet stretches (sparse
+  // beats, breakdowns) are visibly shorter than loud ones (full mix on the
+  // drop). Cheap — no filter pass.
+  const full = downsampleRMS(audioBuffer)
+  // Three filtered peak renders feed the structural-cue detector. Peak is
+  // the right metric there because we want to find transient *onsets*, not
+  // smoothed energy. Run sequentially — parallel triples the memory
+  // footprint with no real gain on the user's typical machine.
   const low = downsample(await renderBand(audioBuffer, 'lowpass', 250))
   const mid = downsample(await renderBand(audioBuffer, 'bandpass', 800))
   const high = downsample(await renderBand(audioBuffer, 'highpass', 2000))
@@ -157,6 +162,40 @@ export function detectFirstBeatFromPeaks(peaks: BandedPeaks, durationSeconds: nu
   return null
 }
 
+/// Downsample to per-bucket RMS amplitude. Used for the visual waveform —
+/// produces an "envelope" that follows song dynamics rather than every
+/// bucket pegging near max because it caught a single kick.
+function downsampleRMS(audioBuffer: AudioBuffer): Float32Array {
+  const channels = audioBuffer.numberOfChannels
+  const length = audioBuffer.length
+  const step = Math.max(1, Math.floor(length / TARGET_BUCKETS))
+  const peaks = new Float32Array(TARGET_BUCKETS)
+
+  const channelData: Float32Array[] = []
+  for (let c = 0; c < channels; c++) channelData.push(audioBuffer.getChannelData(c))
+
+  for (let i = 0; i < TARGET_BUCKETS; i++) {
+    const start = i * step
+    const end = Math.min(start + step, length)
+    let sumSquares = 0
+    let count = 0
+    for (let c = 0; c < channels; c++) {
+      const data = channelData[c]
+      for (let j = start; j < end; j++) {
+        const v = data[j]
+        sumSquares += v * v
+        count++
+      }
+    }
+    peaks[i] = count > 0 ? Math.sqrt(sumSquares / count) : 0
+  }
+
+  return peaks
+}
+
+/// Downsample to per-bucket peak amplitude. Used for analysis bands where
+/// transient onsets matter (low-band peak = kick onset = where structural
+/// boundaries land).
 function downsample(audioBuffer: AudioBuffer): Float32Array {
   const channels = audioBuffer.numberOfChannels
   const length = audioBuffer.length

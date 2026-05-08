@@ -486,13 +486,17 @@ function drawWaveformBars(
   const barWidth = cssWidth / buckets
   const drawW = Math.max(1, barWidth)
   const ampMax = arrayMax(peaks) || 1
-  const usableHeight = cssHeight - 4
+  // 80% of canvas height for bars leaves visible padding top + bottom — that
+  // space is what makes the dynamics "breathe". MiK's waveform sits inside
+  // ~80% of its strip; pegging to 100% washes out the energy variation
+  // because every loud bucket clips to the canvas edge.
+  const usableHeight = cssHeight * 0.8
 
   ctx.fillStyle = WAVEFORM_COLOR
   for (let i = 0; i < buckets; i++) {
     const amp = peaks[i] / ampMax
     if (amp <= 0) continue
-    const h = Math.max(1.5, amp * usableHeight)
+    const h = Math.max(1, amp * usableHeight)
     ctx.fillRect(i * barWidth, mid - h / 2, drawW, h)
   }
 }
@@ -518,7 +522,7 @@ function drawZoomedWaveformBars(
 
   const ampMax = arrayMax(peaks) || 1
   const mid = cssHeight / 2
-  const usableHeight = cssHeight - 6
+  const usableHeight = cssHeight * 0.8
 
   const barWidthPx = 1
   const numBars = Math.floor(cssWidth / barWidthPx)
@@ -529,7 +533,7 @@ function drawZoomedWaveformBars(
     const bucket = Math.min(buckets - 1, Math.max(0, Math.floor((t / totalDuration) * buckets)))
     const amp = peaks[bucket] / ampMax
     if (amp <= 0) continue
-    const h = Math.max(1.5, amp * usableHeight)
+    const h = Math.max(1, amp * usableHeight)
     ctx.fillRect(p * barWidthPx, mid - h / 2, barWidthPx, h)
   }
 }
