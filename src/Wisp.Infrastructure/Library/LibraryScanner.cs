@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Wisp.Core.Tracks;
+using Wisp.Infrastructure.ArtistRefresh;
 using Wisp.Infrastructure.FileSystem;
 using Wisp.Infrastructure.Persistence;
 using Wisp.Infrastructure.Tagging;
@@ -119,6 +120,20 @@ public class LibraryScanner(
             log.LogInformation(
                 "Scan {Id} complete: {Added} added, {Updated} updated, {Removed} removed, {Skipped} skipped",
                 job.Id, job.AddedTracks, job.UpdatedTracks, job.RemovedTracks, job.SkippedFiles);
+
+            // Reconcile the user's Wanted wishlist against the freshly-scanned
+            // library. Anything wanted that now exists locally gets a
+            // MatchedLocalTrackId stamp (visible in the UI as a ✓ in library
+            // chip on the Wanted page). Best-effort — failure here doesn't
+            // un-do the scan.
+            try
+            {
+                await ReconcileWantedTracksAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning(ex, "Wanted-track reconciliation after scan {Id} failed", job.Id);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -140,6 +155,54 @@ public class LibraryScanner(
         finally
         {
             progress.Complete(job.Id);
+        }
+    }
+
+    /// Walks the unmatched WantedTrack rows and stamps MatchedLocalTrackId
+    /// when a local Track matches by normalized (Artist, Title). The Wanted
+    /// page surfaces a "✓ in library" chip on stamped rows; the entry itself
+    /// isn't deleted (the user might want to keep it visible until they
+    /// hit Hide-found).
+    private async Task ReconcileWantedTracksAsync(CancellationToken ct)
+    {
+        var unmatched = await db.WantedTracks
+            .Where(w => w.MatchedLocalTrackId == null)
+            .ToListAsync(ct);
+        if (unmatched.Count == 0) return;
+
+        // Build a lookup from the local library: (normalizedArtist, normalizedTitle) → Track.Id.
+        // TitleOverlap.Normalize already strips bracketed mix names + folds accents
+        // so "Burnin' (Extended Mix)" and "Burnin'" collapse to the same key.
+        var locals = await db.Tracks
+            .AsNoTracking()
+            .Where(t => t.Artist != null && t.Title != null && !t.IsArchived)
+            .Select(t => new { t.Id, t.Artist, t.Title })
+            .ToListAsync(ct);
+
+        var lookup = new Dictionary<(string artist, string title), Guid>();
+        foreach (var t in locals)
+        {
+            var key = (ArtistNormalizer.Normalize(t.Artist!), TitleOverlap.Normalize(t.Title!));
+            if (string.IsNullOrEmpty(key.Item1) || string.IsNullOrEmpty(key.Item2)) continue;
+            lookup.TryAdd(key, t.Id);
+        }
+
+        var now = DateTime.UtcNow;
+        var matched = 0;
+        foreach (var w in unmatched)
+        {
+            var key = (ArtistNormalizer.Normalize(w.Artist), TitleOverlap.Normalize(w.Title));
+            if (lookup.TryGetValue(key, out var trackId))
+            {
+                w.MatchedLocalTrackId = trackId;
+                w.MatchedAt = now;
+                matched++;
+            }
+        }
+        if (matched > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            log.LogInformation("Wanted-track reconcile: {Matched} of {Unmatched} now in library", matched, unmatched.Count);
         }
     }
 

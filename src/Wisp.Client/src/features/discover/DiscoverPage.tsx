@@ -474,16 +474,53 @@ function ArtistResultCard({ hit }: { hit: DiscoverArtistHit }) {
   )
 }
 
-/// Stub Follow button — the real thing (creates ArtistProfile + matches +
-/// triggers an initial RefreshAsync) lands in 22d.
-function FollowButton({ hit: _hit }: { hit: DiscoverArtistHit }) {
+/// Follow button — POSTs to /api/discover/follow which creates (or
+/// reuses) an ArtistProfile, attaches the Spotify ID, and runs an initial
+/// refresh. After a successful follow, the artist appears in the My
+/// artists list and the button flips to "✓ Following".
+function FollowButton({ hit }: { hit: DiscoverArtistHit }) {
+  const qc = useQueryClient()
+  // Look up whether an ArtistProfile already exists for this Spotify ID
+  // so the button reflects the actual state (e.g. the user already
+  // follows this artist via the library scan).
+  const artistList = useQuery({
+    queryKey: ['artists'],
+    queryFn: () => artists.list(),
+  })
+  const alreadyFollowing = (artistList.data ?? []).some(
+    (a) => a.isMatchedSpotify && a.name.toLowerCase() === hit.name.toLowerCase(),
+  )
+
+  const follow = useMutation({
+    mutationFn: () => discover.follow({
+      name: hit.name,
+      spotifyArtistId: hit.externalId,
+      imageUrl: hit.imageUrl ?? undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['artists'] })
+    },
+  })
+
+  if (alreadyFollowing || follow.isSuccess) {
+    return (
+      <span
+        className="shrink-0 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300"
+        title="Already in your library — see them on the My artists tab"
+      >
+        ✓ Following
+      </span>
+    )
+  }
+
   return (
     <button
-      disabled
-      title="Follow lands in Phase 22d"
-      className="shrink-0 rounded-md border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] disabled:cursor-not-allowed"
+      onClick={() => follow.mutate()}
+      disabled={follow.isPending}
+      className="shrink-0 rounded-md border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-40"
+      title="Add this artist to your library and watch for new releases"
     >
-      + Follow
+      {follow.isPending ? 'Following…' : '+ Follow'}
     </button>
   )
 }

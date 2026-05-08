@@ -35,3 +35,11 @@ public sealed record DiscoverSearchResponse(
     DiscoverVideoHit[] Videos,
     DiscoverQuotaInfo? YouTubeQuota,    // null when YouTube wasn't queried
     string[] Errors);                   // surface "spotify_unconfigured" etc.
+
+/// Body for POST /api/discover/follow — creates an ArtistProfile in the
+/// user's library and seeds it with the Spotify match the user picked from
+/// the Discover search results.
+public sealed record FollowArtistRequest(
+    string Name,
+    string SpotifyArtistId,
+    string? ImageUrl);

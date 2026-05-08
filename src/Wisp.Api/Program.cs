@@ -94,6 +94,12 @@ public class Program
             {
                 var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
                 db.Database.Migrate();
+
+                // Phase 22e backfill: any DiscoveredTrack the user previously
+                // marked Want in Crate Digger gets a corresponding WantedTrack
+                // so the new unified Wanted page surfaces them. Idempotent
+                // — re-runs are no-ops once the WantedTrack rows are present.
+                BackfillWantedTracksFromCrateDigger(db);
             }
 
             // Wire saved catalog credentials (if any) into the matching options instances.
@@ -401,6 +407,53 @@ public class Program
         finally
         {
             Log.CloseAndFlush();
+        }
+    }
+
+    /// One-shot backfill — for any DiscoveredTrack with Status = Want that
+    /// doesn't already have a corresponding WantedTrack on (Artist, Title),
+    /// create one. Runs every startup but idempotent: rows that already
+    /// exist are silently skipped via the unique index.
+    private static void BackfillWantedTracksFromCrateDigger(WispDbContext db)
+    {
+        var wantRows = db.DiscoveredTracks
+            .Where(d => d.Status == Wisp.Core.Discovery.DiscoveryStatus.Want)
+            .ToList();
+        if (wantRows.Count == 0) return;
+
+        var existing = db.WantedTracks
+            .Select(w => new { w.Artist, w.Title })
+            .ToList()
+            .Select(w => (w.Artist.ToLowerInvariant(), w.Title.ToLowerInvariant()))
+            .ToHashSet();
+
+        var added = 0;
+        foreach (var d in wantRows)
+        {
+            var artist = (d.ParsedArtist ?? "").Trim();
+            var title = (d.ParsedTitle ?? d.RawTitle).Trim();
+            if (string.IsNullOrEmpty(artist) || string.IsNullOrEmpty(title)) continue;
+            var key = (artist.ToLowerInvariant(), title.ToLowerInvariant());
+            if (existing.Contains(key)) continue;
+
+            db.WantedTracks.Add(new Wisp.Core.Wanted.WantedTrack
+            {
+                Id = Guid.NewGuid(),
+                Source = Wisp.Core.Wanted.WantedSource.CrateDigger,
+                Artist = artist,
+                Title = title,
+                SourceVideoId = d.SourceVideoId,
+                SourceUrl = d.SourceUrl,
+                ThumbnailUrl = d.ThumbnailUrl,
+                AddedAt = DateTime.UtcNow,
+            });
+            existing.Add(key);
+            added++;
+        }
+        if (added > 0)
+        {
+            db.SaveChanges();
+            Log.Information("Phase 22e backfill: migrated {Count} CrateDigger Want rows to WantedTrack", added);
         }
     }
 

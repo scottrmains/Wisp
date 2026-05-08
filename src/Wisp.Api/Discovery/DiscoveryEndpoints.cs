@@ -236,7 +236,38 @@ public static class DiscoveryEndpoints
     {
         var t = await db.DiscoveredTracks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t is null) return Results.NotFound();
+        var previous = t.Status;
         t.Status = body.Status;
+
+        // When a Crate Digger track flips to Want, mirror it onto the
+        // unified WantedTrack list so the user's wishlist is one place.
+        // Idempotent on (Artist, Title) so re-flipping doesn't duplicate.
+        if (body.Status == Wisp.Core.Discovery.DiscoveryStatus.Want
+            && previous != Wisp.Core.Discovery.DiscoveryStatus.Want)
+        {
+            var artist = (t.ParsedArtist ?? "").Trim();
+            var title = (t.ParsedTitle ?? t.RawTitle).Trim();
+            if (!string.IsNullOrEmpty(artist) && !string.IsNullOrEmpty(title))
+            {
+                var alreadyExists = await db.WantedTracks
+                    .AnyAsync(w => w.Artist == artist && w.Title == title, ct);
+                if (!alreadyExists)
+                {
+                    db.WantedTracks.Add(new Wisp.Core.Wanted.WantedTrack
+                    {
+                        Id = Guid.NewGuid(),
+                        Source = Wisp.Core.Wanted.WantedSource.CrateDigger,
+                        Artist = artist,
+                        Title = title,
+                        SourceVideoId = t.SourceVideoId,
+                        SourceUrl = t.SourceUrl,
+                        ThumbnailUrl = t.ThumbnailUrl,
+                        AddedAt = DateTime.UtcNow,
+                    });
+                }
+            }
+        }
+
         await db.SaveChangesAsync(ct);
         return Results.Ok(DiscoveredTrackDto.From(t));
     }

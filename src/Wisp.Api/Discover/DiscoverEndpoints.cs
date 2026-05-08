@@ -1,6 +1,10 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Wisp.Core.ArtistRefresh;
+using Wisp.Infrastructure.ArtistRefresh;
 using Wisp.Infrastructure.ExternalCatalog.Spotify;
 using Wisp.Infrastructure.ExternalCatalog.YouTube;
+using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Api.Discover;
 
@@ -20,7 +24,73 @@ public static class DiscoverEndpoints
     public static IEndpointRouteBuilder MapDiscover(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/discover/search", Search);
+        app.MapPost("/api/discover/follow", Follow);
         return app;
+    }
+
+    /// Follow a Spotify artist that came back from /discover/search but isn't
+    /// in the user's library. Creates (or reuses) an ArtistProfile, attaches
+    /// the Spotify ID, and kicks an initial refresh so the user immediately
+    /// sees recent releases. Idempotent on (NormalizedName) — clicking
+    /// Follow twice on the same artist returns the same row.
+    private static async Task<IResult> Follow(
+        FollowArtistRequest body,
+        WispDbContext db,
+        ArtistRefreshService svc,
+        ILogger<ArtistRefreshService> log,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.Name) || string.IsNullOrWhiteSpace(body.SpotifyArtistId))
+        {
+            return Results.BadRequest(new
+            {
+                code = "missing_fields",
+                message = "Name and SpotifyArtistId are required.",
+            });
+        }
+
+        var name = body.Name.Trim();
+        var normalized = ArtistNormalizer.Normalize(name);
+        if (string.IsNullOrEmpty(normalized))
+        {
+            return Results.BadRequest(new { code = "invalid_name", message = "Name is empty after normalization." });
+        }
+
+        // Find-or-create. The unique index on NormalizedName means we can't
+        // double-insert; we either return the existing row or land a new one.
+        var artist = await db.ArtistProfiles.FirstOrDefaultAsync(a => a.NormalizedName == normalized, ct);
+        if (artist is null)
+        {
+            artist = new ArtistProfile
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                NormalizedName = normalized,
+                CreatedAt = DateTime.UtcNow,
+            };
+            db.ArtistProfiles.Add(artist);
+        }
+        artist.SpotifyArtistId = body.SpotifyArtistId;
+        await db.SaveChangesAsync(ct);
+
+        // Initial refresh so the user sees releases right away. Failures here
+        // shouldn't reverse the follow — the artist is now in the list and
+        // can be re-refreshed manually.
+        try
+        {
+            await svc.RefreshAsync(artist.Id, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "Initial refresh after Follow failed for artist {ArtistId}", artist.Id);
+        }
+
+        return Results.Ok(new
+        {
+            id = artist.Id,
+            name = artist.Name,
+            spotifyArtistId = artist.SpotifyArtistId,
+        });
     }
 
     private static async Task<IResult> Search(
