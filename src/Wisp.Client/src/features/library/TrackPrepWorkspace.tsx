@@ -12,6 +12,7 @@ import { RecommendationsList } from './RecommendationPanel'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
 import { formatDuration } from './format'
 import { detectFirstBeatFromPeaks, loadBandedPeaks } from '../../audio/peaks'
+import { snapToBeat } from '../../audio/snap'
 import { detectStructuralCues } from '../../audio/structure'
 
 interface Props {
@@ -135,17 +136,22 @@ export function TrackPrepWorkspace({
   const hoverTimeRef = useRef<number | null>(null)
 
   // Adds a cue at the magnifier's hover position when active, otherwise at
-  // the current playhead. `Custom` is the safe default type — the user can
-  // change it from the Cues tab or by clicking the marker.
-  const addCueAtCursorOrPlayhead = () => {
-    if (!trackId) return
-    const hoverTime = hoverTimeRef.current
-    if (hoverTime !== null && hoverTime >= 0) {
-      cuesHook.create.mutate({ timeSeconds: hoverTime, type: 'Custom' })
-      return
-    }
-    if (liveTime <= 0) return
-    cuesHook.create.mutate({ timeSeconds: liveTime, type: 'Custom' })
+  // the current playhead. When BPM + a first-beat anchor are known the
+  // resulting time gets snapped to the nearest beat — mouse precision is
+  // way coarser than the actual beat grid, so without snap we'd land off-
+  // grid even with the magnifier zoomed to the floor. Pass `bypassSnap` to
+  // place exactly where the cursor / playhead is (Shift+Q from the keyboard).
+  const addCueAtCursorOrPlayhead = (opts?: { bypassSnap?: boolean }) => {
+    if (!trackId || !track) return
+    const rawTime = hoverTimeRef.current ?? (liveTime > 0 ? liveTime : null)
+    if (rawTime === null || rawTime < 0) return
+
+    const firstBeat = cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null
+    const snapped = opts?.bypassSnap
+      ? rawTime
+      : snapToBeat(rawTime, track.bpm, firstBeat)
+
+    cuesHook.create.mutate({ timeSeconds: snapped, type: 'Custom' })
   }
 
   // Auto-drop structural cues the first time we see a track in the workspace.
@@ -226,7 +232,10 @@ export function TrackPrepWorkspace({
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       if (e.key === 'q' || e.key === 'Q') {
-        addCueAtCursorOrPlayhead()
+        // Shift-Q skips beat-snap so you can drop a cue at the exact hovered
+        // / playhead time (useful when a track has off-grid moments worth
+        // marking).
+        addCueAtCursorOrPlayhead({ bypassSnap: e.shiftKey })
         e.preventDefault()
         return
       }
@@ -314,6 +323,8 @@ export function TrackPrepWorkspace({
             setTimeout(() => seek(c.timeSeconds), 50)
           }}
           onHoverChange={(t) => { hoverTimeRef.current = t }}
+          bpm={track.bpm}
+          firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
           height={120}
         />
         <div className="absolute right-4 top-4 flex items-center gap-1">
@@ -374,8 +385,10 @@ export function TrackPrepWorkspace({
           </ActionButton>
         )}
         <ActionButton
-          onClick={addCueAtCursorOrPlayhead}
-          title="Add a cue at the hovered waveform position (or playhead). Same as pressing Q."
+          onClick={() => addCueAtCursorOrPlayhead()}
+          title={track.bpm
+            ? 'Add a cue at the hovered waveform position (or playhead), snapped to the nearest beat. Same as pressing Q. Shift+Q to place off-grid.'
+            : 'Add a cue at the hovered waveform position (or playhead). Same as pressing Q.'}
         >
           ＋ Cue
         </ActionButton>

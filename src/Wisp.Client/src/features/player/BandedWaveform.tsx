@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getCachedBandedPeaks, loadBandedPeaks, type BandedPeaks } from '../../audio/peaks'
+import { beatTicksInRange } from '../../audio/snap'
 
 export interface CueMarker {
   id: string
@@ -28,6 +29,12 @@ interface Props {
   /// or null when the cursor leaves. Lets the parent (workspace) wire hotkeys
   /// like Q to "place a cue at the hovered position" instead of the playhead.
   onHoverChange?: (timeSeconds: number | null) => void
+  /// Track tempo. Optional — when provided, the magnifier overlays beat
+  /// ticks so the user can see the snap grid before placing a cue.
+  bpm?: number | null
+  /// Time of beat 0 used to anchor the beat grid. Without this we don't know
+  /// where the kick lands so beat ticks would be cosmetic noise.
+  firstBeatSec?: number | null
 }
 
 /// Mixed-in-Key style multi-band waveform for the mini-player.
@@ -36,7 +43,7 @@ interface Props {
 /// Click anywhere to seek; vertical playhead overlays the current position.
 ///
 /// While peaks are computing, falls back to a thin baseline so the click-to-seek still works.
-export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange }: Props) {
+export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange, bpm, firstBeatSec }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [peaks, setPeaks] = useState<BandedPeaks | null>(() => getCachedBandedPeaks(trackId) ?? null)
@@ -353,6 +360,8 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           clientX={cursor.clientX}
           clientY={cursor.clientY}
           windowSec={magnifierWindowSec}
+          bpm={bpm ?? null}
+          firstBeatSec={firstBeatSec ?? null}
         />
       )}
     </div>
@@ -368,6 +377,11 @@ interface MagnifierProps {
   /// Total seconds visible inside the magnifier (zoom level). Smaller = more
   /// zoomed in. Driven by the parent's wheel handler.
   windowSec: number
+  /// Track tempo + first-beat anchor — when both are present the magnifier
+  /// overlays beat / bar / phrase tick lines so the user can see the grid
+  /// they'll snap to. Otherwise the magnifier is purely visual.
+  bpm: number | null
+  firstBeatSec: number | null
 }
 
 const MAGNIFIER_WIDTH = 280
@@ -377,7 +391,7 @@ const MAGNIFIER_MIN_WINDOW = 0.5
 const MAGNIFIER_MAX_WINDOW = 30
 const MAGNIFIER_WHEEL_FACTOR = 1.2
 
-function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec }: MagnifierProps) {
+function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, bpm, firstBeatSec }: MagnifierProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -427,10 +441,34 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec }:
       ctx.fillRect(p * barWidthPx, mid - h / 2, barWidthPx - 0.4, h)
     }
 
-    // Centre crosshair — marks the exact time the cursor is on.
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
+    // Beat grid overlay — drawn UNDER the centre crosshair so the white
+    // crosshair stays visible. Only rendered when we have BPM + a first-beat
+    // anchor, otherwise we'd just be guessing about where beats land. The
+    // weight from beatTicksInRange controls opacity so phrase / bar / beat
+    // boundaries are visually distinguishable.
+    const endTime = cursorTime + windowSec / 2
+    const ticks = beatTicksInRange(startTime, endTime, bpm, firstBeatSec)
+    for (const tick of ticks) {
+      const xRatio = (tick.timeSeconds - startTime) / windowSec
+      if (xRatio < 0 || xRatio > 1) continue
+      const x = xRatio * MAGNIFIER_WIDTH
+      const alpha = 0.15 + tick.weight * 0.55
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`
+      // Phrase + bar lines extend full height; plain beats are short ticks
+      // at top + bottom so they don't visually compete with the waveform.
+      if (tick.weight >= 0.6) {
+        ctx.fillRect(x - 0.5, 0, 1, MAGNIFIER_HEIGHT)
+      } else {
+        ctx.fillRect(x - 0.5, 0, 1, 6)
+        ctx.fillRect(x - 0.5, MAGNIFIER_HEIGHT - 6, 1, 6)
+      }
+    }
+
+    // Centre crosshair — marks the exact time the cursor is on. Drawn last
+    // so it always sits on top of the beat grid.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
     ctx.fillRect(MAGNIFIER_WIDTH / 2 - 0.5, 0, 1, MAGNIFIER_HEIGHT)
-  }, [peaks, duration, cursorTime, windowSec])
+  }, [peaks, duration, cursorTime, windowSec, bpm, firstBeatSec])
 
   // Position the popover via fixed coords on the viewport. Place it just
   // above the cursor; flip to below when the cursor is near the top of the
