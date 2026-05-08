@@ -148,8 +148,22 @@ function RecommendationRow({
   // weight; if it's empty (rare), synthesise from the highest-scoring axis.
   const headlineReason = rec.reasons[0] ?? deriveHeadline(seed, rec)
 
+  // Drag-and-drop: recommendation rows produce the same wisp-track-ids payload
+  // that library rows do, so the existing ChainDock + MixPlansPage drop targets
+  // pick them up without changes. Lets the user drag a recommendation directly
+  // onto their chain instead of having to click the +.
+  const onDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'copyMove'
+    e.dataTransfer.setData('application/x-wisp-track-ids', JSON.stringify([t.id]))
+  }
+
   return (
-    <div className="border-b border-[var(--color-border)]/40 px-5 py-3">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      className="cursor-grab border-b border-[var(--color-border)]/40 px-5 py-3 hover:bg-white/5 active:cursor-grabbing"
+      title="Drag to a mix plan / playlist"
+    >
       <div className="flex items-start gap-3">
         <ScoreBadge value={rec.total} />
         <div className="min-w-0 flex-1">
@@ -173,23 +187,31 @@ function RecommendationRow({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
           {onAddToChain && (
             <button
+              // stopPropagation so clicking the button doesn't also start a drag
+              // (some browsers begin drag from mousedown on draggable parents).
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={() => onAddToChain(t.id)}
-              className="text-base leading-none text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+              className="rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent)]/80"
               title="Add to mix chain"
-              aria-label="Add to mix chain"
             >
-              +
+              + Add
             </button>
           )}
           <button
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setOpen((o) => !o)}
-            className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] hover:text-white"
+            className={[
+              'rounded-md border px-2 py-0.5 text-[11px] transition-colors',
+              open
+                ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white'
+                : 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
+            ].join(' ')}
             aria-expanded={open}
           >
-            {open ? 'Hide' : 'Why?'}
+            {open ? '▾ Why' : '▸ Why?'}
           </button>
         </div>
       </div>
