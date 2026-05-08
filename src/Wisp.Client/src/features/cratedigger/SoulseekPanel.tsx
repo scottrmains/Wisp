@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { apiGet } from '../../api/client'
 import { soulseek } from '../../api/soulseek'
 import type { SoulseekSearchHit, SoulseekTransfer } from '../../api/types'
 
@@ -17,11 +18,22 @@ export function SoulseekPanel({ artist, title }: Props) {
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [responseCount, setResponseCount] = useState(0)
+  // We only start polling /api/soulseek/downloads after the user actually queues
+  // one — no point hammering slskd otherwise (and no point at all if slskd is down).
+  const [transferPollingActive, setTransferPollingActive] = useState(false)
   const startedAtRef = useRef<number>(0)
 
   const query = (artist && title)
     ? `${artist} ${title}`
     : (title ?? artist ?? '')
+
+  // Soulseek configured? Cheap one-shot — gates every other slskd network call.
+  const status = useQuery({
+    queryKey: ['soulseek-status'],
+    queryFn: () => apiGet<{ isConfigured: boolean }>('/api/settings/soulseek'),
+    staleTime: 60_000,
+  })
+  const slskdConfigured = status.data?.isConfigured ?? false
 
   // Poll the search until complete or until we time out.
   useEffect(() => {
@@ -56,11 +68,24 @@ export function SoulseekPanel({ artist, title }: Props) {
     }
   }, [searchId])
 
-  // Active downloads — poll when there are any in flight.
+  // Active downloads — only poll when slskd is configured AND we've actually started a transfer.
+  // Stops automatically when nothing is in-flight anymore.
   const transfers = useQuery({
     queryKey: ['soulseek-downloads'],
     queryFn: () => soulseek.listDownloads(),
-    refetchInterval: 2_000,
+    enabled: slskdConfigured && transferPollingActive,
+    refetchInterval: (q) => {
+      const data = q.state.data ?? []
+      const stillActive = data.some((t) => !t.state.includes('Completed'))
+      if (!stillActive) {
+        // Schedule a state flip on next tick so we stop polling cleanly.
+        setTimeout(() => setTransferPollingActive(false), 0)
+        return false
+      }
+      return POLL_INTERVAL_MS
+    },
+    // If slskd is off or refuses, don't keep retrying — fail once and back off.
+    retry: false,
   })
 
   const activeByFilename = new Map<string, SoulseekTransfer>()
@@ -87,9 +112,15 @@ export function SoulseekPanel({ artist, title }: Props) {
         </h3>
         <button
           onClick={() => startSearch.mutate()}
-          disabled={!query.trim() || startSearch.isPending || searching}
+          disabled={!query.trim() || !slskdConfigured || startSearch.isPending || searching}
           className="rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] hover:bg-white/5 disabled:opacity-40"
-          title={!query.trim() ? 'Set artist + title first' : `Search slskd for "${query}"`}
+          title={
+            !slskdConfigured
+              ? 'Configure slskd in Settings first'
+              : !query.trim()
+                ? 'Set artist + title first'
+                : `Search slskd for "${query}"`
+          }
         >
           {searching ? `Searching… (${responseCount} users)` : 'Search Soulseek'}
         </button>
@@ -97,9 +128,15 @@ export function SoulseekPanel({ artist, title }: Props) {
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 
-      {!searchId && !error && (
+      {!slskdConfigured && (
         <p className="text-xs text-[var(--color-muted)]">
-          Searches the Soulseek peer network via your local slskd daemon. Configure the URL + API key in Settings.
+          Configure slskd URL + API key in Settings. Wisp will only contact slskd when you click Search or while a download is in flight — close it any time you're not using it.
+        </p>
+      )}
+
+      {slskdConfigured && !searchId && !error && (
+        <p className="text-xs text-[var(--color-muted)]">
+          Searches the Soulseek peer network via your local slskd daemon. Start slskd before clicking Search.
         </p>
       )}
 
@@ -121,6 +158,7 @@ export function SoulseekPanel({ artist, title }: Props) {
                   key={`${h.username}:${h.filename}:${i}`}
                   hit={h}
                   transfer={activeByFilename.get(h.filename) ?? null}
+                  onQueued={() => setTransferPollingActive(true)}
                 />
               ))}
             </tbody>
@@ -137,9 +175,18 @@ export function SoulseekPanel({ artist, title }: Props) {
   )
 }
 
-function HitRow({ hit, transfer }: { hit: SoulseekSearchHit; transfer: SoulseekTransfer | null }) {
+function HitRow({
+  hit,
+  transfer,
+  onQueued,
+}: {
+  hit: SoulseekSearchHit
+  transfer: SoulseekTransfer | null
+  onQueued: () => void
+}) {
   const download = useMutation({
     mutationFn: () => soulseek.download(hit.username, hit.filename, hit.size),
+    onSuccess: onQueued,
   })
 
   const fileName = hit.filename.split(/[\\/]/).pop() ?? hit.filename

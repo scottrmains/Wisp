@@ -37,7 +37,9 @@ public static class WispServiceCollectionExtensions
         services.AddHttpClient("Wisp.Spotify.Auth");
         services.AddHttpClient("Wisp.Discogs");
         services.AddHttpClient("Wisp.YouTube");
-        services.AddHttpClient("Wisp.Soulseek");
+        // slskd runs locally — fail fast when it isn't running rather than letting
+        // Windows do its full TCP-retry dance for ~4 seconds per call.
+        services.AddHttpClient("Wisp.Soulseek", c => c.Timeout = TimeSpan.FromSeconds(3));
 
         services.AddSingleton<SpotifyOptions>();
         services.AddSingleton<DiscogsOptions>();
