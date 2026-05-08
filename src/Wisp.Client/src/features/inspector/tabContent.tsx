@@ -101,10 +101,19 @@ export function CuesTab({ track }: { track: Track }) {
 
   const handleGeneratePhrases = async () => {
     if (track.bpm === null) return
-    if (cues.some((c) => c.isAutoSuggested)) {
+    // Only prompt when a previous Generate Phrases run already populated the
+    // track with an auto-suggested phrase grid (Custom-typed). The auto
+    // first-beat / structural cues are *always* auto-suggested too, but
+    // those aren't what "Generate phrases" produces, so prompting about
+    // them every time was confusing — users hit Cancel thinking the dialog
+    // didn't apply, and the button looked broken.
+    const hasExistingPhraseGrid = cues.some(
+      (c) => c.isAutoSuggested && c.type === 'Custom',
+    )
+    if (hasExistingPhraseGrid) {
       const ok = await confirmDialog({
         title: 'Generate phrase markers again?',
-        message: 'This track already has auto-generated markers. Generating again will add more on top — clear all cues first if you want a fresh set.',
+        message: 'This track already has auto-generated phrase markers. Generating again will add more on top — clear all cues first if you want a fresh set.',
         confirmLabel: 'Add markers',
       })
       if (!ok) return

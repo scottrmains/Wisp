@@ -219,8 +219,12 @@ export function detectDownbeatFromPeaks(
   const phaseSteps = 21  // search ±0.5 beat in 21 steps (~ms-level resolution)
   const beatsToCheck = 32
 
+  // Start at 0 so candidates that score nothing don't displace `naiveTime`.
+  // Without this, the *first* candidate processed (often a negative shift)
+  // wins by default at score 0 even when no kicks aligned with it — we'd
+  // return a phase that has no kicks at all on its grid.
   let bestAnchor = naiveTime
-  let bestScore = -1
+  let bestScore = 0
 
   for (let s = 0; s < phaseSteps; s++) {
     const shiftBeats = (s / (phaseSteps - 1)) - 0.5

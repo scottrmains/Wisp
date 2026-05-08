@@ -291,13 +291,13 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
         className="pointer-events-none absolute top-0 bottom-0 w-px bg-white shadow-[0_0_4px_rgba(255,255,255,0.7)]"
         style={{ left: `${playheadPct}%` }}
       />
-      {/* Hover cursor: dashed guide line + time chip on the waveform itself.
-          Always-on whenever the user's mouse is over the waveform — gives the
-          precise time at the pointer so they can see what they'd seek to. */}
+      {/* Hover cursor: dim guide line at the literal cursor + time chip.
+          When snap is on, the bright green snap-target marker (rendered
+          separately below) is the dominant indicator; this stays subtle. */}
       {cursor && (
         <>
           <div
-            className="pointer-events-none absolute top-0 bottom-0 w-px bg-white/40"
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-white/30"
             style={{ left: cursor.x }}
           />
           <div
@@ -308,6 +308,23 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           </div>
         </>
       )}
+      {/* Snap target marker on the main waveform — same green as the
+          magnifier's snap line so the two read as the same concept. Only
+          renders when BPM + first-beat are known (which is when snap
+          actually applies). Sits on top of the cursor guide so when the
+          user is already on a beat the green wins visually. */}
+      {cursor && bpm && bpm > 0 && firstBeatSec !== null && firstBeatSec !== undefined && duration > 0 && (() => {
+        const snapTime = snapToBeat(cursor.time, bpm, firstBeatSec)
+        const snapPct = (snapTime / duration) * 100
+        if (snapPct < 0 || snapPct > 100) return null
+        return (
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-[3px] -translate-x-1/2 bg-emerald-400 shadow-[0_0_6px_rgba(74,222,128,0.7)]"
+            style={{ left: `${snapPct}%` }}
+            aria-hidden
+          />
+        )
+      })()}
       {/* Magnifier popover — floats above the waveform near the cursor and
           draws a zoomed window of the same banded peaks. Pixel-to-time
           mapping inside the magnifier is much finer than the main waveform
@@ -407,30 +424,39 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, b
       }
     }
 
-    // Snap target — when BPM + first-beat are known, draw a brighter cyan
-    // line at the beat the cue would actually land on if the user pressed
-    // Q right now. Sits between the dim beat-grid ticks (which mark every
-    // beat) and the white crosshair (which marks the literal cursor): this
-    // line is the answer to "what's about to happen if I commit?".
+    // Centre crosshair — marks the literal cursor position. Drawn FIRST and
+    // dim so the snap target (drawn after) reads as the dominant indicator
+    // when snap is on. The user cares about where the cue *will land*, not
+    // where their mouse atom-by-atom is.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.40)'
+    ctx.fillRect(MAGNIFIER_WIDTH / 2 - 0.5, 0, 1, MAGNIFIER_HEIGHT)
+
+    // Snap target — when BPM + first-beat are known, draw a wide bright
+    // green line at the beat the cue would land on if Q fired right now.
+    // This is the "answer" to the magnifier — what the user actually
+    // commits to. Wide outer glow + thicker core so it reads at any zoom
+    // level and stays obvious even if it lands directly under the dim
+    // crosshair when the cursor is already on a beat.
     if (bpm && bpm > 0 && firstBeatSec !== null && firstBeatSec !== undefined) {
       const snapTime = snapToBeat(cursorTime, bpm, firstBeatSec)
       const snapRatio = (snapTime - startTime) / windowSec
       if (snapRatio >= 0 && snapRatio <= 1) {
         const snapX = snapRatio * MAGNIFIER_WIDTH
-        // Soft outer glow first so it reads even at deep zoom where the
-        // line might overlap a tall waveform bar.
-        ctx.fillStyle = 'rgba(74, 222, 128, 0.20)'
-        ctx.fillRect(snapX - 2, 0, 5, MAGNIFIER_HEIGHT)
-        // Bright core line.
-        ctx.fillStyle = 'rgba(74, 222, 128, 0.95)'
-        ctx.fillRect(snapX - 0.5, 0, 1.5, MAGNIFIER_HEIGHT)
+        // Wide soft outer glow first.
+        ctx.fillStyle = 'rgba(74, 222, 128, 0.18)'
+        ctx.fillRect(snapX - 6, 0, 13, MAGNIFIER_HEIGHT)
+        // Brighter inner glow.
+        ctx.fillStyle = 'rgba(74, 222, 128, 0.40)'
+        ctx.fillRect(snapX - 2.5, 0, 6, MAGNIFIER_HEIGHT)
+        // Solid core line.
+        ctx.fillStyle = 'rgb(74, 222, 128)'
+        ctx.fillRect(snapX - 1.5, 0, 3, MAGNIFIER_HEIGHT)
+        // Cap markers top + bottom for extra visibility.
+        ctx.fillStyle = 'rgb(134, 239, 172)'
+        ctx.fillRect(snapX - 4, 0, 8, 3)
+        ctx.fillRect(snapX - 4, MAGNIFIER_HEIGHT - 3, 8, 3)
       }
     }
-
-    // Centre crosshair — marks the exact time the cursor is on. Drawn last
-    // so it always sits on top of the beat grid + snap indicator.
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-    ctx.fillRect(MAGNIFIER_WIDTH / 2 - 0.5, 0, 1, MAGNIFIER_HEIGHT)
   }, [peaks, duration, cursorTime, windowSec, bpm, firstBeatSec])
 
   // Position the popover via fixed coords on the viewport. Place it just
