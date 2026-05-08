@@ -46,6 +46,16 @@ public sealed class SpaSidecar : IAsyncDisposable
         if (!process.Start())
             throw new InvalidOperationException($"Failed to start SPA sidecar: {command}");
 
+        // Tie the sidecar (and any node/vite processes it spawns) to a Job Object so
+        // Windows kills the whole tree when our process dies — graceful close, Ctrl+C,
+        // crash, dotnet watch reload, all of it. Without this, a stale Vite is left
+        // holding port 5173 and you can't relaunch DevShell until you kill it manually.
+        if (OperatingSystem.IsWindows())
+        {
+            try { WindowsJobObject.Assign(process); }
+            catch (Exception ex) { Log.Warning(ex, "Could not assign sidecar to Job Object — relying on best-effort kill on dispose"); }
+        }
+
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
