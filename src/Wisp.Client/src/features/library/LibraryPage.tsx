@@ -273,8 +273,12 @@ export function LibraryPage() {
         }
         return
       }
-      if (e.key === 'p' || e.key === 'P') {
+      // Spacebar is the universal "play/pause" hotkey. `P` stays as an alias.
+      // Skipping when typing in inputs is already handled at the top of the
+      // handler — important for spacebar especially since textareas need it.
+      if (e.key === ' ' || e.key === 'p' || e.key === 'P') {
         togglePlay()
+        // preventDefault on space stops the page from scrolling underneath.
         e.preventDefault()
       }
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length > 0) {
