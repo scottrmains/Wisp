@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet } from '../../api/client'
 import { soulseek } from '../../api/soulseek'
 import type { SoulseekSearchHit, SoulseekTransfer } from '../../api/types'
@@ -22,6 +22,10 @@ export function SoulseekPanel({ artist, title }: Props) {
   // one — no point hammering slskd otherwise (and no point at all if slskd is down).
   const [transferPollingActive, setTransferPollingActive] = useState(false)
   const startedAtRef = useRef<number>(0)
+  // Track transfer ids we've already announced as completed, so we only kick off
+  // a single library refetch per downloaded file (not on every poll tick).
+  const completedSeenRef = useRef<Set<string>>(new Set())
+  const qc = useQueryClient()
 
   const query = (artist && title)
     ? `${artist} ${title}`
@@ -90,6 +94,26 @@ export function SoulseekPanel({ artist, title }: Props) {
 
   const activeByFilename = new Map<string, SoulseekTransfer>()
   for (const t of transfers.data ?? []) activeByFilename.set(t.filename, t)
+
+  // When a transfer flips to Completed, the backend has already kicked off a library
+  // re-scan of slskd's download folder (assuming the user set DownloadFolder in Settings).
+  // Wait a moment for the scan to land then invalidate the library so the new track shows up.
+  useEffect(() => {
+    const newlyDone = (transfers.data ?? []).filter(
+      (t) => t.state.includes('Completed') && t.id && !completedSeenRef.current.has(t.id),
+    )
+    if (newlyDone.length === 0) return
+    for (const t of newlyDone) completedSeenRef.current.add(t.id)
+    // Library scan worker runs on a Channel — give it a beat to enumerate the file
+    // before we ask for fresh data. Two refetches catch both the fast (already-scanned)
+    // and slow (still-scanning) cases.
+    const earlyId = setTimeout(() => qc.invalidateQueries({ queryKey: ['tracks'] }), 1_500)
+    const lateId = setTimeout(() => qc.invalidateQueries({ queryKey: ['tracks'] }), 6_000)
+    return () => {
+      clearTimeout(earlyId)
+      clearTimeout(lateId)
+    }
+  }, [transfers.data, qc])
 
   const startSearch = useMutation({
     mutationFn: () => soulseek.startSearch(query),

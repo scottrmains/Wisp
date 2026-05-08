@@ -44,6 +44,20 @@ export function LibraryPage() {
   const total = tracksQuery.data?.total ?? 0
   const items = tracksQuery.data?.items ?? []
 
+  // "Library is empty" is a different concept from "current filter matches nothing".
+  // If any filter is set we keep the filter bar visible so the user can clear it —
+  // showing the EmptyState wipes the whole UI and is a panic-inducing dead end.
+  const hasActiveFilters = !!(
+    query.search ||
+    query.key ||
+    query.bpmMin ||
+    query.bpmMax ||
+    query.energyMin ||
+    query.energyMax ||
+    query.missing
+  )
+  const showLibraryEmptyState = total === 0 && !tracksQuery.isLoading && !hasActiveFilters
+
   const pickAndScan = async () => {
     if (!bridgeAvailable()) return
     const result = await bridge.pickFolder()
@@ -92,7 +106,7 @@ export function LibraryPage() {
         </div>
       </header>
 
-      {total === 0 && !tracksQuery.isLoading ? (
+      {showLibraryEmptyState ? (
         <EmptyState onPick={pickAndScan} canPick={bridgeAvailable()} />
       ) : (
         <div className="flex min-h-0 flex-1">

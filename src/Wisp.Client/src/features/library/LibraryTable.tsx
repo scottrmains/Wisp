@@ -46,6 +46,15 @@ export function LibraryTable({ tracks, loading, selectedId, onSelect, onAddToCha
     )
   }
 
+  if (!loading && tracks.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-[var(--color-muted)]">
+        <span>No tracks match these filters.</span>
+        <span className="text-xs">Clear the search box or BPM range to see your library again.</span>
+      </div>
+    )
+  }
+
   return (
     <div ref={parentRef} className="h-full overflow-auto">
       <div className="sticky top-0 z-10 grid border-b border-[var(--color-border)] bg-[var(--color-surface)] text-xs uppercase tracking-wide text-[var(--color-muted)]"
