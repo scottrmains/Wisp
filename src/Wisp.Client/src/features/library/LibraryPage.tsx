@@ -12,7 +12,6 @@ import type { InspectorTab } from '../../state/uiPrefs'
 import { ArchiveModal } from '../archive/ArchiveModal'
 import { CleanupModal } from '../cleanup/CleanupModal'
 import { UndoToast } from '../cleanup/UndoToast'
-import { TrackInspector } from '../inspector/TrackInspector'
 import { useMixPlan } from '../mixchain/useMixPlans'
 import { AddToPlaylistDialog } from './AddToPlaylistDialog'
 import { BulkActionBar } from './BulkActionBar'
@@ -20,6 +19,7 @@ import { BulkTagDialog } from './BulkTagDialog'
 import { LibraryFilters } from './LibraryFilters'
 import { LibraryTable } from './LibraryTable'
 import { RowContextMenu, type ContextMenuItem } from './RowContextMenu'
+import { TrackPrepWorkspace } from './TrackPrepWorkspace'
 import { useScan } from './useScan'
 
 /// Library content for the routed App layout — no top-nav, no chain dock,
@@ -326,55 +326,13 @@ export function LibraryPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {activePlaylist && (
-          <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 px-4 py-2 text-xs">
-            <span className="text-[var(--color-muted)]">Scoped to playlist:</span>
-            <span className="font-medium text-white">{activePlaylist.name}</span>
-            <span className="text-[var(--color-muted)] tabular-nums">
-              ({activePlaylist.trackCount} {activePlaylist.trackCount === 1 ? 'track' : 'tracks'})
-            </span>
-            <button
-              onClick={() => setActivePlaylistId(null)}
-              className="ml-auto rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] hover:text-white"
-              title="Clear playlist scope"
-            >
-              ✕ clear scope
-            </button>
-          </div>
-        )}
-        <LibraryFilters query={query} onChange={setQuery} total={total} />
-        {selectedIds.size > 1 && (
-          <BulkActionBar
-            count={selectedIds.size}
-            hasActivePlan={!!activePlanId}
-            onAddToMix={bulkAddToMix}
-            onArchive={bulkArchive}
-            onTag={bulkTag}
-            onAddToPlaylist={bulkAddToPlaylist}
-            onClear={clearSelection}
-          />
-        )}
-        <div className="min-h-0 flex-1">
-          <LibraryTable
-            tracks={items}
-            loading={tracksQuery.isLoading}
-            selectedId={selected?.id ?? null}
-            selectedIds={selectedIds}
-            sort={query.sort}
-            onSortChange={(next) => setQuery((q) => ({ ...q, sort: next, page: 1 }))}
-            onSelect={onSelectRow}
-            onActivate={onActivateRow}
-            onAddToChain={activePlanId ? addToActivePlan : undefined}
-            onCleanup={setCleanupTarget}
-            onContextMenu={onContextMenuRow}
-            onDragStartRow={onDragStartRow}
-          />
-        </div>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Track prep workspace (Phase 20b) — appears at the top when a single track is
+          selected. Multi-selection hides the workspace because bulk operations live in
+          the BulkActionBar instead and the workspace's per-track actions wouldn't make
+          sense for a selection. */}
       {inspectorTarget && (
-        <TrackInspector
+        <TrackPrepWorkspace
           track={inspectorTarget}
           onClose={() => setSelected(null)}
           onAddToChain={activePlanId ? addToActivePlan : undefined}
@@ -383,6 +341,51 @@ export function LibraryPage() {
           focusTab={focusTab ?? undefined}
         />
       )}
+
+      {activePlaylist && (
+        <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 px-4 py-2 text-xs">
+          <span className="text-[var(--color-muted)]">Scoped to playlist:</span>
+          <span className="font-medium text-white">{activePlaylist.name}</span>
+          <span className="text-[var(--color-muted)] tabular-nums">
+            ({activePlaylist.trackCount} {activePlaylist.trackCount === 1 ? 'track' : 'tracks'})
+          </span>
+          <button
+            onClick={() => setActivePlaylistId(null)}
+            className="ml-auto rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] hover:text-white"
+            title="Clear playlist scope"
+          >
+            ✕ clear scope
+          </button>
+        </div>
+      )}
+      <LibraryFilters query={query} onChange={setQuery} total={total} />
+      {selectedIds.size > 1 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          hasActivePlan={!!activePlanId}
+          onAddToMix={bulkAddToMix}
+          onArchive={bulkArchive}
+          onTag={bulkTag}
+          onAddToPlaylist={bulkAddToPlaylist}
+          onClear={clearSelection}
+        />
+      )}
+      <div className="min-h-0 flex-1">
+        <LibraryTable
+          tracks={items}
+          loading={tracksQuery.isLoading}
+          selectedId={selected?.id ?? null}
+          selectedIds={selectedIds}
+          sort={query.sort}
+          onSortChange={(next) => setQuery((q) => ({ ...q, sort: next, page: 1 }))}
+          onSelect={onSelectRow}
+          onActivate={onActivateRow}
+          onAddToChain={activePlanId ? addToActivePlan : undefined}
+          onCleanup={setCleanupTarget}
+          onContextMenu={onContextMenuRow}
+          onDragStartRow={onDragStartRow}
+        />
+      </div>
 
       {cleanupTarget && (
         <CleanupModal
