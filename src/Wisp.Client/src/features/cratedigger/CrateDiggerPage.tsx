@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { discovery, subscribeToDiscoveryScan } from '../../api/discovery'
-import type { DiscoveredTrack, DiscoverySource, DiscoveryStatus } from '../../api/types'
+import { discovery } from '../../api/discovery'
+import type {
+  DiscoveredTrack,
+  DiscoverySource,
+  DiscoveryScanProgress,
+  DiscoveryStatus,
+} from '../../api/types'
 import { DiscoveredTrackList } from './DiscoveredTrackList'
 import { DiscoveredTrackDetail } from './DiscoveredTrackDetail'
+import { useDiscoveryScans } from './useDiscoveryScans'
 
 interface Props {
   onClose: () => void
@@ -27,6 +33,7 @@ export function CrateDiggerPage({ onClose }: Props) {
   const [statusFilter, setStatusFilter] = useState<DiscoveryStatus | 'all'>('all')
   const [search, setSearch] = useState('')
   const [selectedTrack, setSelectedTrack] = useState<DiscoveredTrack | null>(null)
+  const scans = useDiscoveryScans()
 
   const sources = useQuery({
     queryKey: ['discovery-sources'],
@@ -64,6 +71,9 @@ export function CrateDiggerPage({ onClose }: Props) {
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['discovery-sources'] })
       setActiveSourceId(created.id)
+      // The backend auto-queues an initial scan on create — start tracking its progress
+      // immediately so the user sees a spinner instead of an empty source row.
+      scans.trackScan(created.id)
     },
   })
 
@@ -99,14 +109,19 @@ export function CrateDiggerPage({ onClose }: Props) {
         <SourceSidebar
           sources={sources.data ?? []}
           activeId={activeSourceId}
+          progress={scans.progress}
           onSelect={setActiveSourceId}
           onAdd={handleAddSource}
+          onTrackScan={scans.trackScan}
           adding={addSource.isPending}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-[var(--color-border)]">
           {activeSourceId ? (
             <>
+              {activeSourceId in scans.progress && (
+                <ScanBanner progress={scans.progress[activeSourceId]} />
+              )}
               <FilterBar
                 search={search}
                 onSearch={setSearch}
@@ -143,14 +158,18 @@ export function CrateDiggerPage({ onClose }: Props) {
 function SourceSidebar({
   sources,
   activeId,
+  progress,
   onSelect,
   onAdd,
+  onTrackScan,
   adding,
 }: {
   sources: DiscoverySource[]
   activeId: string | null
+  progress: Record<string, DiscoveryScanProgress>
   onSelect: (id: string) => void
   onAdd: () => void
+  onTrackScan: (id: string) => void
   adding: boolean
 }) {
   return (
@@ -173,7 +192,9 @@ function SourceSidebar({
             key={s.id}
             source={s}
             active={s.id === activeId}
+            scanProgress={progress[s.id] ?? null}
             onSelect={() => onSelect(s.id)}
+            onTrackScan={onTrackScan}
           />
         ))}
       </ul>
@@ -184,36 +205,29 @@ function SourceSidebar({
 function SourceRow({
   source,
   active,
+  scanProgress,
   onSelect,
+  onTrackScan,
 }: {
   source: DiscoverySource
   active: boolean
+  scanProgress: DiscoveryScanProgress | null
   onSelect: () => void
+  onTrackScan: (id: string) => void
 }) {
   const qc = useQueryClient()
-  const [scanProgress, setScanProgress] = useState<{ status: string; totalImported: number; newItems: number } | null>(null)
 
   const startScan = useMutation({
     mutationFn: () => discovery.scanSource(source.id),
-    onSuccess: () => {
-      const teardown = subscribeToDiscoveryScan(source.id, {
-        onProgress: (p) => setScanProgress({ status: p.status, totalImported: p.totalImported, newItems: p.newItems }),
-        onComplete: (p) => {
-          setScanProgress(null)
-          if (p.status === 'Completed') {
-            qc.invalidateQueries({ queryKey: ['discovery-sources'] })
-            qc.invalidateQueries({ queryKey: ['discovery-tracks', source.id] })
-          }
-          teardown()
-        },
-      })
-    },
+    onSuccess: () => onTrackScan(source.id),
   })
 
   const remove = useMutation({
     mutationFn: () => discovery.deleteSource(source.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['discovery-sources'] }),
   })
+
+  const isScanning = scanProgress !== null
 
   return (
     <li
@@ -225,13 +239,22 @@ function SourceRow({
     >
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-medium">{source.name}</span>
-        <span className="text-[10px] text-[var(--color-muted)]">
-          {source.sourceType === 'YouTubeChannel' ? 'Ch' : 'PL'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {isScanning && <Spinner />}
+          <span className="text-[10px] text-[var(--color-muted)]">
+            {source.sourceType === 'YouTubeChannel' ? 'Ch' : 'PL'}
+          </span>
+        </div>
       </div>
       <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-        {scanProgress
-          ? `${scanProgress.status === 'Running' ? 'Scanning' : scanProgress.status} · ${scanProgress.newItems} new`
+        {isScanning
+          ? scanProgress.status === 'Pending'
+            ? 'Queued…'
+            : scanProgress.status === 'Running'
+              ? scanProgress.totalImported > 0
+                ? `Scanning · ${scanProgress.newItems} new of ${scanProgress.totalImported}`
+                : 'Scanning YouTube…'
+              : scanProgress.status
           : `${source.importedCount} imported${source.lastScannedAt ? ` · ${new Date(source.lastScannedAt).toLocaleDateString()}` : ''}`}
       </div>
       <div className="mt-1 flex items-center gap-2 text-[10px] opacity-0 transition-opacity group-hover:opacity-100">
@@ -240,10 +263,10 @@ function SourceRow({
             e.stopPropagation()
             startScan.mutate()
           }}
-          disabled={startScan.isPending}
+          disabled={startScan.isPending || isScanning}
           className="text-[var(--color-accent)] hover:underline disabled:opacity-40"
         >
-          {startScan.isPending ? 'queued…' : 'rescan'}
+          {startScan.isPending || isScanning ? 'scanning…' : 'rescan'}
         </button>
         <button
           onClick={(e) => {
@@ -256,6 +279,37 @@ function SourceRow({
         </button>
       </div>
     </li>
+  )
+}
+
+function ScanBanner({ progress }: { progress: DiscoveryScanProgress }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-2.5 text-sm">
+      <Spinner />
+      <span className="flex-1">
+        {progress.status === 'Pending' && 'Scan queued…'}
+        {progress.status === 'Running' && (
+          progress.totalImported > 0
+            ? `Importing — ${progress.newItems} new of ${progress.totalImported} so far`
+            : 'Fetching from YouTube…'
+        )}
+        {progress.status === 'Failed' && (
+          <span className="text-red-300">Scan failed{progress.error ? `: ${progress.error}` : ''}</span>
+        )}
+      </span>
+      <span className="text-xs text-[var(--color-muted)]">
+        Tracks will appear automatically when done.
+      </span>
+    </div>
+  )
+}
+
+function Spinner() {
+  return (
+    <span
+      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent"
+      aria-hidden
+    />
   )
 }
 
