@@ -22,6 +22,26 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, height 
   const [peaks, setPeaks] = useState<BandedPeaks | null>(() => getCachedBandedPeaks(trackId) ?? null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Tracks the container's measured width so the canvas redraws when the
+  // wrapper toggles visibility (display:none → block goes 0 → realW, which
+  // ResizeObserver reports as a resize). Without this, the canvas stays at
+  // 0px wide if peaks resolved while the parent was hidden — leaves a blank
+  // strip when the user navigates back to a page where MiniPlayer shows.
+  const [containerWidth, setContainerWidth] = useState(0)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect
+      if (cr) setContainerWidth(cr.width)
+    })
+    ro.observe(el)
+    // Initial measurement (ResizeObserver fires on first observe in modern browsers,
+    // but explicit set is harmless and protects against any edge case).
+    setContainerWidth(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
 
   // Load (or read from cache) the banded peaks for this track.
   useEffect(() => {
@@ -49,14 +69,19 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, height 
     }
   }, [trackId])
 
-  // Draw the waveform whenever peaks or container size changes.
+  // Draw the waveform whenever peaks, height, or container size changes.
   useEffect(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
     if (!canvas || !container) return
+    // Skip when the container has no real width yet — drawing at 0 would lock
+    // the canvas at 0×N until something forced another redraw, which is the
+    // exact bug ResizeObserver above is here to prevent. Wait for the next
+    // resize event (which will fire when the parent becomes visible).
+    if (containerWidth <= 0) return
 
     const dpr = window.devicePixelRatio || 1
-    const cssWidth = container.clientWidth
+    const cssWidth = containerWidth
     const cssHeight = height
     canvas.width = Math.floor(cssWidth * dpr)
     canvas.height = Math.floor(cssHeight * dpr)
@@ -114,7 +139,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, height 
       ctx.fillStyle = `rgb(${red}, ${grn}, ${blu})`
       ctx.fillRect(i * barWidth, mid - h / 2, drawW, h)
     }
-  }, [peaks, height])
+  }, [peaks, height, containerWidth])
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration) return
