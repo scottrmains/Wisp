@@ -53,8 +53,15 @@ function App() {
   // Mix Plans has its own full chain workspace; showing the compact dock there too
   // would render the same plan twice. Hide it on that page only.
   const showChainDock = !!activePlanId && page !== 'mix-plans'
-  // Suppress the bottom MiniPlayer whenever the Library workspace is in front, since
-  // the workspace already shows playback controls + waveform for the selected track.
+  // Hide the bottom MiniPlayer (visually) whenever the Library workspace is in
+  // front — the workspace already shows playback controls + waveform for the
+  // loaded track, so two strips would just duplicate.
+  //
+  // Important: we only HIDE it, never unmount. The MiniPlayer owns the App-level
+  // audio deck (HTMLAudioElement + Web Audio graph + the imperative play/pause/seek
+  // commands published into usePlayer). Unmounting it kills the deck, which is
+  // why playback fired off the workspace was silent until the user navigated to
+  // a page where MiniPlayer remounted.
   const showMiniPlayer = !libraryWorkspaceActive
 
   return (
@@ -83,7 +90,9 @@ function App() {
           />
         )}
 
-        {showMiniPlayer && <MiniPlayer />}
+        <div className={showMiniPlayer ? '' : 'hidden'}>
+          <MiniPlayer />
+        </div>
       </div>
 
       {/* Global toasts + overlays — not page-scoped */}
