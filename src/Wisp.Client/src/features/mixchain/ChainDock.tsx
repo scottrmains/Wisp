@@ -16,6 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { MixPlanTrack, Track } from '../../api/types'
+import { usePlayer } from '../../state/player'
 import { formatBpm } from '../library/format'
 import { PreviewDialog } from '../preview/PreviewDialog'
 import { useMixPlan, useMixPlans } from './useMixPlans'
@@ -38,6 +39,7 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
   const { rename } = useMixPlans()
   const [preview, setPreview] = useState<{ a: Track; b: Track } | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
+  const playTrack = usePlayer((s) => s.playTrack)
   const summary = computePlanSummary(plan)
   const warningsByTransition = indexWarningsByTransition(summary.warnings)
 
@@ -156,6 +158,7 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
                           order={i + 1}
                           onRemove={() => removeTrack.mutate(mpt.id)}
                           onNotesChange={(notes) => updateNotes.mutate({ mptId: mpt.id, notes })}
+                          onPlay={() => playTrack(mpt.track.id)}
                         />
                         {i < plan.tracks.length - 1 && (
                           <TransitionGap
@@ -193,11 +196,13 @@ function SortableCard({
   order,
   onRemove,
   onNotesChange,
+  onPlay,
 }: {
   mpt: MixPlanTrack
   order: number
   onRemove: () => void
   onNotesChange: (notes: string) => void
+  onPlay: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mpt.id })
   const [notes, setNotes] = useState(mpt.transitionNotes ?? '')
@@ -219,6 +224,14 @@ function SortableCard({
           <span className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded bg-[var(--color-accent)]/20 px-1 text-[10px] font-semibold text-[var(--color-accent)] tabular-nums">
             {order.toString().padStart(2, '0')}
           </span>
+          <button
+            onClick={onPlay}
+            className="text-[10px] text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+            title="Play in mini-player"
+            aria-label="Play in mini-player"
+          >
+            ▶
+          </button>
           <button
             {...attributes}
             {...listeners}

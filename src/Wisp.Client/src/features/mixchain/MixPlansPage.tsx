@@ -16,6 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { MixPlanTrack, Track } from '../../api/types'
+import { usePlayer } from '../../state/player'
 import { formatBpm } from '../library/format'
 import { PreviewDialog } from '../preview/PreviewDialog'
 import { ChainStats } from './ChainStats'
@@ -267,6 +268,7 @@ function BigCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mpt.id })
   const [notes, setNotes] = useState(mpt.transitionNotes ?? '')
+  const playTrack = usePlayer((s) => s.playTrack)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -287,6 +289,14 @@ function BigCard({
         <span className="inline-flex h-6 min-w-[2rem] items-center justify-center rounded bg-[var(--color-accent)]/20 px-1.5 text-xs font-semibold text-[var(--color-accent)] tabular-nums">
           {order.toString().padStart(2, '0')}
         </span>
+        <button
+          onClick={() => playTrack(mpt.track.id)}
+          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+          title="Play in mini-player"
+          aria-label="Play in mini-player"
+        >
+          ▶
+        </button>
         <button
           {...attributes}
           {...listeners}
