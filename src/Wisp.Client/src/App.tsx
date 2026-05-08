@@ -31,6 +31,12 @@ import { bridge, bridgeAvailable } from './bridge'
 /// Settings stays as a modal overlay (contextual panel, not a section).
 function App() {
   const page = useCurrentPage((s) => s.page)
+  // When LibraryPage's TrackPrepWorkspace is showing, the workspace owns the
+  // playback UI for the selected track — the bottom MiniPlayer would just
+  // duplicate the same controls. Hide it in that case. The mini-player still
+  // renders when no row is selected, so users coming back from Mix Plans /
+  // Crate Digger with a track playing don't lose visibility of it.
+  const libraryWorkspaceActive = useCurrentPage((s) => s.libraryWorkspaceActive)
   const { activePlanId } = useActivePlan()
   const scan = useScan()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -47,6 +53,9 @@ function App() {
   // Mix Plans has its own full chain workspace; showing the compact dock there too
   // would render the same plan twice. Hide it on that page only.
   const showChainDock = !!activePlanId && page !== 'mix-plans'
+  // Suppress the bottom MiniPlayer whenever the Library workspace is in front, since
+  // the workspace already shows playback controls + waveform for the selected track.
+  const showMiniPlayer = !libraryWorkspaceActive
 
   return (
     <div className="flex h-full">
@@ -74,7 +83,7 @@ function App() {
           />
         )}
 
-        <MiniPlayer />
+        {showMiniPlayer && <MiniPlayer />}
       </div>
 
       {/* Global toasts + overlays — not page-scoped */}

@@ -42,6 +42,7 @@ export function LibraryPage() {
 
   const qc = useQueryClient()
   const setPage = useCurrentPage((s) => s.setPage)
+  const setLibraryWorkspaceActive = useCurrentPage((s) => s.setLibraryWorkspaceActive)
   const activePlaylistId = useActivePlaylist((s) => s.activePlaylistId)
   const setActivePlaylistId = useActivePlaylist((s) => s.setActivePlaylistId)
   // Playlist metadata (for the scope banner). Cheap — already cached by the sidebar.
@@ -142,6 +143,13 @@ export function LibraryPage() {
   }
 
   const inspectorTarget = selectedIds.size > 1 ? null : selected
+
+  // Tell App when the workspace is showing so it can suppress the redundant MiniPlayer.
+  // Cleared on unmount so navigating away re-enables the mini-player on the next page.
+  useEffect(() => {
+    setLibraryWorkspaceActive(inspectorTarget !== null)
+    return () => setLibraryWorkspaceActive(false)
+  }, [inspectorTarget, setLibraryWorkspaceActive])
 
   const buildMenuItems = (rowTrack: Track): ContextMenuItem[] => {
     const opIds = selectedIds.has(rowTrack.id) && selectedIds.size > 1
