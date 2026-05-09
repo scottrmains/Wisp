@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation } from '@tanstack/react-query'
 import { soulseek } from '../../api/soulseek'
 import type { SoulseekSearchHit, SoulseekTransfer } from '../../api/types'
@@ -185,7 +186,12 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
   const remainingSec = Math.max(0, Math.ceil((SEARCH_TIMEOUT_MS - elapsedMs) / 1000))
   const totalHidden = hits.length - filteredHits.length
 
-  return (
+  // Portal into document.body so the modal escapes any ancestor that creates
+  // a new stacking / containing context (transforms, filter, isolation,
+  // contain). The Wanted / Discover callsites mount the dialog inside list
+  // items, and those ancestors can pin position:fixed to the wrong frame —
+  // user reported the dialog showing as "empty" when launched from Wanted.
+  return createPortal(
     <div
       className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/70 p-4"
       onClick={(e) => { if (e.target === e.currentTarget && !searching) onClose() }}
@@ -383,7 +389,8 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
