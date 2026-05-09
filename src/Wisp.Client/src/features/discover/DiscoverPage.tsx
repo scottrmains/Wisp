@@ -12,7 +12,7 @@ import type {
 } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useUiPrefs } from '../../state/uiPrefs'
-import { SoulseekPanel } from '../cratedigger/SoulseekPanel'
+import { SoulseekDialog } from '../soulseek/SoulseekDialog'
 import { useWantedTracks } from '../wanted/useWantedTracks'
 import { ArtistMatchModal } from './ArtistMatchModal'
 
@@ -636,9 +636,11 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
         </div>
       )}
       {expandSlskd && (
-        <div className="border-t border-[var(--color-border)] px-3 pb-3">
-          <SoulseekPanel artist={artist} title={title} />
-        </div>
+        <SoulseekDialog
+          initialArtist={artist}
+          initialTitle={title}
+          onClose={() => setExpandSlskd(false)}
+        />
       )}
     </div>
   )
@@ -1042,9 +1044,11 @@ function ReleaseRow({
         </div>
       )}
       {slskdExpanded && (
-        <div className="border-t border-[var(--color-border)] px-3 pb-3">
-          <SoulseekPanel artist={artistName} title={release.title} />
-        </div>
+        <SoulseekDialog
+          initialArtist={artistName}
+          initialTitle={release.title}
+          onClose={() => setSlskdExpanded(false)}
+        />
       )}
     </li>
   )

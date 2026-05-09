@@ -29,6 +29,20 @@ interface UiPrefsState {
   discoverSpotifyEnabled: boolean
   discoverYouTubeEnabled: boolean
   toggleDiscoverSource: (source: 'spotify' | 'youtube') => void
+
+  /// Soulseek dialog filter prefs. Default to MP3 320 because that's the
+  /// DJ-deck-friendly format the user explicitly picks; persisted so the
+  /// preferred filter applies on every search without re-toggling.
+  slskdFormat: 'any' | 'mp3' | 'flac' | 'wav'
+  slskdMp3Bitrate: 'any' | '320' | '256+'
+  slskdHideLocked: boolean
+  slskdFreeSlotsOnly: boolean
+  setSlskdFilter: (next: Partial<{
+    slskdFormat: 'any' | 'mp3' | 'flac' | 'wav'
+    slskdMp3Bitrate: 'any' | '320' | '256+'
+    slskdHideLocked: boolean
+    slskdFreeSlotsOnly: boolean
+  }>) => void
 }
 
 const MIN_WIDTH = 280
@@ -64,6 +78,15 @@ export const useUiPrefs = create<UiPrefsState>()(
             ? { discoverSpotifyEnabled: !s.discoverSpotifyEnabled }
             : { discoverYouTubeEnabled: !s.discoverYouTubeEnabled },
         ),
+
+      // Soulseek filter defaults — MP3 320 is the DJ-deck sweet spot, hide
+      // locked files (share-ratio gated) by default since they need a
+      // share to download anyway.
+      slskdFormat: 'mp3',
+      slskdMp3Bitrate: '320',
+      slskdHideLocked: true,
+      slskdFreeSlotsOnly: false,
+      setSlskdFilter: (next) => set((s) => ({ ...s, ...next })),
     }),
     {
       name: 'wisp.uiPrefs',

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { WantedTrack } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { confirmDialog } from '../../components/dialog'
-import { SoulseekPanel } from '../cratedigger/SoulseekPanel'
+import { SoulseekDialog } from '../soulseek/SoulseekDialog'
 import { useWantedTracks } from './useWantedTracks'
 
 /// Single timeline-sorted page for everything the user has marked Want from
@@ -104,11 +104,11 @@ export function WantedPage() {
                     </button>
                   )}
                   <button
-                    onClick={() => setSlskdFor(slskdFor === w.id ? null : w.id)}
+                    onClick={() => setSlskdFor(w.id)}
                     className="rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
                     title="Search Soulseek"
                   >
-                    {slskdFor === w.id ? '▾ Soulseek' : '🎼 Soulseek'}
+                    🎼 Soulseek
                   </button>
                   <button
                     onClick={() => handleRemove(w)}
@@ -120,9 +120,11 @@ export function WantedPage() {
                 </div>
               </div>
               {slskdFor === w.id && (
-                <div className="border-t border-[var(--color-border)] px-3 pb-3">
-                  <SoulseekPanel artist={w.artist} title={w.title} />
-                </div>
+                <SoulseekDialog
+                  initialArtist={w.artist}
+                  initialTitle={w.title}
+                  onClose={() => setSlskdFor(null)}
+                />
               )}
             </li>
           ))}

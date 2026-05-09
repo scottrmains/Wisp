@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { discovery } from '../../api/discovery'
 import type { DigitalMatch, DiscoveredTrack, DiscoveryStatus } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
-import { SoulseekPanel } from './SoulseekPanel'
+import { SoulseekDialog } from '../soulseek/SoulseekDialog'
 
 interface Props {
   trackId: string
@@ -12,6 +12,7 @@ interface Props {
 
 export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
   const qc = useQueryClient()
+  const [slskdOpen, setSlskdOpen] = useState(false)
   const detail = useQuery({
     queryKey: ['discovery-track', trackId],
     queryFn: () => discovery.getTrack(trackId),
@@ -19,11 +20,13 @@ export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // Don't close the detail modal when the user hits Esc with the
+      // Soulseek dialog open — that dialog handles its own Esc.
+      if (e.key === 'Escape' && !slskdOpen) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, slskdOpen])
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['discovery-track', trackId] })
@@ -160,9 +163,25 @@ export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
               </section>
 
               {detail.data && (
-                <SoulseekPanel
-                  artist={detail.data.track.parsedArtist}
-                  title={detail.data.track.parsedTitle}
+                <section className="mt-4">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    Soulseek (slskd)
+                  </h3>
+                  <button
+                    onClick={() => setSlskdOpen(true)}
+                    disabled={!detail.data.track.parsedArtist && !detail.data.track.parsedTitle}
+                    className="rounded-md border border-[var(--color-accent)]/40 px-3 py-2 text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-40"
+                    title="Open Soulseek search dialog"
+                  >
+                    🎼 Search Soulseek
+                  </button>
+                </section>
+              )}
+              {slskdOpen && detail.data && (
+                <SoulseekDialog
+                  initialArtist={detail.data.track.parsedArtist}
+                  initialTitle={detail.data.track.parsedTitle}
+                  onClose={() => setSlskdOpen(false)}
                 />
               )}
             </div>
