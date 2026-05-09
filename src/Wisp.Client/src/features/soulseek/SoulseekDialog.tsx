@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation } from '@tanstack/react-query'
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Disc3,
+  Download,
+  Lock,
+  Search as SearchIcon,
+  X,
+  Zap,
+} from 'lucide-react'
 import { soulseek } from '../../api/soulseek'
 import type { SoulseekSearchHit, SoulseekTransfer } from '../../api/types'
 import { useSoulseekStatus } from '../../state/soulseekStatus'
@@ -199,7 +210,9 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
       <div className="flex h-[90vh] w-full max-w-5xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl">
         <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">🎼 Search Soulseek</h2>
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold">
+              <Disc3 size={16} strokeWidth={1.75} /> Search Soulseek
+            </h2>
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">
               Searches the Soulseek peer network via your local slskd daemon.
             </p>
@@ -208,9 +221,9 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
             onClick={onClose}
             disabled={searching}
             title={searching ? 'Cancel the search first' : 'Close'}
-            className="text-xl leading-none text-[var(--color-muted)] hover:text-white disabled:opacity-30"
+            className="text-[var(--color-muted)] hover:text-white disabled:opacity-30"
           >
-            ×
+            <X size={18} strokeWidth={1.75} />
           </button>
         </header>
 
@@ -235,10 +248,10 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
             <button
               onClick={() => startSearch.mutate()}
               disabled={!query.trim() || !slskdConfigured || startSearch.isPending}
-              className="rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent)]/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent)]/90 disabled:cursor-not-allowed disabled:opacity-50"
               title={!slskdConfigured ? 'Configure slskd in Settings first' : `Search slskd for "${query}"`}
             >
-              🎼 Search Soulseek
+              <SearchIcon size={14} strokeWidth={2} /> Search Soulseek
             </button>
           )}
         </div>
@@ -275,13 +288,13 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
             active={filter.freeSlotsOnly}
             onClick={() => setFilter({ slskdFreeSlotsOnly: !filter.freeSlotsOnly })}
           >
-            ⚡ Free slots only
+            <Zap size={11} strokeWidth={1.75} /> Free slots only
           </FilterChip>
           <FilterChip
             active={filter.hideLocked}
             onClick={() => setFilter({ slskdHideLocked: !filter.hideLocked })}
           >
-            🔓 Hide locked
+            <Lock size={11} strokeWidth={1.75} /> Hide locked
           </FilterChip>
           <span className="ml-auto text-[var(--color-muted)]">
             {hits.length === 0
@@ -300,11 +313,11 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
         {searching && (
           <div className="border-b border-[var(--color-border)]/40 px-5 py-2">
             <div className="flex items-center justify-between text-[11px] text-[var(--color-muted)]">
-              <span>
+              <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                {' '}🟢 {responseCount} {responseCount === 1 ? 'user' : 'users'} responded · {hits.length} hits
+                {responseCount} {responseCount === 1 ? 'user' : 'users'} responded · {hits.length} hits
               </span>
-              <span>⏱ {remainingSec}s left</span>
+              <span className="inline-flex items-center gap-1"><Clock size={11} strokeWidth={1.75} /> {remainingSec}s left</span>
             </div>
             <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--color-bg)]">
               <div
@@ -317,7 +330,7 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
 
         {error && (
           <div className="border-b border-[var(--color-border)]/40 px-5 py-2">
-            <p className="text-xs text-red-400">⚠ {error}</p>
+            <p className="inline-flex items-center gap-1.5 text-xs text-red-400"><AlertTriangle size={12} strokeWidth={1.75} /> {error}</p>
           </div>
         )}
 
@@ -369,7 +382,7 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
           ) : !searchId && slskdConfigured ? (
             <EmptyState
               title="Ready to search."
-              hint={`Click "🎼 Search Soulseek" to query the peer network for "${query}".`}
+              hint={`Click "Search Soulseek" to query the peer network for "${query}".`}
               action={null}
             />
           ) : null}
@@ -492,8 +505,8 @@ function HitRow({
       <td className="max-w-[28rem] truncate px-3 py-2" title={hit.filename}>
         {fileName}
         {hit.locked && (
-          <span className="ml-2 rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-300" title="User has share-ratio gate">
-            🔒 locked
+          <span className="ml-2 inline-flex items-center gap-0.5 rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-300" title="User has share-ratio gate">
+            <Lock size={9} strokeWidth={2} /> locked
           </span>
         )}
         {/* In-flight download progress strip under the filename — visible
@@ -516,8 +529,8 @@ function HitRow({
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">{formatBytes(hit.size)}</td>
       <td className="px-3 py-2 text-[var(--color-muted)]">
-        <span className={hit.hasFreeUploadSlot ? 'text-emerald-300/80' : ''}>
-          {hit.hasFreeUploadSlot && '⚡ '}
+        <span className={`inline-flex items-center gap-1 ${hit.hasFreeUploadSlot ? 'text-emerald-300/80' : ''}`}>
+          {hit.hasFreeUploadSlot && <Zap size={11} strokeWidth={2} />}
           {hit.username}
         </span>
       </td>
@@ -529,7 +542,7 @@ function HitRow({
       </td>
       <td className="px-3 py-2 text-right">
         {completed ? (
-          <span className="text-emerald-300" title="Completed">✓ Done</span>
+          <span className="inline-flex items-center gap-1 text-emerald-300" title="Completed"><Check size={12} strokeWidth={2} /> Done</span>
         ) : inProgress ? (
           <span className="text-amber-300 tabular-nums" title={transfer!.state}>
             {transfer!.percentage > 0 ? `${transfer!.percentage.toFixed(0)}%` : transfer!.state}
@@ -538,9 +551,9 @@ function HitRow({
           <button
             onClick={() => download.mutate()}
             disabled={download.isPending}
-            className="rounded bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[var(--color-accent)]/90 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[var(--color-accent)]/90 disabled:opacity-40"
           >
-            {download.isPending ? '…' : '⬇ DL'}
+            {download.isPending ? '…' : <><Download size={11} strokeWidth={2} /> DL</>}
           </button>
         )}
       </td>

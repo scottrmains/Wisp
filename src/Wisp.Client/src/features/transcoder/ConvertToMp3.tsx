@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { Check, Cog, ExternalLink } from 'lucide-react'
 import type { Track } from '../../api/types'
 import { transcoder } from '../../api/transcoder'
 import { bridge, bridgeAvailable } from '../../bridge'
@@ -49,13 +50,13 @@ export function ConvertToMp3Button({ track }: { track: Track }) {
         disabled={!isReady}
         title={tooltip}
         className={[
-          'rounded-md border px-3 py-1.5 text-xs',
+          'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs',
           isReady
             ? 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white'
             : 'border-[var(--color-border)] text-[var(--color-muted)]/50 cursor-not-allowed',
         ].join(' ')}
       >
-        ⚙ MP3 320
+        <Cog size={12} strokeWidth={1.75} /> MP3 320
       </button>
       {open && <ConvertDialog track={track} onClose={() => setOpen(false)} />}
     </>
@@ -106,7 +107,7 @@ function ConvertDialog({ track, onClose }: { track: Track; onClose: () => void }
 
         {convert.isSuccess && (
           <div className="mt-4 space-y-2">
-            <p className="text-sm text-emerald-300">✓ Done</p>
+            <p className="inline-flex items-center gap-1.5 text-sm text-emerald-300"><Check size={14} strokeWidth={2} /> Done</p>
             <p className="break-all text-xs text-[var(--color-muted)]">
               {convert.data.outputPath}
             </p>
@@ -120,9 +121,9 @@ function ConvertDialog({ track, onClose }: { track: Track; onClose: () => void }
           {convert.isSuccess && bridgeAvailable() && (
             <button
               onClick={() => bridge.openInExplorer(convert.data!.outputPath)}
-              className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white"
             >
-              ↗ Reveal
+              <ExternalLink size={14} strokeWidth={1.75} /> Reveal
             </button>
           )}
           <button

@@ -1,3 +1,4 @@
+import { FolderSearch, Settings } from 'lucide-react'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { SoulseekStatusIndicator } from '../soulseek/SoulseekStatusIndicator'
@@ -20,9 +21,10 @@ export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
       <button
         onClick={onScan}
         disabled={!bridgeAvailable() || scanActive}
-        className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
         title={bridgeAvailable() ? 'Pick a folder and scan' : 'Folder picker only works inside Photino'}
       >
+        <FolderSearch size={14} strokeWidth={1.75} />
         {scanActive ? 'Scanning…' : 'Scan folder'}
       </button>
       <button
@@ -31,7 +33,7 @@ export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
         aria-label="Settings"
         title="Settings"
       >
-        ⚙
+        <Settings size={16} strokeWidth={1.75} />
       </button>
     </header>
   )

@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Compass,
+  Heart,
+  Library as LibraryIcon,
+  Pencil,
+  Pickaxe,
+  Plus,
+  SlidersVertical,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react'
 import { playlists } from '../../api/playlists'
 import { useActivePlaylist } from '../../state/activePlaylist'
 import { useCurrentPage, type AppPage } from '../../state/currentPage'
@@ -11,15 +22,15 @@ import { useWantedTracks } from '../wanted/useWantedTracks'
 interface SectionDef {
   id: AppPage
   label: string
-  icon: string
+  icon: LucideIcon
 }
 
 const SECTIONS: SectionDef[] = [
-  { id: 'library', label: 'Library', icon: '🎵' },
-  { id: 'mix-plans', label: 'Mix Plans', icon: '🎚' },
-  { id: 'discover', label: 'Discover', icon: '🔁' },
-  { id: 'wanted', label: 'Wanted', icon: '❤️' },
-  { id: 'crate-digger', label: 'Crate Digger', icon: '⛏' },
+  { id: 'library', label: 'Library', icon: LibraryIcon },
+  { id: 'mix-plans', label: 'Mix Plans', icon: SlidersVertical },
+  { id: 'discover', label: 'Discover', icon: Compass },
+  { id: 'wanted', label: 'Wanted', icon: Heart },
+  { id: 'crate-digger', label: 'Crate Digger', icon: Pickaxe },
 ]
 
 const WISP_DRAG_TYPE = 'application/x-wisp-track-ids'
@@ -132,11 +143,11 @@ export function AppSidebar() {
               <span>Playlists</span>
               <button
                 onClick={() => setCreateOpen(true)}
-                className="text-base leading-none text-[var(--color-muted)] hover:text-white"
+                className="text-[var(--color-muted)] hover:text-white"
                 title="New playlist"
                 aria-label="New playlist"
               >
-                +
+                <Plus size={14} strokeWidth={2} />
               </button>
             </div>
             <ul className="flex flex-col gap-0.5 px-1 pt-1">
@@ -198,14 +209,14 @@ export function AppSidebar() {
 function SidebarButton({
   active,
   collapsed,
-  icon,
+  icon: Icon,
   label,
   badge,
   onClick,
 }: {
   active: boolean
   collapsed: boolean
-  icon: string
+  icon: LucideIcon
   label: string
   /// Optional count badge after the label (e.g. Wanted: N). Only renders
   /// when expanded; in collapsed mode the count would have nowhere to go.
@@ -224,7 +235,7 @@ function SidebarButton({
           : 'text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
       ].join(' ')}
     >
-      <span aria-hidden className="text-base">{icon}</span>
+      <Icon size={16} aria-hidden strokeWidth={1.75} />
       {!collapsed && (
         <>
           <span className="flex-1 text-left">{label}</span>
@@ -353,11 +364,11 @@ function PlaylistContextMenu({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button onClick={onRename} className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--color-accent)]/20 hover:text-white">
-          <span className="w-4 text-center text-[var(--color-muted)]">✎</span>
+          <Pencil size={14} className="text-[var(--color-muted)]" strokeWidth={1.75} />
           <span>Rename</span>
         </button>
         <button onClick={onDelete} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-red-300 hover:bg-red-500/10">
-          <span className="w-4 text-center">🗑</span>
+          <Trash2 size={14} strokeWidth={1.75} />
           <span>Delete</span>
         </button>
       </div>
