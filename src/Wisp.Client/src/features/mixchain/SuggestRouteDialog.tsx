@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { AlertTriangle } from 'lucide-react'
 import { mixPlans } from '../../api/mixPlans'
 import type { MixPlanTrack, SuggestedRoute, Track } from '../../api/types'
 import { formatBpm } from '../library/format'
@@ -116,8 +117,8 @@ function RouteRow({
           <span className="ml-2 text-xs text-[var(--color-muted)]">
             score {route.totalScore} · {route.summary}
             {route.warningCount > 0 && (
-              <span className="ml-1 text-amber-400" title={`${route.warningCount} rough transition${route.warningCount === 1 ? '' : 's'}`}>
-                · ⚠ {route.warningCount}
+              <span className="ml-1 inline-flex items-center gap-1 text-amber-400" title={`${route.warningCount} rough transition${route.warningCount === 1 ? '' : 's'}`}>
+                · <AlertTriangle size={11} strokeWidth={2} /> {route.warningCount}
               </span>
             )}
           </span>

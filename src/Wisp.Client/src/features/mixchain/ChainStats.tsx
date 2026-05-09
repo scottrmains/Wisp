@@ -1,3 +1,4 @@
+import { AlertTriangle, ArrowRight } from 'lucide-react'
 import type { MixPlanTrack } from '../../api/types'
 
 interface Props {
@@ -68,7 +69,9 @@ function KeyPathView({ tracks }: { tracks: MixPlanTrack[] }) {
             <span key={t.id} className="flex items-center gap-1">
               {i > 0 && (
                 <span className={warn ? 'text-amber-400' : 'text-[var(--color-muted)]'}>
-                  {warn ? '⚠' : '→'}
+                  {warn
+                    ? <AlertTriangle size={11} strokeWidth={2} />
+                    : <ArrowRight size={11} strokeWidth={1.75} />}
                 </span>
               )}
               <span

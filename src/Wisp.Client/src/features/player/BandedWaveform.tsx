@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Play, Search as SearchIcon } from 'lucide-react'
 import { getCachedBandedPeaks, loadBandedPeaks, type BandedPeaks } from '../../audio/peaks'
 import { beatTicksInRange, snapToBeat } from '../../audio/snap'
 
@@ -253,9 +254,9 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
               aria-label={c.label
                 ? `Play from ${c.label}`
                 : `Play from cue at ${formatTimeShort(c.timeSeconds)}`}
-              className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-accent)] text-[9px] leading-none text-white opacity-0 shadow transition-opacity hover:scale-110 group-hover:opacity-95"
+              className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-accent)] text-white opacity-0 shadow transition-opacity hover:scale-110 group-hover:opacity-95"
             >
-              ▶
+              <Play size={10} fill="currentColor" />
             </button>
             {c.label && (
               <span className="pointer-events-none absolute left-7 right-1.5 top-1.5 truncate text-left text-[10px] font-semibold uppercase tracking-wide text-white opacity-0 transition-opacity group-hover:opacity-90">
@@ -500,7 +501,7 @@ function MagnifierFooter({
 
   return (
     <div className="flex items-center justify-between gap-2 border-t border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/80">
-      <span>🔍 {formatTimeFine(cursorTime)}</span>
+      <span className="inline-flex items-center gap-1"><SearchIcon size={10} strokeWidth={1.75} /> {formatTimeFine(cursorTime)}</span>
       {snapsTo ? (
         <span className="text-[rgb(74,222,128)]">→ {formatTimeFine(snapTime!)}</span>
       ) : (

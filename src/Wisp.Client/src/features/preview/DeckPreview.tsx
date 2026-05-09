@@ -1,3 +1,4 @@
+import { Pause, Play } from 'lucide-react'
 import type { Track } from '../../api/types'
 import type { AudioDeck } from '../../audio/useAudioDeck'
 import { CuePointEditor } from '../cues/CuePointEditor'
@@ -43,11 +44,9 @@ export function DeckPreview({ label, track, deck }: Props) {
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-white"
           aria-label={deck.isPlaying ? 'Pause' : 'Play'}
         >
-          {deck.isPlaying ? (
-            <span className="text-base">❚❚</span>
-          ) : (
-            <span className="ml-0.5 text-base">▶</span>
-          )}
+          {deck.isPlaying
+            ? <Pause size={16} fill="currentColor" />
+            : <Play size={16} fill="currentColor" className="translate-x-[1px]" />}
         </button>
 
         <span className="w-20 shrink-0 text-xs tabular-nums text-[var(--color-muted)]">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, Check, X } from 'lucide-react'
 import { apiDelete, apiGet, apiPost } from '../../api/client'
 import { cleanup } from '../../api/cleanup'
 import { transcoder } from '../../api/transcoder'
@@ -225,8 +226,10 @@ function SpotifySettings() {
         </div>
       )}
       {testResult && (
-        <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
-          {testResult.ok ? '✓ Connection OK' : `✗ ${testResult.message}`}
+        <p className={`inline-flex items-center gap-1 text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {testResult.ok
+            ? <><Check size={11} strokeWidth={2} /> Connection OK</>
+            : <><X size={11} strokeWidth={2} /> {testResult.message}</>}
         </p>
       )}
     </div>
@@ -513,7 +516,9 @@ function SoulseekSettings() {
       )}
       {testResult && (
         <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
-          {testResult.ok ? '✓ Connected' : `✗ ${testResult.message}`}
+          {testResult.ok
+            ? <span className="inline-flex items-center gap-1"><Check size={11} strokeWidth={2} /> Connected</span>
+            : <span className="inline-flex items-center gap-1"><X size={11} strokeWidth={2} /> {testResult.message}</span>}
         </p>
       )}
     </div>
@@ -635,8 +640,10 @@ function SingleTokenSettings(props: {
         </div>
       )}
       {testResult && (
-        <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
-          {testResult.ok ? '✓ Connection OK' : `✗ ${testResult.message}`}
+        <p className={`inline-flex items-center gap-1 text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {testResult.ok
+            ? <><Check size={11} strokeWidth={2} /> Connection OK</>
+            : <><X size={11} strokeWidth={2} /> {testResult.message}</>}
         </p>
       )}
     </div>
@@ -663,10 +670,12 @@ function TranscoderSettings() {
     },
   })
 
-  const stateLabel = !status.data ? '…'
-    : !status.data.isReady ? '⚠ FFmpeg not found'
-    : status.data.bundled ? '✓ Detected · bundled'
-    : '✓ Detected'
+  const stateLabel: React.ReactNode = !status.data ? '…'
+    : !status.data.isReady
+      ? <span className="inline-flex items-center gap-1"><AlertTriangle size={12} strokeWidth={2} /> FFmpeg not found</span>
+      : status.data.bundled
+        ? <span className="inline-flex items-center gap-1"><Check size={12} strokeWidth={2} /> Detected · bundled</span>
+        : <span className="inline-flex items-center gap-1"><Check size={12} strokeWidth={2} /> Detected</span>
 
   const stateClass = !status.data?.isReady
     ? 'text-amber-300'

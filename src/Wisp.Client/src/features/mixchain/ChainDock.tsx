@@ -15,6 +15,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { ChevronDown, ChevronUp, Play } from 'lucide-react'
 import type { MixPlanTrack, Track } from '../../api/types'
 import { usePlayer } from '../../state/player'
 import { formatBpm } from '../library/format'
@@ -120,7 +121,9 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
             className="text-[var(--color-muted)] hover:text-white"
             aria-label={collapsed ? 'Expand chain' : 'Collapse chain'}
           >
-            {collapsed ? '▴' : '▾'}
+            {collapsed
+              ? <ChevronUp size={14} strokeWidth={1.75} />
+              : <ChevronDown size={14} strokeWidth={1.75} />}
           </button>
           <h2 className="text-sm font-semibold">{plan?.name ?? 'Mix chain'}</h2>
           <span className="text-xs text-[var(--color-muted)]">
@@ -226,11 +229,11 @@ function SortableCard({
           </span>
           <button
             onClick={onPlay}
-            className="text-[10px] text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+            className="text-[var(--color-muted)] hover:text-[var(--color-accent)]"
             title="Play in mini-player"
             aria-label="Play in mini-player"
           >
-            ▶
+            <Play size={10} fill="currentColor" />
           </button>
           <button
             {...attributes}

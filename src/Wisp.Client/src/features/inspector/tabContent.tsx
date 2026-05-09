@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tracks as tracksApi } from '../../api/library'
 import { tags as tagsApi } from '../../api/tags'
 import type { TagType, Track, TrackTag } from '../../api/types'
+import { ArrowLeftRight, Sparkles, Target, Trash2 } from 'lucide-react'
 import { detectFirstBeatFromPeaks, getCachedBandedPeaks } from '../../audio/peaks'
 import { confirmDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
@@ -141,10 +142,10 @@ export function CuesTab({ track }: { track: Track }) {
   // affordance). When the track has no BPM tag, the button is disabled with a
   // tooltip explaining why — more discoverable than hiding the whole strip.
   const noBpm = track.bpm === null
-  const anchorLabel: Record<typeof anchorSource, string> = {
+  const anchorLabel: Record<typeof anchorSource, React.ReactNode> = {
     firstBeatCue: 'from cue',
     playhead: 'from playhead',
-    autoDetected: '🎯 auto',
+    autoDetected: <span className="inline-flex items-center gap-0.5"><Target size={10} strokeWidth={1.75} /> auto</span>,
     trackStart: 'fallback',
   }
   const header = (
@@ -169,22 +170,24 @@ export function CuesTab({ track }: { track: Track }) {
         <button
           onClick={handleClearAll}
           disabled={cues.length === 0 || removeAll.isPending}
-          className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-muted)] hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted)]"
+          className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-muted)] hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted)]"
           title={cues.length === 0
             ? 'No cues to delete'
             : `Delete all ${cues.length} cues on this track`}
         >
-          {removeAll.isPending ? 'Clearing…' : '🗑 Clear all'}
+          <Trash2 size={11} strokeWidth={1.75} />
+          {removeAll.isPending ? 'Clearing…' : 'Clear all'}
         </button>
         <button
           onClick={handleGeneratePhrases}
           disabled={noBpm || generatePhraseMarkers.isPending}
-          className="rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
+          className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
           title={noBpm
             ? 'Track has no BPM tag — Wisp can\'t extrapolate phrase positions. Add a BPM via cleanup first.'
             : 'Generate phrase markers across the track using the anchor + the BPM tag'}
         >
-          {generatePhraseMarkers.isPending ? 'Generating…' : '✨ Generate phrases'}
+          <Sparkles size={11} strokeWidth={1.75} />
+          {generatePhraseMarkers.isPending ? 'Generating…' : 'Generate phrases'}
         </button>
       </div>
     </div>
@@ -197,11 +200,11 @@ export function CuesTab({ track }: { track: Track }) {
         {header}
         <div className="space-y-2 px-5 py-6 text-sm text-[var(--color-muted)]">
           <p>
-            No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>＋ Cue</strong> in the action row.
+            No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>Cue</strong> in the action row.
           </p>
           {!noBpm && (
             <p className="text-xs">
-              For phrase markers across the whole track: pause at the kick on bar 1, then click <strong>✨ Generate phrases</strong> above — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
+              For phrase markers across the whole track: pause at the kick on bar 1, then click <strong>Generate phrases</strong> above — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
             </p>
           )}
         </div>
@@ -258,7 +261,7 @@ export function CuesTab({ track }: { track: Track }) {
             title="Jump to cue"
             aria-label="Jump to cue"
           >
-            ↪
+            <ArrowLeftRight size={13} strokeWidth={1.75} />
           </button>
           <button
             onClick={() => remove.mutate(c.id)}
@@ -266,7 +269,7 @@ export function CuesTab({ track }: { track: Track }) {
             title="Delete cue"
             aria-label="Delete cue"
           >
-            🗑
+            <Trash2 size={13} strokeWidth={1.75} />
           </button>
         </li>
       ))}

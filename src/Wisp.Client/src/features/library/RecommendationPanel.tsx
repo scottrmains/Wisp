@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
 import { playlists as playlistsApi } from '../../api/playlists'
 import type { Recommendation, RecommendationMode, Track } from '../../api/types'
-import { Pause, Play, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pause, Play, Plus } from 'lucide-react'
 import { useActivePlan } from '../../state/activePlan'
 import { usePlayer } from '../../state/player'
 import { useMixPlan } from '../mixchain/useMixPlans'
@@ -16,7 +16,7 @@ const MODES: { value: RecommendationMode; label: string }[] = [
   { value: 'SameVibe', label: 'Same vibe' },
   { value: 'Creative', label: 'Creative' },
   { value: 'Wildcard', label: 'Wildcard' },
-  { value: 'Party', label: '🪩 Party' },
+  { value: 'Party', label: 'Party' },
 ]
 
 interface RecommendationsListProps {
@@ -267,14 +267,15 @@ function RecommendationRow({
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setOpen((o) => !o)}
             className={[
-              'rounded-md border px-2 py-0.5 text-[11px] transition-colors',
+              'inline-flex items-center gap-0.5 rounded-md border px-2 py-0.5 text-[11px] transition-colors',
               open
                 ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white'
                 : 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
             ].join(' ')}
             aria-expanded={open}
           >
-            {open ? '▾ Why' : '▸ Why?'}
+            {open ? <ChevronDown size={11} strokeWidth={1.75} /> : <ChevronRight size={11} strokeWidth={1.75} />}
+            Why{open ? '' : '?'}
           </button>
         </div>
       </div>

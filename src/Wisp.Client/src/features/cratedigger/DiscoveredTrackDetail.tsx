@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, Disc3, ExternalLink } from 'lucide-react'
 import { discovery } from '../../api/discovery'
 import type { DigitalMatch, DiscoveredTrack, DiscoveryStatus } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
@@ -123,8 +124,8 @@ export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
                 })}
               </div>
               {detail.data?.track.isAlreadyInLibrary && (
-                <p className="mt-2 text-[11px] text-blue-300">
-                  ✓ Already in your library — Wisp matched this against your scanned tracks.
+                <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-blue-300">
+                  <Check size={11} strokeWidth={2} /> Already in your library — Wisp matched this against your scanned tracks.
                 </p>
               )}
             </div>
@@ -170,10 +171,10 @@ export function DiscoveredTrackDetail({ trackId, onClose }: Props) {
                   <button
                     onClick={() => setSlskdOpen(true)}
                     disabled={!detail.data.track.parsedArtist && !detail.data.track.parsedTitle}
-                    className="rounded-md border border-[var(--color-accent)]/40 px-3 py-2 text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-40"
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--color-accent)]/40 px-3 py-2 text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-40"
                     title="Open Soulseek search dialog"
                   >
-                    🎼 Search Soulseek
+                    <Disc3 size={14} strokeWidth={1.75} /> Search Soulseek
                   </button>
                 </section>
               )}
@@ -302,9 +303,9 @@ function MatchRow({ match }: { match: DigitalMatch }) {
       <button
         onClick={() => bridgeAvailable() && void bridge.openExternal(match.url)}
         disabled={!bridgeAvailable() || !match.url}
-        className="shrink-0 rounded border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-muted)] hover:text-white disabled:opacity-30"
+        className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-muted)] hover:text-white disabled:opacity-30"
       >
-        Open ↗
+        Open <ExternalLink size={10} strokeWidth={1.75} />
       </button>
     </li>
   )

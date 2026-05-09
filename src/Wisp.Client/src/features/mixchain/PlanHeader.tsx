@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { AlertTriangle, type LucideIcon } from 'lucide-react'
 import { playlists as playlistsApi } from '../../api/playlists'
 import type { MixPlan } from '../../api/types'
 import { formatBpm } from '../library/format'
@@ -79,7 +80,8 @@ export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
           )}
           {summary.warnings.length > 0 && (
             <Stat
-              label={`⚠ ${summary.warnings.length} warning${summary.warnings.length === 1 ? '' : 's'}`}
+              icon={AlertTriangle}
+              label={`${summary.warnings.length} warning${summary.warnings.length === 1 ? '' : 's'}`}
               tone="warn"
               title={summary.warnings.map((w) => w.message).join('\n')}
             />
@@ -121,10 +123,12 @@ function Stat({
   label,
   tone,
   title,
+  icon: Icon,
 }: {
   label: string
   tone?: 'up' | 'down' | 'flat' | 'warn'
   title?: string
+  icon?: LucideIcon
 }) {
   const cls =
     tone === 'warn'
@@ -135,7 +139,8 @@ function Stat({
           ? 'border-sky-500/40 bg-sky-500/10 text-sky-200'
           : 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-muted)]'
   return (
-    <span className={`rounded-md border px-2 py-0.5 ${cls}`} title={title}>
+    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${cls}`} title={title}>
+      {Icon && <Icon size={11} strokeWidth={1.75} />}
       {label}
     </span>
   )

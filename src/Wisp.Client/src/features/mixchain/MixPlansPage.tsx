@@ -15,6 +15,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { Play } from 'lucide-react'
 import type { MixPlanTrack, Track } from '../../api/types'
 import { confirmDialog, promptDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
@@ -303,11 +304,11 @@ function BigCard({
         </span>
         <button
           onClick={() => playTrack(mpt.track.id)}
-          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+          className="text-[var(--color-muted)] hover:text-[var(--color-accent)]"
           title="Play in mini-player"
           aria-label="Play in mini-player"
         >
-          ▶
+          <Play size={11} fill="currentColor" />
         </button>
         <button
           {...attributes}

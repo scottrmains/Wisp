@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { confirmDialog, promptDialog } from '../../components/dialog'
 import { useMixPlans } from './useMixPlans'
 
@@ -49,7 +50,7 @@ export function PlanSwitcher() {
       >
         <span className="text-[var(--color-muted)]">Mix plan:</span>
         <span className="font-medium">{active ? active.name : 'None'}</span>
-        <span className="text-[var(--color-muted)]">▾</span>
+        <ChevronDown size={12} strokeWidth={1.75} className="text-[var(--color-muted)]" />
       </button>
 
       {open && (
