@@ -4,6 +4,7 @@ import { tracks } from '../../api/library'
 import { playlists as playlistsApi } from '../../api/playlists'
 import type { Recommendation, RecommendationMode, Track } from '../../api/types'
 import { useActivePlan } from '../../state/activePlan'
+import { usePlayer } from '../../state/player'
 import { useMixPlan } from '../mixchain/useMixPlans'
 import { formatBpm } from './format'
 
@@ -143,6 +144,13 @@ function RecommendationRow({
 }) {
   const [open, setOpen] = useState(false)
   const t = rec.track
+  const playTrack = usePlayer((s) => s.playTrack)
+  const playerTrackId = usePlayer((s) => s.trackId)
+  const isPlaying = usePlayer((s) => s.isPlaying)
+  const togglePlay = usePlayer((s) => s.togglePlay)
+
+  // The same row is "now playing" when its track id matches the player's.
+  const isLoaded = playerTrackId === t.id
 
   // Pick the strongest one-line reason. Backend reasons[] is already ordered by
   // weight; if it's empty (rare), synthesise from the highest-scoring axis.
@@ -157,17 +165,51 @@ function RecommendationRow({
     e.dataTransfer.setData('application/x-wisp-track-ids', JSON.stringify([t.id]))
   }
 
+  // Click the row body (title / artist / pill area) to load the rec into the
+  // mini-player and start playback. This makes "audition this candidate"
+  // a single click instead of forcing the user to drag onto the chain or
+  // navigate away. Buttons inside the row stopPropagation so they keep
+  // their distinct affordances (Add / Why?).
+  const handlePlayClick = (e: React.MouseEvent) => {
+    // Native drag uses mousedown; a quick click fires onClick AFTER
+    // mousedown without starting a drag, which is exactly what we want.
+    // No special handling needed.
+    e.stopPropagation()
+    if (isLoaded) {
+      togglePlay()
+    } else {
+      playTrack(t.id)
+    }
+  }
+
   return (
     <div
       draggable
       onDragStart={onDragStart}
       className="cursor-grab border-b border-[var(--color-border)]/40 px-5 py-3 hover:bg-white/5 active:cursor-grabbing"
-      title="Drag to a mix plan / playlist"
+      title="Click to play · drag to a mix plan / playlist"
     >
       <div className="flex items-start gap-3">
         <ScoreBadge value={rec.total} />
-        <div className="min-w-0 flex-1">
+        <button
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handlePlayClick}
+          className={[
+            'min-w-0 flex-1 cursor-pointer text-left',
+            // No visual styling beyond a hover lift on the title — the row
+            // itself already has hover bg.
+          ].join(' ')}
+          title={isLoaded
+            ? (isPlaying ? 'Pause' : 'Resume')
+            : 'Play this recommendation'}
+        >
           <p className="truncate text-sm font-medium" title={t.title ?? ''}>
+            {isLoaded && (
+              <span
+                className="mr-1 text-[var(--color-accent)]"
+                aria-hidden
+              >{isPlaying ? '❚❚' : '▶'}</span>
+            )}
             {t.title ?? t.fileName}
           </p>
           <p className="truncate text-xs text-[var(--color-muted)]" title={t.artist ?? ''}>
@@ -186,8 +228,23 @@ function RecommendationRow({
               previously rated 😐 {rec.previousRating}
             </p>
           )}
-        </div>
+        </button>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={handlePlayClick}
+            className={[
+              'rounded-md border px-2.5 py-1 text-xs font-medium',
+              isLoaded
+                ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white'
+                : 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
+            ].join(' ')}
+            title={isLoaded
+              ? (isPlaying ? 'Pause' : 'Resume')
+              : 'Load + play in mini-player'}
+          >
+            {isLoaded ? (isPlaying ? '❚❚ Pause' : '▶ Resume') : '▶ Play'}
+          </button>
           {onAddToChain && (
             <button
               // stopPropagation so clicking the button doesn't also start a drag
