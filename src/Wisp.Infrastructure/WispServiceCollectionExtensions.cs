@@ -48,6 +48,11 @@ public static class WispServiceCollectionExtensions
         services.AddSingleton<YouTubeOptions>();
         services.AddSingleton<SoulseekOptions>();
 
+        // Mp3Transcoder reads the FFmpeg path from settings via the supplied
+        // provider; we thread the WispSettingsStore lookup through at the
+        // composition root in Wisp.Api/Program.cs (registered there because
+        // WispSettingsStore lives in the API project).
+
         services.AddSingleton<SpotifyCatalogClient>();
         services.AddSingleton<DiscogsCatalogClient>();
         services.AddSingleton<YouTubeCatalogClient>();

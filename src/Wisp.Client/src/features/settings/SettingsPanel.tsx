@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost } from '../../api/client'
 import { cleanup } from '../../api/cleanup'
+import { transcoder } from '../../api/transcoder'
 import type { SystemInfo } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 
@@ -68,9 +69,13 @@ export function SettingsPanel({ onClose }: Props) {
             <SoulseekSettings />
           </Section>
 
+          <Section title="Convert to MP3 (FFmpeg for DJ-deck export)">
+            <TranscoderSettings />
+          </Section>
+
           <Section title="Coming soon">
             <p className="text-xs text-[var(--color-muted)]">
-              Recommendation weight overrides, default mix mode, FFmpeg path, audio device selection, MusicBrainz.
+              Recommendation weight overrides, default mix mode, audio device selection, MusicBrainz.
             </p>
           </Section>
         </div>
@@ -633,6 +638,77 @@ function SingleTokenSettings(props: {
         <p className={`text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
           {testResult.ok ? '✓ Connection OK' : `✗ ${testResult.message}`}
         </p>
+      )}
+    </div>
+  )
+}
+
+/// Phase 23 — surfaces FFmpeg detection state and lets the user override the
+/// path. Override + save persists into WispSettings.FfmpegPath; the transcoder
+/// status is then re-queried so the row updates.
+function TranscoderSettings() {
+  const qc = useQueryClient()
+  const status = useQuery({
+    queryKey: ['transcoder-status'],
+    queryFn: () => transcoder.status(),
+  })
+  const [override, setOverride] = useState('')
+
+  const save = useMutation({
+    mutationFn: (path: string | null) =>
+      apiPost('/api/settings/ffmpeg', { ffmpegPath: path }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transcoder-status'] })
+      setOverride('')
+    },
+  })
+
+  const stateLabel = !status.data ? '…'
+    : !status.data.isReady ? '⚠ FFmpeg not found'
+    : status.data.bundled ? '✓ Detected · bundled'
+    : '✓ Detected'
+
+  const stateClass = !status.data?.isReady
+    ? 'text-amber-300'
+    : 'text-emerald-300'
+
+  return (
+    <div className="space-y-2 text-sm">
+      <Row label="Status">
+        <span className={stateClass}>{stateLabel}</span>
+      </Row>
+      {status.data?.ffmpegPath && (
+        <Row label="Path">
+          <code className="truncate rounded bg-[var(--color-surface)] px-2 py-1 text-xs" title={status.data.ffmpegPath}>
+            {status.data.ffmpegPath}
+          </code>
+        </Row>
+      )}
+      {!status.data?.isReady && (
+        <p className="text-xs text-[var(--color-muted)]">
+          The bundled <code>ffmpeg.exe</code> normally ships next to <code>Wisp.exe</code>. If it's missing, run <code>tools/get-ffmpeg.ps1</code> in the repo to fetch it, or paste a system FFmpeg path below.
+        </p>
+      )}
+      <Row label="Override path">
+        <div className="flex gap-2">
+          <input
+            value={override}
+            onChange={(e) => setOverride(e.target.value)}
+            placeholder="C:\\path\\to\\ffmpeg.exe"
+            className="min-w-0 flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs"
+          />
+          <button
+            onClick={() => save.mutate(override.trim() ? override.trim() : null)}
+            disabled={save.isPending}
+            className="rounded border border-[var(--color-border)] px-2 py-1 text-xs hover:bg-white/5 disabled:opacity-40"
+            title={override.trim() ? 'Save override path' : 'Clear override (use bundled / PATH)'}
+          >
+            {override.trim() ? 'Save' : 'Clear'}
+          </button>
+        </div>
+      </Row>
+      {save.isError && (
+        <p className="text-xs text-red-400">{(save.error as Error).message}</p>
       )}
     </div>
   )

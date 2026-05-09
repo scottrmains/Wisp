@@ -10,6 +10,10 @@ public sealed record WispSettings
     public WindowState? Window { get; init; }
     public RecommendationWeights? RecommendationWeights { get; init; }
     public CatalogCredentials? Catalog { get; init; }
+    /// Optional override for the FFmpeg binary path used by Mp3Transcoder
+    /// (Phase 23). When null, discovery falls back to a bundled
+    /// `ffmpeg.exe` next to `Wisp.exe`, then PATH.
+    public string? FfmpegPath { get; init; }
 }
 
 public sealed record WindowState(int Width, int Height, int? X, int? Y);

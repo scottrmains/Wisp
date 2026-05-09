@@ -8,6 +8,7 @@ import { bridge, bridgeAvailable } from '../../bridge'
 import { useCues } from '../cues/useCues'
 import { CuesTab, MetadataTab, NotesTab, OverviewTab, TagsTab } from '../inspector/tabContent'
 import { BandedWaveform } from '../player/BandedWaveform'
+import { ConvertToMp3Button } from '../transcoder/ConvertToMp3'
 import { RecommendationsList } from './RecommendationPanel'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
 import { formatDuration } from './format'
@@ -433,6 +434,7 @@ export function TrackPrepWorkspace({
             ↗ Reveal
           </ActionButton>
         )}
+        <ConvertToMp3Button track={track} />
       </div>
 
       {/* Tab bar */}

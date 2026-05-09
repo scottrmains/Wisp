@@ -29,6 +29,7 @@
     <SpaRoot>..\Wisp.Client\</SpaRoot>
     <SpaDist>wwwroot\</SpaDist>
     <SlskdRoot>..\..\slskd-0.25.1-win-x64\</SlskdRoot>
+    <FfmpegBinary>..\..\tools\ffmpeg\ffmpeg.exe</FfmpegBinary>
   </PropertyGroup>
 
   <Target Name="BuildSpa" BeforeTargets="Publish">
@@ -46,6 +47,18 @@
   -->
   <ItemGroup Condition="Exists('$(SlskdRoot)')">
     <None Include="$(SlskdRoot)**\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="slskd\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" />
+  </ItemGroup>
+
+  <!--
+    Bundle ffmpeg.exe alongside Wisp.exe so Phase 23's "Convert to MP3 320"
+    action works with no additional install. The binary is gitignored
+    (~96 MB) — fresh checkouts run `pwsh tools/get-ffmpeg.ps1` to download
+    it once. Build/publish skipped silently when the binary isn't present
+    so dev workflow keeps working; the action surfaces a clean
+    "FFmpeg not found" message at runtime instead.
+  -->
+  <ItemGroup Condition="Exists('$(FfmpegBinary)')">
+    <None Include="$(FfmpegBinary)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="ffmpeg.exe" Visible="false" />
   </ItemGroup>
 
 </Project>

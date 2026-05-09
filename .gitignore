@@ -53,3 +53,7 @@ coverage/
 /slskd-0.25.1-win-x64
 /WISP_IMPLEMENTATION_PLAN.md
 /screenshots
+
+# Bundled ffmpeg.exe — fetched via tools/get-ffmpeg.ps1, not committed
+# (96 MB binary, gyan.dev essentials build, GPL).
+/tools/ffmpeg/ffmpeg.exe

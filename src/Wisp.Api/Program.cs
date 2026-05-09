@@ -13,6 +13,7 @@ using Wisp.Api.Tagging;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
 using Wisp.Api.Soulseek;
+using Wisp.Api.Transcoder;
 using Wisp.Api.Wanted;
 using Wisp.Infrastructure;
 using Wisp.Infrastructure.ExternalCatalog.Discogs;
@@ -70,6 +71,15 @@ public class Program
                 opts.UseSqlite(WispPaths.DatabaseConnectionString));
 
             builder.Services.AddSingleton<WispSettingsStore>();
+            // Mp3Transcoder reads the optional ffmpeg-path override from
+            // WispSettings; injecting the lookup as a Func keeps the
+            // Infrastructure layer ignorant of WispSettings internals.
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.Mp3Transcoder>(sp =>
+            {
+                var settings = sp.GetRequiredService<WispSettingsStore>();
+                var log = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Wisp.Infrastructure.Audio.Mp3Transcoder>>();
+                return new Wisp.Infrastructure.Audio.Mp3Transcoder(log, () => settings.Current.FfmpegPath);
+            });
             builder.Services.AddWispLibrary();
             // Sidecar that owns the bundled slskd.exe lifecycle. Defers cleanly to an
             // externally-running slskd if port 5030 is taken; respects the
@@ -168,6 +178,7 @@ public class Program
             app.MapPlaylists();
             app.MapWanted();
             app.MapDiscover();
+            app.MapTranscoder();
 
             // Helper: apply credentials after every save/delete so the catalog clients pick up changes.
             void ReapplyCatalog() => ApplyCatalogCredentials(
@@ -336,6 +347,14 @@ public class Program
                 return Results.NoContent();
             });
 
+            // ─── FFmpeg override (Phase 23) ──────────────────────────────────
+            app.MapPost("/api/settings/ffmpeg", (FfmpegPathRequest? body, WispSettingsStore store) =>
+            {
+                var path = string.IsNullOrWhiteSpace(body?.FfmpegPath) ? null : body!.FfmpegPath!.Trim();
+                store.Update(s => s with { FfmpegPath = path });
+                return Results.NoContent();
+            });
+
             app.MapFallbackToFile("index.html");
 
             var photinoEnabled = app.Configuration.GetValue("Wisp:LaunchPhotino", !app.Environment.IsDevelopment());
@@ -456,6 +475,11 @@ public class Program
             Log.Information("Phase 22e backfill: migrated {Count} CrateDigger Want rows to WantedTrack", added);
         }
     }
+
+    /// Body for POST /api/settings/ffmpeg — paste an existing ffmpeg.exe
+    /// path to override the bundled / PATH-detected one. Empty string clears
+    /// the override (back to discovery defaults).
+    public sealed record FfmpegPathRequest(string? FfmpegPath);
 
     public static void ApplyCatalogCredentials(
         WispSettingsStore store,
