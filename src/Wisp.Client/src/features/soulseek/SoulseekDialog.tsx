@@ -56,15 +56,16 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   // Filter prefs — read from + write to useUiPrefs so they persist across
-  // sessions. The user's preferred filter (e.g. MP3 320) applies on every
-  // search without re-toggling.
-  const filter = useUiPrefs((s) => ({
-    format: s.slskdFormat,
-    mp3Bitrate: s.slskdMp3Bitrate,
-    freeSlotsOnly: s.slskdFreeSlotsOnly,
-    hideLocked: s.slskdHideLocked,
-  }))
+  // sessions. Selectors are split into separate calls so Zustand's default
+  // Object.is equality holds; the previous combined-object selector
+  // returned a fresh reference every render and caused render churn / a
+  // black-screen on the Wanted page → Soulseek path.
+  const format = useUiPrefs((s) => s.slskdFormat)
+  const mp3Bitrate = useUiPrefs((s) => s.slskdMp3Bitrate)
+  const freeSlotsOnly = useUiPrefs((s) => s.slskdFreeSlotsOnly)
+  const hideLocked = useUiPrefs((s) => s.slskdHideLocked)
   const setFilter = useUiPrefs((s) => s.setSlskdFilter)
+  const filter = { format, mp3Bitrate, freeSlotsOnly, hideLocked }
 
   const { transfers, slskdConfigured } = useSoulseekTransfers()
   const ensurePolling = useSoulseekStatus((s) => s.ensurePolling)
