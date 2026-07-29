@@ -12,6 +12,11 @@ public static class CueEndpoints
         app.MapPost("/api/tracks/{trackId:guid}/cues", Create);
         app.MapPost("/api/tracks/{trackId:guid}/cues/phrase-markers", GeneratePhraseMarkers);
         app.MapDelete("/api/tracks/{trackId:guid}/cues", DeleteAllForTrack);
+        app.MapGet("/api/tracks/{trackId:guid}/device-cues", ListDeviceCues);
+        app.MapPost("/api/tracks/{trackId:guid}/device-cues", CreateDeviceCue);
+        app.MapPost("/api/cues/{id:guid}/promote-to-device-cue", PromoteCue);
+        app.MapPatch("/api/device-cues/{id:guid}", UpdateDeviceCue);
+        app.MapDelete("/api/device-cues/{id:guid}", DeleteDeviceCue);
         app.MapPatch("/api/cues/{id:guid}", Update);
         app.MapDelete("/api/cues/{id:guid}", Delete);
         return app;
@@ -120,4 +125,106 @@ public static class CueEndpoints
 
         return Results.Ok(generated.Select(CuePointDto.From));
     }
+
+    private static async Task<IResult> ListDeviceCues(Guid trackId, WispDbContext db, CancellationToken ct)
+    {
+        var cues = await db.DeviceCues.AsNoTracking()
+            .Where(c => c.TrackId == trackId)
+            .OrderBy(c => c.StartSeconds)
+            .ToListAsync(ct);
+        return Results.Ok(cues.Select(DeviceCueDto.From));
+    }
+
+    private static async Task<IResult> PromoteCue(Guid id, WispDbContext db, CancellationToken ct)
+    {
+        var source = await db.CuePoints.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (source is null) return Results.NotFound();
+
+        var existing = await db.DeviceCues.FirstOrDefaultAsync(c => c.SourceCuePointId == id, ct);
+        if (existing is not null) return Results.Ok(DeviceCueDto.From(existing));
+
+        var cue = new DeviceCue
+        {
+            Id = Guid.NewGuid(),
+            TrackId = source.TrackId,
+            Kind = DeviceCueKind.MemoryCue,
+            StartSeconds = source.TimeSeconds,
+            Comment = string.IsNullOrWhiteSpace(source.Label) ? null : source.Label.Trim(),
+            SourceCuePointId = source.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        db.DeviceCues.Add(cue);
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/device-cues/{cue.Id}", DeviceCueDto.From(cue));
+    }
+
+    private static async Task<IResult> CreateDeviceCue(
+        Guid trackId, CreateDeviceCueRequest body, WispDbContext db, CancellationToken ct)
+    {
+        var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == trackId, ct);
+        if (track is null) return Results.NotFound();
+        var error = ValidateDeviceCue(body.Kind, body.StartSeconds, body.EndSeconds, track.Duration.TotalSeconds);
+        if (error is not null) return Results.BadRequest(new { code = "invalid_device_cue", message = error });
+
+        var now = DateTime.UtcNow;
+        var cue = new DeviceCue
+        {
+            Id = Guid.NewGuid(), TrackId = trackId, Kind = body.Kind,
+            StartSeconds = body.StartSeconds, EndSeconds = body.EndSeconds,
+            Comment = TrimComment(body.Comment), SourceCuePointId = body.SourceCuePointId,
+            CreatedAt = now, UpdatedAt = now,
+        };
+        db.DeviceCues.Add(cue);
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/device-cues/{cue.Id}", DeviceCueDto.From(cue));
+    }
+
+    private static async Task<IResult> UpdateDeviceCue(
+        Guid id, UpdateDeviceCueRequest body, WispDbContext db, CancellationToken ct)
+    {
+        var cue = await db.DeviceCues.Include(c => c.Track).FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (cue is null) return Results.NotFound();
+
+        var kind = body.Kind ?? cue.Kind;
+        var start = body.StartSeconds ?? cue.StartSeconds;
+        // A supplied null EndSeconds means "leave unchanged" here. Removing a loop end is
+        // intentionally done by changing the kind to MemoryCue, keeping PATCH unambiguous.
+        var end = body.EndSeconds ?? cue.EndSeconds;
+        var error = ValidateDeviceCue(kind, start, end, cue.Track?.Duration.TotalSeconds ?? double.PositiveInfinity);
+        if (error is not null) return Results.BadRequest(new { code = "invalid_device_cue", message = error });
+
+        cue.Kind = kind;
+        cue.StartSeconds = start;
+        cue.EndSeconds = kind == DeviceCueKind.MemoryCue ? null : end;
+        if (body.Comment is not null) cue.Comment = TrimComment(body.Comment);
+        cue.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(DeviceCueDto.From(cue));
+    }
+
+    private static async Task<IResult> DeleteDeviceCue(Guid id, WispDbContext db, CancellationToken ct)
+    {
+        var cue = await db.DeviceCues.FindAsync([id], ct);
+        if (cue is null) return Results.NotFound();
+        db.DeviceCues.Remove(cue);
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static string? ValidateDeviceCue(DeviceCueKind kind, double start, double? end, double duration)
+    {
+        if (!Enum.IsDefined(kind)) return "Unknown device cue kind.";
+        if (!double.IsFinite(start) || start < 0) return "Cue start must be a finite value at or after 0 seconds.";
+        if (start > duration) return "Cue start cannot be after the end of the track.";
+        if (kind == DeviceCueKind.Loop)
+        {
+            if (end is null || !double.IsFinite(end.Value) || end <= start)
+                return "A loop needs an end time after its start.";
+            if (end > duration) return "Loop end cannot be after the end of the track.";
+        }
+        return null;
+    }
+
+    private static string? TrimComment(string? comment) => string.IsNullOrWhiteSpace(comment) ? null : comment.Trim()[..Math.Min(200, comment.Trim().Length)];
 }

@@ -1,5 +1,5 @@
 import { FolderSearch, Settings } from 'lucide-react'
-import { bridge, bridgeAvailable } from '../../bridge'
+import { bridgeAvailable } from '../../bridge'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { SoulseekStatusIndicator } from '../soulseek/SoulseekStatusIndicator'
 
@@ -38,6 +38,3 @@ export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
     </header>
   )
 }
-
-// Re-export bridge for any caller that still needs it externally.
-export { bridge }

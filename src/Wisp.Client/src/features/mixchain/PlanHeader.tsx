@@ -5,6 +5,7 @@ import { playlists as playlistsApi } from '../../api/playlists'
 import type { MixPlan } from '../../api/types'
 import { formatBpm } from '../library/format'
 import { computePlanSummary, formatPlanDuration } from './summary'
+import { CdjExportButton } from '../usb/CdjExportButton'
 
 interface Props {
   plan: MixPlan
@@ -84,6 +85,14 @@ export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
               label={`${summary.warnings.length} warning${summary.warnings.length === 1 ? '' : 's'}`}
               tone="warn"
               title={summary.warnings.map((w) => w.message).join('\n')}
+            />
+          )}
+          {!compact && (
+            <CdjExportButton
+              source="mix-plan"
+              sourceId={plan.id}
+              sourceName={plan.name}
+              disabled={plan.tracks.length === 0}
             />
           )}
         </div>

@@ -1,0 +1,83 @@
+# Wisp implementation status
+
+Last reviewed: 2026-07-28
+
+> Current implementation status: **template-backed CDJ export is enabled for physical testing.** A removable-drive export no longer creates a DeviceSQL database from scratch. Wisp reads a separate, player-accepted `PIONEER/rekordbox/export.pdb` (for the present test setup, `F:`) as a **read-only** allocation template, appends Wisp tracks and playlists to a staged copy, validates the added rows, and installs that copy on the selected USB (for the present test setup, `H:`). The template drive is never written to.
+
+> Current diagnostic mode: Wisp deliberately retains the template catalogue while verifying that a newly appended Wisp playlist is visible and its copied tracks load on the CDJ. Attempts to delete template rows caused CDJ-850 read failures and are paused pending a real before/after rekordbox deletion fixture. This diagnostic USB is not a release-ready library.
+
+> Memory Cue diagnostic: the successful playlist/audio result enables the next isolated pass. Wisp now writes each selected track's `ANLZ0000.DAT` sidecar and PCOB Memory Cue records, while retaining the accepted template catalogue. The CDJ-850 must now confirm cue recall for the `WISP — …` playlist before cue support can be considered validated.
+
+## 2026-07-28: fixture-backed Pioneer database editor
+
+- **Implemented.** `PioneerTemplatePdbEditor` follows the established incremental DeviceSQL allocation model: it preserves table/index pages, consumes each table's existing empty-candidate page, appends rows with real row-directory masks and allocation accounting, then advances the candidate pointer.
+- **Implemented.** The template's tracks and playlists are removed using DeviceSQL's delete-only transaction form: presence masks, deletion flags, present-counts, write-generation values and delete-only sentinels are updated while the accepted page accounting remains intact. `H:` uses `F:` only for accepted database structure and does not advertise `F:`-only tracks or playlists.
+- **Implemented.** `PioneerDeviceLibraryWriter.WriteFromTemplate` assigns non-colliding Pioneer IDs for tracks, artists, genres, playlists and playlist entries, and maps Wisp playlist membership to those IDs.
+- **Implemented.** The Mix Plan and Playlist “Export to CDJ USB” actions are re-enabled. A root-drive export requires exactly one separate Pioneer template (or an explicit `WISP_PIONEER_TEMPLATE` path); it fails safely before replacing `H:` if none is available.
+- **Regression-covered.** The test suite now verifies that an existing PDB can be used as a template and that appended tracks/playlists retain valid IDs and ordering without rebuilding the database.
+- **Still pending physical acceptance.** This implementation deliberately keeps generated `ANLZ` / Memory Cue data out of the first template-backed USB, because the former hand-authored sidecar was never accepted by the players. The next device test is browse + playback + playlist + metadata/BPM. Memory Cue/loop sidecars will be reintroduced only once the catalogue mounts successfully, then verified separately on CDJ-850/900.
+
+> CDJ direct export is **under rebuild and unavailable**. Four physical CDJ-850 export attempts showed that matching selected DeviceSQL fields is insufficient; the fresh database initializer is not accepted by the player. The replacement must be a fixture-backed incremental editor that begins from a verified Pioneer PDB structure.
+
+## Reliability and quality remediation
+
+- **Rescan safety — implemented.** A missing file is now retained as an unavailable track instead of being deleted. Its cue points, playlists, tags and mix-plan entries remain intact and are restored when the same path returns.
+- **Credentials at rest — implemented.** Spotify, Discogs, YouTube and Soulseek secrets in `%LOCALAPPDATA%\Wisp\config.json` are protected with Windows DPAPI for the current Windows user. Existing plain values are migrated on the next settings save.
+- **Frontend quality — implemented.** Lint errors have been removed. Imperative Web Audio mutations and external-identity draft resets remain documented lint warnings rather than release-blocking errors.
+- **Regression coverage — implemented.** The library scanner has explicit tests for both retaining a missing track and restoring it on a later scan.
+
+## USB sync
+
+- **Portable file sync — implemented.** A mix plan can be copied to a selected USB root from the desktop app. Wisp writes audio files beneath `Contents/`, portable M3U8 playlists beneath `WISP/playlists/`, and a Wisp-only incremental sync manifest at `WISP/sync-manifest.json`.
+- **Safety guarantees.** Only `Contents/` and `WISP/` are written; copies use a temporary file and replacement to avoid partially copied playable files.
+- **Current player outcome.** This is functional *folder-browse* media on players that support the copied format and filesystem. Source-file tags (artist/title/BPM/key/artwork when present) are preserved by copying.
+
+## CDJ-850 / CDJ-900 compatibility decision
+
+The complete implementation specification lives in **Phase 25 — CDJ-850 prepared USB export** in `WISP_IMPLEMENTATION_PLAN.md`. Its first shippable vertical slice is now implemented: Wisp can create a staged conventional `EXPORT.PDB`, ordered Pioneer playlists, and per-track `ANLZ0000.DAT` Memory Cue/loop sidecars; it validates the generated page structure, playlist links, analysis paths and Memory Cue counts before installation. The desktop export flow preflights capacity/formats, requires explicit approval to replace an existing `PIONEER` library, and moves that library to `WISP/backups` first. Editorial cues are only exported after the user marks them **CDJ cue**.
+
+This is still **not** a claim of proven CDJ-850 compatibility. It intentionally does not invent Pioneer beat-grid or waveform data, and must pass the physical-device acceptance matrix before being relied on at a show.
+
+The requested full experience — database browsing, playlists, BPM, metadata and stored cues without rekordbox — requires writing Pioneer’s conventional Device Library (`PIONEER/rekordbox/export.pdb`) plus associated analysis data. Wisp does **not** claim that support yet. No official supported writer is available, and an unverified writer risks a USB that appears empty or corrupt at a show.
+
+The CDJ-850 is rekordbox-ready and supports conventional-library export, but it does **not** recall Hot Cues; its reliable prepared-cue workflow is Memory Cues. The original CDJ-900 similarly predates pad-based Hot Cues. Wisp must therefore map its cue points to supported Memory Cues and explicitly state per-player limits, rather than promise every cue type as a Hot Cue.
+
+### Required before marking “CDJ-850/900 prepared USB” as shipped
+
+1. Implement a versioned conventional-Device-Library writer using verified fixtures, with no mutation of an existing Pioneer directory until validation passes.
+2. Persist an explicit export-cue model (Memory Cue / loop / Hot Cue) rather than inferring all Wisp editorial cue labels as interchangeable device cues.
+3. Generate or deliberately omit analysis data with an honest UI capability matrix. BPM tags alone do not create a Pioneer beatgrid or waveform.
+4. Test the generated USB on physical, current-firmware CDJ-850 and original CDJ-900 units: startup, playlist browse, metadata/BPM display, memory-cue recall, loops, missing/unplugged recovery, and repeated incremental sync.
+5. Keep a standard rekordbox-exported backup USB until that hardware matrix has passed for a release.
+
+## 2026-07-28 implementation update
+
+The two historical paragraphs and checklist above are superseded in part by the current implementation: Wisp now writes a staged `PIONEER/rekordbox/EXPORT.PDB`, Pioneer playlists and per-track `ANLZ0000.DAT` Memory Cue/loop sidecars, and validates them before installation. The direct export action is visible in both the active Mix Plan header and the selected Playlist banner; the playlist route does not require a Mix Plan.
+
+The physical CDJ-850 and original CDJ-900 acceptance tests remain outstanding. Wisp deliberately does not fabricate beat-grid or waveform data, so a standard rekordbox USB should remain the backup until mount, playback, browse, metadata, Memory Cue recall and loop tests have passed on the target players.
+
+### Hardware-test finding: 2026-07-28
+
+The first CDJ-850 test of the Wisp `H:` export showed an empty device. A read-only comparison with the working rekordbox `F:` USB found `F:/PIONEER/rekordbox/export.pdb` (4.7 MB, 419 analysis files), while `H:/PIONEER/rekordbox` was empty after the player test despite Wisp's export receipt. The Wisp writer also had an invalid Track-row layout: the DeviceSQL string offsets began six bytes early and overwrote the file-type fields. This was corrected and covered by a regression test. A fresh physical-device re-export and acceptance test is required before compatibility can be claimed.
+
+The fresh re-export retained a 106 KB `H:/PIONEER/rekordbox/export.pdb`, but the CDJ-850 still displayed an empty device. Direct CDJ export is therefore disabled in both the desktop UI and API. It must be replaced by a fixture-verified DeviceSQL writer and pass the physical acceptance matrix before it can be enabled again. Wisp's portable track sync is unaffected; it does not claim Pioneer-library or Memory-Cue compatibility.
+
+### Hardware-test finding: second export, 2026-07-28
+
+After a fresh export to `H:`, the USB contained the expected audio files, analysis sidecars and a 106 KB `PIONEER/rekordbox/export.pdb`. On the CDJ-850, however, the player flashed red continuously while attempting to read it. A read-only PDB inspection identified the direct cause: the writer gave every empty DeviceSQL index page a self-referential `next_page` pointer and left its required empty-index allocation entries as zeroes. Wisp now writes the `0x1ffffff8` empty-entry sentinel and no longer creates that cycle.
+
+The subsequent `H:` test no longer flashed red on either CDJ-850 or CDJ-900, but both devices reported the USB as empty. The next read-only comparison found every Wisp table's `empty_candidate` field was page zero, whereas Rekordbox seeds a blank candidate page for each table and advances the candidate pointer on each data-page allocation. Wisp now creates the same 41-page initial allocator (header, 20 index pages, 20 reserved blank candidate pages), preserves the `0x03ffffff` empty-table sentinel, and tests those invariants. This is the next narrowly scoped hardware-test build; it still does not claim production compatibility.
+
+### Catalogue-isolation test: pending
+
+The seeded allocator did not yet make the third `H:` export visible on a CDJ-850. The next build deliberately writes a catalogue-only PDB: track paths, metadata and playlists remain, but Wisp leaves the analysis path empty and writes no `ANLZ` sidecar or Memory Cue. This isolates whether Pioneer analysis validation is causing the player to discard otherwise-readable database rows. This diagnostic mode is temporary and explicitly does **not** implement cue export.
+
+The catalogue-only test still appeared empty. Comparing the table headers byte-for-byte with the working fixture exposed a final initializer error: for an empty table, Wisp put `0x03ffffff` in both `next_page` fields. Rekordbox stores the table's reserved `empty_candidate` in the common page-header `next_page`, while retaining `0x03ffffff` only in the index-specific first-data-page field. The writer and regression test now enforce this distinction before the next physical test.
+
+The fourth CDJ-850 result was still an empty USB. Direct hardware testing is now paused: the accumulated results show that Wisp's hand-built fresh initializer remains incomplete despite matching the inspected fields. The implementation is being replaced by a fixture-backed incremental editor, modelled on the verified `rekordbox-pdb` approach: start from a known-good PDB template, preserve its page allocator and table state, append Wisp rows using the format's actual allocation rules, and only then restore ANLZ / Memory Cue support. The UI and API direct-export route are disabled until that replacement has local fixture conformance and a new device test.
+
+## Source references
+
+- AlphaTheta’s USB-export compatibility table lists CDJ-850 under the conventional library format: https://rekordbox.com/en/support/usb-export/
+- Pioneer’s CDJ-850 product page confirms USB playback and rekordbox metadata / BPM / waveform support: https://www.pioneerdj.com/en/product/dj-players-turntables/cdj-850/
+- Pioneer support confirms the CDJ-850 cannot call Hot Cues: https://forums.pioneerdj.com/hc/ja/community/posts/360057765391-CDJ-850-and-2000s-Memory-Cue-points-with-wav

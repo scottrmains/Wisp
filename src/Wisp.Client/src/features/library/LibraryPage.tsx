@@ -13,6 +13,7 @@ import { ArchiveModal } from '../archive/ArchiveModal'
 import { CleanupModal } from '../cleanup/CleanupModal'
 import { UndoToast } from '../cleanup/UndoToast'
 import { useMixPlan } from '../mixchain/useMixPlans'
+import { CdjExportButton } from '../usb/CdjExportButton'
 import { AddToPlaylistDialog } from './AddToPlaylistDialog'
 import { BulkActionBar } from './BulkActionBar'
 import { BulkTagDialog } from './BulkTagDialog'
@@ -375,6 +376,12 @@ export function LibraryPage() {
           <span className="text-[var(--color-muted)] tabular-nums">
             ({activePlaylist.trackCount} {activePlaylist.trackCount === 1 ? 'track' : 'tracks'})
           </span>
+          <CdjExportButton
+            source="playlist"
+            sourceId={activePlaylist.id}
+            sourceName={activePlaylist.name}
+            disabled={activePlaylist.trackCount === 0}
+          />
           <button
             onClick={() => setActivePlaylistId(null)}
             className="ml-auto inline-flex items-center gap-1 rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] hover:text-white"

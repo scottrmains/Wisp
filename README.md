@@ -43,7 +43,7 @@ This runs the SPA build (output → `src/Wisp.Api/wwwroot/`) and `dotnet publish
 dotnet test
 ```
 
-103 tests across `Wisp.Core.Tests` (filename parser, Camelot wheel, BPM scoring, recommendation modes, fractional ordering, phrase markers, name normalizer, cleanup suggestions) and `Wisp.Infrastructure.Tests` (file fingerprint, library scanner integration, cleanup applier round-trip against a real MP3).
+117 backend tests across `Wisp.Core.Tests` (filename parser, Camelot wheel, BPM scoring, recommendation modes, fractional ordering, phrase markers, name normalizer, cleanup suggestions), `Wisp.Infrastructure.Tests` (file fingerprint, library scanner integration, cleanup applier round-trip and USB sync), and `Wisp.Api.Tests` (HTTP endpoint contracts). The React client also has Vitest coverage for shared UI logic.
 
 ## Where things live
 
@@ -64,6 +64,7 @@ The built-in **Settings** dialog (gear icon top-right) shows these paths and let
 
 - `WISP_IMPLEMENTATION_PLAN.md` — phase-by-phase build plan (Phases 0–6 shipped; 7 packaging, 8 Artist Refresh, 9 Crate Digger, 10 Master Tempo are scoped)
 - `WISP_BACKLOG_FEATURES.md` — feature backlog with P0–P3 priorities
+- `WISP_IMPLEMENTATION_STATUS.md` — current quality remediation and USB/CDJ export status
 
 ## License
 

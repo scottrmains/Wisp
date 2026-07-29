@@ -226,7 +226,7 @@ public static class LibraryEndpoints
         // When scopePlaylistId is set, the candidate pool is further restricted to playlist members
         // — the user's "build me a House Night set, but only suggest from these candidates" lever.
         var candidatesQuery = db.Tracks.AsNoTracking()
-            .Where(t => t.Id != id && !t.IsArchived && (t.MusicalKey != null || t.Bpm != null));
+            .Where(t => t.Id != id && !t.IsArchived && !t.IsUnavailable && (t.MusicalKey != null || t.Bpm != null));
         if (scopePlaylistId.HasValue && scopePlaylistId.Value != Guid.Empty)
         {
             var pid = scopePlaylistId.Value;
@@ -344,6 +344,9 @@ public static class LibraryEndpoints
         // includeArchived=true → mix Active + Archived. archivedOnly=true → only Archived.
         bool includeArchived = false,
         bool archivedOnly = false,
+        // Missing files are retained for prep-data safety but excluded from the
+        // normal playable library. Explicit opt-in is useful for recovery UI.
+        bool includeUnavailable = false,
         // Tag filter — repeat ?tag=warm-up&tag=vocal for AND across multiple tags.
         string[]? tag = null,
         // Playlist scope — restrict to tracks that belong to the given playlist.
@@ -361,6 +364,7 @@ public static class LibraryEndpoints
         // view + from the recommendation candidate pool. Caller has to opt in to see them.
         if (archivedOnly) q = q.Where(t => t.IsArchived);
         else if (!includeArchived) q = q.Where(t => !t.IsArchived);
+        if (!includeUnavailable) q = q.Where(t => !t.IsUnavailable);
 
         // Tag filter — intersection (track must have ALL requested tags). Done as a sequence
         // of `Any` clauses so EF turns each into an EXISTS subquery against TrackTags.

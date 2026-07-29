@@ -6,7 +6,10 @@ export function useCrossfader(leftGain: GainNode | null, rightGain: GainNode | n
   const [fade, setFade] = useState(0.5)
 
   useEffect(() => {
+    // GainNode is an imperative Web Audio API object, not React state.
+    // eslint-disable-next-line react-hooks/immutability
     if (leftGain) leftGain.gain.value = Math.cos((fade * Math.PI) / 2)
+    // eslint-disable-next-line react-hooks/immutability
     if (rightGain) rightGain.gain.value = Math.sin((fade * Math.PI) / 2)
   }, [fade, leftGain, rightGain])
 

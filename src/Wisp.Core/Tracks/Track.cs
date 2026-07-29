@@ -27,6 +27,14 @@ public class Track
     public bool IsMissingMetadata { get; set; }
     public bool IsDirtyName { get; set; }
 
+    /// The last scan did not find this file beneath its registered library root.
+    /// Keep the row (and its cues, playlists, tags and mix-plan references) so a
+    /// moved drive or a transiently unavailable folder never destroys DJ prep.
+    /// A future explicit "forget missing tracks" action is the only place a
+    /// missing track may be permanently deleted.
+    public bool IsUnavailable { get; set; }
+    public DateTime? UnavailableSince { get; set; }
+
     /// Free-text notes the user keeps against a track (in-key transitions, vinyl shop bought from, "for the warmup", etc.).
     /// Optional; null = no notes set.
     public string? Notes { get; set; }

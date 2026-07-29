@@ -21,7 +21,7 @@ import {
   Tag as TagIcon,
   X,
 } from 'lucide-react'
-import { CuesTab, MetadataTab, NotesTab, OverviewTab, TagsTab } from '../inspector/tabContent'
+import { CueBank, CuesTab, MetadataTab, NotesTab, OverviewTab, TagsTab } from '../inspector/tabContent'
 import { BandedWaveform } from '../player/BandedWaveform'
 import { ConvertToMp3Button } from '../transcoder/ConvertToMp3'
 import { RecommendationsList } from './RecommendationPanel'
@@ -112,6 +112,7 @@ export function TrackPrepWorkspace({
   const togglePlay = usePlayer((s) => s.togglePlay)
   const seek = usePlayer((s) => s.seek)
   const playTrack = usePlayer((s) => s.playTrack)
+  const playerTrackId = usePlayer((s) => s.trackId)
   const clear = usePlayer((s) => s.clear)
   const liveTime = usePlayer((s) => s.position)
   const liveDuration = usePlayer((s) => s.duration)
@@ -326,29 +327,38 @@ export function TrackPrepWorkspace({
   return (
     <div className="flex shrink-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)]">
       {/* Top: waveform + close/collapse buttons floating top-right */}
-      <div className="relative px-3 pt-3">
-        <BandedWaveform
-          trackId={track.id}
-          duration={duration}
-          currentTime={liveTime}
-          onSeek={handleSeek}
-          cues={cueMarkers}
+      <div className="relative flex gap-3 px-3 pt-3">
+        <div className="min-w-0 flex-1">
+          <BandedWaveform
+            trackId={track.id}
+            duration={duration}
+            currentTime={liveTime}
+            onSeek={handleSeek}
+            cues={cueMarkers}
           // Click on a cue marker / section → seek + start playback from that
           // cue (matches Mixed-in-Key's "click section, play from there"
           // pattern). If the user wants to edit a cue's label/type, the Cues
           // tab is right there in the tab bar.
-          onCueClick={(id) => {
-            const c = cuesHook.cues.find((x) => x.id === id)
-            if (!c) return
-            // playTrack on the same id is a no-op for "load" but kicks audio
-            // back into play if it was paused; then seek lands the playhead.
-            playTrack(track.id)
-            setTimeout(() => seek(c.timeSeconds), 50)
+            onCueClick={(id) => {
+              const c = cuesHook.cues.find((x) => x.id === id)
+              if (!c) return
+              // playTrack on the same id is a no-op for "load" but kicks audio
+              // back into play if it was paused; then seek lands the playhead.
+              playTrack(track.id)
+              setTimeout(() => seek(c.timeSeconds), 50)
+            }}
+            onHoverChange={(t) => { hoverTimeRef.current = t }}
+            bpm={track.bpm}
+            firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
+            height={120}
+          />
+        </div>
+        <CueBank
+          track={track}
+          onJump={(seconds) => {
+            if (playerTrackId !== track.id) playTrack(track.id)
+            setTimeout(() => seek(seconds), 50)
           }}
-          onHoverChange={(t) => { hoverTimeRef.current = t }}
-          bpm={track.bpm}
-          firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
-          height={120}
         />
         <div className="absolute right-4 top-4 flex items-center gap-1">
           <button

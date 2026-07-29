@@ -40,6 +40,8 @@ public sealed record TrackDto(
     double DurationSeconds,
     bool IsMissingMetadata,
     bool IsDirtyName,
+    bool IsUnavailable,
+    DateTime? UnavailableSince,
     DateTime AddedAt,
     DateTime? LastScannedAt,
     string? Notes,
@@ -51,7 +53,7 @@ public sealed record TrackDto(
         t.Id, t.FilePath, t.FileName,
         t.Artist, t.Title, t.Version, t.Album, t.Genre,
         t.Bpm, t.MusicalKey, t.Energy, t.ReleaseYear,
-        t.Duration.TotalSeconds, t.IsMissingMetadata, t.IsDirtyName,
+        t.Duration.TotalSeconds, t.IsMissingMetadata, t.IsDirtyName, t.IsUnavailable, t.UnavailableSince,
         t.AddedAt, t.LastScannedAt, t.Notes,
         t.IsArchived, t.ArchivedAt, t.ArchiveReason?.ToString());
 }

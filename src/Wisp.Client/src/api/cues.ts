@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './client'
-import type { CuePoint, CuePointType } from './types'
+import type { CuePoint, CuePointType, DeviceCue } from './types'
 
 export const cues = {
   list: (trackId: string) => apiGet<CuePoint[]>(`/api/tracks/${trackId}/cues`),
@@ -22,4 +22,8 @@ export const cues = {
     trackId: string,
     body: { firstBeatSeconds: number; stepBeats?: number; replaceExisting?: boolean },
   ) => apiPost<CuePoint[]>(`/api/tracks/${trackId}/cues/phrase-markers`, body),
+
+  listDeviceCues: (trackId: string) => apiGet<DeviceCue[]>(`/api/tracks/${trackId}/device-cues`),
+  promoteToDeviceCue: (cueId: string) => apiPost<DeviceCue>(`/api/cues/${cueId}/promote-to-device-cue`),
+  removeDeviceCue: (cueId: string) => apiDelete(`/api/device-cues/${cueId}`),
 }

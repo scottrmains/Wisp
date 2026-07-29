@@ -1,20 +1,23 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useActivePlan } from './state/activePlan'
 import { useCurrentPage } from './state/currentPage'
-import { CrateDiggerPage } from './features/cratedigger/CrateDiggerPage'
 import { LibraryPage } from './features/library/LibraryPage'
 import { ScanToast } from './features/library/ScanToast'
 import { useScan } from './features/library/useScan'
 import { ChainDock } from './features/mixchain/ChainDock'
-import { MixPlansPage } from './features/mixchain/MixPlansPage'
 import { MiniPlayer } from './features/player/MiniPlayer'
-import { DiscoverPage } from './features/discover/DiscoverPage'
-import { WantedPage } from './features/wanted/WantedPage'
-import { SettingsPanel } from './features/settings/SettingsPanel'
 import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 import { DialogHost } from './components/DialogHost'
+
+// These feature areas are not needed for first paint of the library workspace.
+// Keep their dependencies out of the startup bundle and load only on navigation.
+const CrateDiggerPage = lazy(() => import('./features/cratedigger/CrateDiggerPage').then((m) => ({ default: m.CrateDiggerPage })))
+const MixPlansPage = lazy(() => import('./features/mixchain/MixPlansPage').then((m) => ({ default: m.MixPlansPage })))
+const DiscoverPage = lazy(() => import('./features/discover/DiscoverPage').then((m) => ({ default: m.DiscoverPage })))
+const WantedPage = lazy(() => import('./features/wanted/WantedPage').then((m) => ({ default: m.WantedPage })))
+const SettingsPanel = lazy(() => import('./features/settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel })))
 
 /// App-level shell. Layout is:
 ///
@@ -78,11 +81,13 @@ function App() {
         />
 
         <main className="min-h-0 flex-1 overflow-hidden">
+          <Suspense fallback={<div className="p-6 text-sm text-[var(--color-muted)]">Loading workspaceâ€¦</div>}>
           {page === 'library' && <LibraryPage />}
           {page === 'mix-plans' && <MixPlansPage />}
           {page === 'discover' && <DiscoverPage />}
           {page === 'wanted' && <WantedPage />}
           {page === 'crate-digger' && <CrateDiggerPage />}
+          </Suspense>
         </main>
 
         {showChainDock && (
@@ -105,7 +110,11 @@ function App() {
         active={scan.active}
         onDismiss={scan.dismiss}
       />
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsPanel onClose={() => setSettingsOpen(false)} />
+        </Suspense>
+      )}
       <DialogHost />
     </div>
   )
