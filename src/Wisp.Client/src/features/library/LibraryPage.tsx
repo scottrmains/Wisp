@@ -13,11 +13,25 @@ import { ArchiveModal } from '../archive/ArchiveModal'
 import { CleanupModal } from '../cleanup/CleanupModal'
 import { UndoToast } from '../cleanup/UndoToast'
 import { useMixPlan } from '../mixchain/useMixPlans'
+import { CdjExportButton } from '../usb/CdjExportButton'
 import { AddToPlaylistDialog } from './AddToPlaylistDialog'
 import { BulkActionBar } from './BulkActionBar'
 import { BulkTagDialog } from './BulkTagDialog'
 import { LibraryFilters } from './LibraryFilters'
 import { LibraryTable } from './LibraryTable'
+import {
+  AlertTriangle,
+  Archive,
+  ArchiveRestore,
+  ExternalLink,
+  ListMusic,
+  Play,
+  Plus,
+  Sparkles,
+  StickyNote,
+  Tag as TagIcon,
+  X,
+} from 'lucide-react'
 import { RowContextMenu, type ContextMenuItem } from './RowContextMenu'
 import { TrackPrepWorkspace } from './TrackPrepWorkspace'
 import { useScan } from './useScan'
@@ -163,17 +177,17 @@ export function LibraryPage() {
     const hasPlan = !!activePlanId
     return [
       {
-        id: 'play', icon: '▶', label: 'Play',
+        id: 'play', icon: Play, label: 'Play',
         disabled: isMulti, disabledReason: 'Single track only',
         onSelect: () => playTrack(rowTrack.id),
       },
       {
-        id: 'add', icon: '+', label: isMulti ? `Add ${opIds.length} to mix` : 'Add to mix',
+        id: 'add', icon: Plus, label: isMulti ? `Add ${opIds.length} to mix` : 'Add to mix',
         disabled: !hasPlan, disabledReason: 'Pick or create an active mix plan first',
         onSelect: () => { for (const id of opIds) addToActivePlan(id) },
       },
       {
-        id: 'find', icon: '✨', label: 'Find matches',
+        id: 'find', icon: Sparkles, label: 'Find matches',
         disabled: isMulti, disabledReason: 'Single track only',
         onSelect: () => {
           // Load (without auto-play) so the workspace appears at the right tab.
@@ -183,7 +197,7 @@ export function LibraryPage() {
         },
       },
       {
-        id: 'tag', icon: '🏷', label: isMulti ? `Tag ${opIds.length} tracks…` : 'Tag…',
+        id: 'tag', icon: TagIcon, label: isMulti ? `Tag ${opIds.length} tracks…` : 'Tag…',
         separator: true,
         onSelect: () => {
           if (isMulti) setBulkTagIds(opIds)
@@ -195,12 +209,12 @@ export function LibraryPage() {
         },
       },
       {
-        id: 'playlist', icon: '🎶',
+        id: 'playlist', icon: ListMusic,
         label: isMulti ? `Add ${opIds.length} to playlist…` : 'Add to playlist…',
         onSelect: () => setAddToPlaylistIds(opIds),
       },
       {
-        id: 'notes', icon: '📝', label: 'Notes',
+        id: 'notes', icon: StickyNote, label: 'Notes',
         disabled: isMulti, disabledReason: 'Single track only',
         onSelect: () => {
           loadTrack(rowTrack.id)
@@ -210,7 +224,7 @@ export function LibraryPage() {
       },
       {
         id: 'archive',
-        icon: rowTrack.isArchived ? '♻' : '📦',
+        icon: rowTrack.isArchived ? ArchiveRestore : Archive,
         label: isMulti ? `Archive ${opIds.length} tracks` : rowTrack.isArchived ? 'Restore' : 'Archive',
         separator: true,
         onSelect: () => {
@@ -220,13 +234,13 @@ export function LibraryPage() {
         },
       },
       {
-        id: 'cleanup', icon: '⚠', label: 'Cleanup…',
+        id: 'cleanup', icon: AlertTriangle, label: 'Cleanup…',
         disabled: isMulti || (!rowTrack.isDirtyName && !rowTrack.isMissingMetadata),
         disabledReason: isMulti ? 'Single track only' : 'No cleanup suggested',
         onSelect: () => setCleanupTarget(rowTrack),
       },
       {
-        id: 'reveal', icon: '↗', label: 'Reveal in Explorer',
+        id: 'reveal', icon: ExternalLink, label: 'Reveal in Explorer',
         disabled: isMulti || !bridgeAvailable(),
         disabledReason: isMulti ? 'Single track only' : 'Only available in the desktop shell',
         separator: true,
@@ -362,12 +376,18 @@ export function LibraryPage() {
           <span className="text-[var(--color-muted)] tabular-nums">
             ({activePlaylist.trackCount} {activePlaylist.trackCount === 1 ? 'track' : 'tracks'})
           </span>
+          <CdjExportButton
+            source="playlist"
+            sourceId={activePlaylist.id}
+            sourceName={activePlaylist.name}
+            disabled={activePlaylist.trackCount === 0}
+          />
           <button
             onClick={() => setActivePlaylistId(null)}
-            className="ml-auto rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] hover:text-white"
+            className="ml-auto inline-flex items-center gap-1 rounded border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-muted)] hover:text-white"
             title="Clear playlist scope"
           >
-            ✕ clear scope
+            <X size={11} strokeWidth={1.75} /> clear scope
           </button>
         </div>
       )}

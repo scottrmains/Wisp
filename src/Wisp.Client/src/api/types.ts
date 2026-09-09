@@ -16,6 +16,8 @@ export interface Track {
   durationSeconds: number
   isMissingMetadata: boolean
   isDirtyName: boolean
+  isUnavailable: boolean
+  unavailableSince: string | null
   addedAt: string
   lastScannedAt: string | null
   notes: string | null
@@ -105,6 +107,8 @@ export interface TrackQuery {
   includeArchived?: boolean
   /// Returns ONLY archived tracks. Wins over includeArchived when both set.
   archivedOnly?: boolean
+  /// Retained but currently missing files; hidden by default so the library is playable.
+  includeUnavailable?: boolean
   /// Repeat per tag for AND-intersection.
   tag?: string[]
   /// Restrict to tracks that are members of the given playlist.
@@ -219,6 +223,39 @@ export interface CuePoint {
   type: CuePointType
   isAutoSuggested: boolean
   createdAt: string
+}
+
+export type DeviceCueKind = 'MemoryCue' | 'Loop'
+
+export interface DeviceCue {
+  id: string
+  trackId: string
+  kind: DeviceCueKind
+  startSeconds: number
+  endSeconds: number | null
+  comment: string | null
+  sourceCuePointId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CdjExportPreflight {
+  trackCount: number
+  deviceCueCount: number
+  requiredBytes: number
+  availableBytes: number
+  needsPioneerReplacement: boolean
+  missingFiles: string[]
+  unsupportedFiles: string[]
+}
+
+export interface CdjExportResult {
+  trackCount: number
+  playlistCount: number
+  stagedPdbPath: string
+  receiptPath: string
+  pioneerBackupPath: string | null
+  contentsBackupPath: string | null
 }
 
 export interface TrackSnapshot {

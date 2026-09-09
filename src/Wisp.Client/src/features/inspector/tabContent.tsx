@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tracks as tracksApi } from '../../api/library'
 import { tags as tagsApi } from '../../api/tags'
+import { cues as cuesApi } from '../../api/cues'
 import type { TagType, Track, TrackTag } from '../../api/types'
+import { ArrowLeftRight, Check, Sparkles, Target, Trash2 } from 'lucide-react'
 import { detectFirstBeatFromPeaks, getCachedBandedPeaks } from '../../audio/peaks'
 import { confirmDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
@@ -62,10 +64,29 @@ type CueTypeName = typeof CUE_TYPES[number]
 
 export function CuesTab({ track }: { track: Track }) {
   const { cues, loading, update, remove, removeAll, generatePhraseMarkers } = useCues(track.id)
+  const queryClient = useQueryClient()
+  const deviceCues = useQuery({
+    queryKey: ['device-cues', track.id],
+    queryFn: () => cuesApi.listDeviceCues(track.id),
+  })
+  const promoteToDeviceCue = useMutation({
+    mutationFn: (cueId: string) => cuesApi.promoteToDeviceCue(cueId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['device-cues', track.id] }),
+  })
+  const removeDeviceCue = useMutation({
+    mutationFn: (cueId: string) => cuesApi.removeDeviceCue(cueId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['device-cues', track.id] }),
+  })
   const seek = usePlayer((s) => s.seek)
   const position = usePlayer((s) => s.position)
   const playerTrackId = usePlayer((s) => s.trackId)
   const playTrack = usePlayer((s) => s.playTrack)
+  const deviceCueBySource = new Map(
+    (deviceCues.data ?? [])
+      .filter((cue) => cue.sourceCuePointId)
+      .map((cue) => [cue.sourceCuePointId!, cue]),
+  )
+  const memoryCueCount = (deviceCues.data ?? []).filter((cue) => cue.kind === 'MemoryCue').length
 
   const handleJump = (timeSeconds: number) => {
     if (playerTrackId !== track.id) playTrack(track.id)
@@ -141,10 +162,10 @@ export function CuesTab({ track }: { track: Track }) {
   // affordance). When the track has no BPM tag, the button is disabled with a
   // tooltip explaining why — more discoverable than hiding the whole strip.
   const noBpm = track.bpm === null
-  const anchorLabel: Record<typeof anchorSource, string> = {
+  const anchorLabel: Record<typeof anchorSource, React.ReactNode> = {
     firstBeatCue: 'from cue',
     playhead: 'from playhead',
-    autoDetected: '🎯 auto',
+    autoDetected: <span className="inline-flex items-center gap-0.5"><Target size={10} strokeWidth={1.75} /> auto</span>,
     trackStart: 'fallback',
   }
   const header = (
@@ -165,26 +186,31 @@ export function CuesTab({ track }: { track: Track }) {
       <span className="text-[var(--color-muted)]">
         {noBpm ? '· no BPM tag' : `· ${Number(track.bpm).toFixed(0)} BPM · 16-beat phrases`}
       </span>
+      <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">
+        {memoryCueCount} selected for CDJ export
+      </span>
       <div className="ml-auto flex items-center gap-1.5">
         <button
           onClick={handleClearAll}
           disabled={cues.length === 0 || removeAll.isPending}
-          className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-muted)] hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted)]"
+          className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-muted)] hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted)]"
           title={cues.length === 0
             ? 'No cues to delete'
             : `Delete all ${cues.length} cues on this track`}
         >
-          {removeAll.isPending ? 'Clearing…' : '🗑 Clear all'}
+          <Trash2 size={11} strokeWidth={1.75} />
+          {removeAll.isPending ? 'Clearing…' : 'Clear all'}
         </button>
         <button
           onClick={handleGeneratePhrases}
           disabled={noBpm || generatePhraseMarkers.isPending}
-          className="rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
+          className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-muted)]"
           title={noBpm
             ? 'Track has no BPM tag — Wisp can\'t extrapolate phrase positions. Add a BPM via cleanup first.'
             : 'Generate phrase markers across the track using the anchor + the BPM tag'}
         >
-          {generatePhraseMarkers.isPending ? 'Generating…' : '✨ Generate phrases'}
+          <Sparkles size={11} strokeWidth={1.75} />
+          {generatePhraseMarkers.isPending ? 'Generating…' : 'Generate phrases'}
         </button>
       </div>
     </div>
@@ -197,11 +223,11 @@ export function CuesTab({ track }: { track: Track }) {
         {header}
         <div className="space-y-2 px-5 py-6 text-sm text-[var(--color-muted)]">
           <p>
-            No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>＋ Cue</strong> in the action row.
+            No cue points yet. Press <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 text-[10px]">Q</kbd> while a track is playing to add one at the playhead, or click <strong>Cue</strong> in the action row.
           </p>
           {!noBpm && (
             <p className="text-xs">
-              For phrase markers across the whole track: pause at the kick on bar 1, then click <strong>✨ Generate phrases</strong> above — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
+              For phrase markers across the whole track: pause at the kick on bar 1, then click <strong>Generate phrases</strong> above — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
             </p>
           )}
         </div>
@@ -252,13 +278,32 @@ export function CuesTab({ track }: { track: Track }) {
           <span className="shrink-0 tabular-nums text-xs text-[var(--color-muted)]">
             {formatDuration(c.timeSeconds)}
           </span>
+          {deviceCueBySource.has(c.id) ? (
+            <button
+              onClick={() => removeDeviceCue.mutate(deviceCueBySource.get(c.id)!.id)}
+              disabled={removeDeviceCue.isPending}
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-400/50 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] text-emerald-200 hover:bg-red-500/15 hover:text-red-200 disabled:opacity-50"
+              title="This cue is selected as a CDJ Memory Cue. Click to remove it from CDJ export."
+            >
+              <Check size={10} strokeWidth={2} /> CDJ selected
+            </button>
+          ) : (
+            <button
+              onClick={() => promoteToDeviceCue.mutate(c.id)}
+              disabled={promoteToDeviceCue.isPending}
+              className="shrink-0 rounded border border-[var(--color-accent)]/50 px-1.5 py-0.5 text-[10px] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-50"
+              title="Add this WISP cue as a CDJ Memory Cue for export."
+            >
+              Add CDJ Memory
+            </button>
+          )}
           <button
             onClick={() => handleJump(c.timeSeconds)}
             className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-accent)]"
             title="Jump to cue"
             aria-label="Jump to cue"
           >
-            ↪
+            <ArrowLeftRight size={13} strokeWidth={1.75} />
           </button>
           <button
             onClick={() => remove.mutate(c.id)}
@@ -266,12 +311,61 @@ export function CuesTab({ track }: { track: Track }) {
             title="Delete cue"
             aria-label="Delete cue"
           >
-            🗑
+            <Trash2 size={13} strokeWidth={1.75} />
           </button>
         </li>
       ))}
       </ul>
     </div>
+  )
+}
+
+/// A compact rekordbox-style bank that lives beside the waveform. It shows
+/// only device-facing cue state; editorial WISP markers remain editable in
+/// the Cues tab and must be deliberately selected for USB export.
+export function CueBank({
+  track,
+  onJump,
+}: {
+  track: Track
+  onJump: (seconds: number) => void
+}) {
+  const deviceCues = useQuery({
+    queryKey: ['device-cues', track.id],
+    queryFn: () => cuesApi.listDeviceCues(track.id),
+  })
+  const memoryCues = (deviceCues.data ?? [])
+    .filter((cue) => cue.kind === 'MemoryCue' || cue.kind === 'Loop')
+    .sort((a, b) => a.startSeconds - b.startSeconds)
+
+  return (
+    <aside className="flex h-[120px] w-56 shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-bg)]/65 text-[11px]">
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-2.5 py-1.5">
+        <span className="font-semibold tracking-wide text-emerald-200">MEMORY CUES</span>
+        <span className="tabular-nums text-[var(--color-muted)]">{memoryCues.length}/10</span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        {deviceCues.isLoading ? (
+          <p className="px-2.5 py-2 text-[var(--color-muted)]">Loading…</p>
+        ) : memoryCues.length === 0 ? (
+          <p className="px-2.5 py-2 leading-relaxed text-[var(--color-muted)]">No Memory Cues selected. Use the Cues tab to add one for the next USB export.</p>
+        ) : memoryCues.map((cue, index) => (
+          <button
+            key={cue.id}
+            onClick={() => onJump(cue.startSeconds)}
+            className="flex w-full items-center gap-2 border-b border-[var(--color-border)]/35 px-2.5 py-1 text-left hover:bg-white/5"
+            title={`Jump to Memory Cue ${index + 1}`}
+          >
+            <span className="w-7 text-[10px] font-semibold text-emerald-300">{cue.kind === 'Loop' ? 'LOOP' : `MEM ${index + 1}`}</span>
+            <span className="tabular-nums text-white">{formatDuration(cue.startSeconds)}</span>
+            <span className="min-w-0 flex-1 truncate text-[var(--color-muted)]">{cue.comment ?? 'Memory Cue'}</span>
+          </button>
+        ))}
+      </div>
+      <div className="border-t border-[var(--color-border)] px-2.5 py-1.5 text-[10px] text-[var(--color-muted)]">
+        <span className="font-medium text-amber-200">HOT CUES</span> · not supported on CDJ-850
+      </div>
+    </aside>
   )
 }
 

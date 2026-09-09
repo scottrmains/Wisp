@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Check,
+  ChevronDown,
+  Disc3,
+  ExternalLink,
+  Heart,
+  Play,
+  Search as SearchIcon,
+  Tv,
+} from 'lucide-react'
 import { artists } from '../../api/artists'
 import { discover } from '../../api/discover'
 import type {
@@ -125,7 +135,7 @@ function SearchBar({
     <div className="mt-3 flex items-center gap-3">
       <div className="relative min-w-0 flex-1">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]">
-          🔍
+          <SearchIcon size={14} strokeWidth={1.75} />
         </span>
         <input
           autoFocus
@@ -265,7 +275,7 @@ function ArtistList({
   )
 }
 
-/// "Anywhere" search results — Spotify artists + YouTube videos, fetched
+/// "Anywhere" search results — Spotify artists + Tv videos, fetched
 /// in parallel by the backend. Source toggles + quota meter live in the
 /// header strip.
 function AnywhereView({ query }: { query: string }) {
@@ -301,12 +311,14 @@ function AnywhereView({ query }: { query: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] px-6 py-2 text-xs">
         <SourceToggle
-          label="🟢 Spotify"
+          icon={<span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />}
+          label="Spotify"
           enabled={spotifyEnabled}
           onToggle={() => toggleSource('spotify')}
         />
         <SourceToggle
-          label="🎬 YouTube"
+          icon={<Tv size={12} strokeWidth={1.75} />}
+          label="YouTube"
           enabled={youtubeEnabled}
           onToggle={() => toggleSource('youtube')}
         />
@@ -341,10 +353,12 @@ function AnywhereView({ query }: { query: string }) {
 }
 
 function SourceToggle({
+  icon,
   label,
   enabled,
   onToggle,
 }: {
+  icon: React.ReactNode
   label: string
   enabled: boolean
   onToggle: () => void
@@ -353,12 +367,13 @@ function SourceToggle({
     <button
       onClick={onToggle}
       className={[
-        'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors',
         enabled
           ? 'border-[var(--color-accent)]/50 bg-[var(--color-accent)]/15 text-white'
           : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-white',
       ].join(' ')}
     >
+      {icon}
       {label}
     </button>
   )
@@ -375,10 +390,11 @@ function QuotaMeter({ info }: { info: DiscoverQuotaInfo }) {
   const reset = new Date(info.resetUtc)
   return (
     <span
-      className={`ml-auto ${tone}`}
-      title={`YouTube search.list quota. Resets ${reset.toLocaleString()}`}
+      className={`ml-auto inline-flex items-center gap-1.5 ${tone}`}
+      title={`Tv search.list quota. Resets ${reset.toLocaleString()}`}
     >
-      🎬 {info.exhausted ? 'YouTube quota exhausted' : `${remaining}/${info.dailyBudget} searches left today`}
+      <Tv size={12} strokeWidth={1.75} />
+      {info.exhausted ? 'Tv quota exhausted' : `${remaining}/${info.dailyBudget} searches left today`}
     </span>
   )
 }
@@ -397,17 +413,17 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
         <ErrorBanner>Spotify isn't configured. Add credentials in Settings to enable artist search.</ErrorBanner>
       )}
       {data.errors.includes('youtube_unconfigured') && (
-        <ErrorBanner>YouTube isn't configured. Add an API key in Settings to enable video search.</ErrorBanner>
+        <ErrorBanner>Tv isn't configured. Add an API key in Settings to enable video search.</ErrorBanner>
       )}
       {data.errors.includes('spotify_failed') && (
         <ErrorBanner>Spotify search failed. Try again or check your credentials.</ErrorBanner>
       )}
       {data.errors.includes('youtube_failed') && (
-        <ErrorBanner>YouTube search failed. Try again or check your credentials.</ErrorBanner>
+        <ErrorBanner>Tv search failed. Try again or check your credentials.</ErrorBanner>
       )}
       {data.errors.includes('youtube_quota_exhausted') && (
         <ErrorBanner tone="warn">
-          YouTube quota exhausted for today. Spotify search continues; video results return after midnight UTC.
+          Tv quota exhausted for today. Spotify search continues; video results return after midnight UTC.
         </ErrorBanner>
       )}
 
@@ -427,7 +443,7 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
       {hasVideos && (
         <section>
           <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-            Videos · YouTube
+            Videos · Tv
           </h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {data.videos.map((v) => (
@@ -449,7 +465,7 @@ function ErrorBanner({ children, tone = 'error' }: { children: React.ReactNode; 
   )
 }
 
-/// Spotify artist hit — vertical card to match the YouTube-grid feel:
+/// Spotify artist hit — vertical card to match the Tv-grid feel:
 /// circular avatar on top, name below, followers + genres beneath, Follow
 /// button at the bottom. Hover slightly raises the card so the grid feels
 /// interactive at a glance.
@@ -505,10 +521,10 @@ function FollowButton({ hit }: { hit: DiscoverArtistHit }) {
   if (alreadyFollowing || follow.isSuccess) {
     return (
       <span
-        className="shrink-0 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300"
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300"
         title="Already in your library — see them on the My artists tab"
       >
-        ✓ Following
+        <Check size={12} strokeWidth={2} /> Following
       </span>
     )
   }
@@ -525,14 +541,14 @@ function FollowButton({ hit }: { hit: DiscoverArtistHit }) {
   )
 }
 
-/// One YouTube video hit. Inline iframe expands on Watch; Soulseek expands
+/// One Tv video hit. Inline iframe expands on Watch; Soulseek expands
 /// inline; Want POSTs a WantedTrack via the existing useWantedTracks hook.
 function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
   const [expandWatch, setExpandWatch] = useState(false)
   const [expandSlskd, setExpandSlskd] = useState(false)
   const wanted = useWantedTracks()
 
-  // Crudely split the YouTube title into artist/title for the Want payload
+  // Crudely split the Tv title into artist/title for the Want payload
   // and Soulseek search. Title parsing belongs in a real parser (see the
   // YouTubeTitleParser server-side); for now an em-dash / dash split gets
   // us 80% of cases. The Want row's freeform Notes can hold the original.
@@ -562,18 +578,18 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
         {hit.thumbnailUrl ? (
           <img src={hit.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[var(--color-muted)]">🎬</div>
+          <div className="flex h-full w-full items-center justify-center text-[var(--color-muted)]"><Tv size={28} strokeWidth={1.25} /></div>
         )}
         {/* Hover overlay — quick-action shortcut over the thumbnail. The
             full action row lives below for keyboard / always-visible
-            access; this is the YouTube-style hover affordance. */}
+            access; this is the Tv-style hover affordance. */}
         <div className="pointer-events-none absolute inset-0 flex items-end justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             onClick={() => setExpandWatch((e) => !e)}
-            className="pointer-events-auto rounded-full bg-red-500/90 px-2 py-1 text-[10px] font-medium text-white hover:bg-red-500"
+            className="pointer-events-auto rounded-full bg-red-500/90 p-1.5 text-white hover:bg-red-500"
             title="Watch on YouTube"
           >
-            ▶
+            <Play size={12} fill="currentColor" />
           </button>
         </div>
       </div>
@@ -587,38 +603,40 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
       <div className="flex flex-wrap gap-1 border-t border-[var(--color-border)]/40 px-3 py-2">
         <button
           onClick={() => setExpandWatch((e) => !e)}
-          className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
+          className="inline-flex items-center gap-1 rounded border border-red-500/30 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
           title="Watch on YouTube (embedded)"
         >
-          {expandWatch ? '▾ Watch' : '▶ Watch'}
+          {expandWatch ? <ChevronDown size={11} strokeWidth={1.75} /> : <Play size={10} fill="currentColor" />} Watch
         </button>
         <button
           onClick={() => setExpandSlskd((e) => !e)}
-          className="rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+          className="inline-flex items-center gap-1 rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
           title="Search Soulseek for this track"
         >
-          {expandSlskd ? '▾ Soulseek' : '🎼 Soulseek'}
+          {expandSlskd ? <ChevronDown size={11} strokeWidth={1.75} /> : <Disc3 size={11} strokeWidth={1.75} />} Soulseek
         </button>
         <button
           onClick={onWant}
           disabled={alreadyWanted || wanted.create.isPending}
           className={[
-            'rounded border px-2 py-1 text-xs',
+            'inline-flex items-center gap-1 rounded border px-2 py-1 text-xs',
             alreadyWanted
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 cursor-default'
               : 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10',
           ].join(' ')}
           title={alreadyWanted ? 'Already on your Wanted list' : 'Add to Wanted'}
         >
-          {alreadyWanted ? '✓ Wanted' : '❤ Want'}
+          {alreadyWanted
+            ? <><Check size={11} strokeWidth={2} /> Wanted</>
+            : <><Heart size={11} strokeWidth={1.75} /> Want</>}
         </button>
         {bridgeAvailable() && (
           <button
             onClick={() => bridge.openExternal(hit.url)}
             className="ml-auto rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
-            title="Open on YouTube"
+            title="Open on Tv"
           >
-            ↗
+            <ExternalLink size={12} strokeWidth={1.75} />
           </button>
         )}
       </div>
@@ -626,7 +644,7 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
         <div className="border-t border-[var(--color-border)] p-3">
           <div className="aspect-video w-full overflow-hidden rounded bg-black">
             <iframe
-              src={`https://www.youtube.com/embed/${hit.videoId}`}
+              src={`https://www.Tv.com/embed/${hit.videoId}`}
               title={hit.title}
               className="h-full w-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -765,7 +783,7 @@ function ArtistDetail({
           <ul className="ml-4 list-disc text-[12px]">
             <li><strong className="text-white">Spotify</strong> — broad streaming catalogue, fast for current/active artists</li>
             <li><strong className="text-white">Discogs</strong> — vinyl + underground, best for old white-label material</li>
-            <li><strong className="text-white">YouTube</strong> — enriches matched releases with an inline audition player</li>
+            <li><strong className="text-white">Tv</strong> — enriches matched releases with an inline audition player</li>
           </ul>
         </div>
       )}
@@ -810,7 +828,7 @@ function ArtistDetail({
             {[
               artist.isMatchedSpotify && ' Spotify',
               artist.isMatchedDiscogs && ' Discogs',
-              artist.isMatchedYouTube && ' YouTube',
+              artist.isMatchedYouTube && ' Tv',
             ].filter(Boolean).join(', ')}).
           </p>
         </div>
@@ -885,8 +903,8 @@ function SourceMatchTile({
     >
       <div className="flex items-center justify-between">
         <span className="font-medium">{label}</span>
-        <span className={`text-xs ${matched ? 'text-white' : 'text-[var(--color-muted)]'}`}>
-          {matched ? '✓ matched' : 'match →'}
+        <span className={`inline-flex items-center gap-1 text-xs ${matched ? 'text-white' : 'text-[var(--color-muted)]'}`}>
+          {matched ? <><Check size={11} strokeWidth={2} /> matched</> : <>match <ChevronDown size={11} strokeWidth={1.75} className="-rotate-90" /></>}
         </span>
       </div>
       <p className="mt-0.5 text-[10px] text-[var(--color-muted)]">
@@ -926,7 +944,7 @@ function ReleaseRow({
 
   const searchYouTube = () => {
     const q = encodeURIComponent(`${artistName} ${release.title}`)
-    if (bridgeAvailable()) void bridge.openExternal(`https://www.youtube.com/results?search_query=${q}`)
+    if (bridgeAvailable()) void bridge.openExternal(`https://www.Tv.com/results?search_query=${q}`)
   }
 
   return (
@@ -954,19 +972,19 @@ function ReleaseRow({
           {release.youTubeVideoId ? (
             <button
               onClick={() => setYtExpanded((e) => !e)}
-              className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
-              title="Audition on YouTube"
+              className="inline-flex items-center gap-1 rounded border border-red-500/30 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
+              title="Audition on Tv"
             >
-              {ytExpanded ? '▾ YouTube' : '▶ YouTube'}
+              {ytExpanded ? <ChevronDown size={11} strokeWidth={1.75} /> : <Play size={10} fill="currentColor" />} Tv
             </button>
           ) : (
             bridgeAvailable() && (
               <button
                 onClick={searchYouTube}
-                className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
-                title="Search YouTube for this release"
+                className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
+                title="Search Tv for this release"
               >
-                🔍 YT
+                <SearchIcon size={11} strokeWidth={1.75} /> YT
               </button>
             )
           )}
@@ -976,7 +994,7 @@ function ReleaseRow({
               className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
               title={`Open on ${release.source}`}
             >
-              ↗
+              <ExternalLink size={12} strokeWidth={1.75} />
             </button>
           )}
           {/* Soulseek search — same component Crate Digger uses, just fed the
@@ -984,10 +1002,10 @@ function ReleaseRow({
               material that the catalog sources only have a tracklist entry for. */}
           <button
             onClick={() => setSlskdExpanded((s) => !s)}
-            className="rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+            className="inline-flex items-center gap-1 rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
             title="Search Soulseek for this release"
           >
-            {slskdExpanded ? '▾ Soulseek' : '🎼 Soulseek'}
+            {slskdExpanded ? <ChevronDown size={11} strokeWidth={1.75} /> : <Disc3 size={11} strokeWidth={1.75} />} Soulseek
           </button>
           {/* Action buttons swap based on which tab the row is rendered in.
               `library` tab is read-only — the row's already in the user's library,
@@ -1013,10 +1031,10 @@ function ReleaseRow({
           {filter === 'saved' && (
             <button
               onClick={() => update.mutate({ isSavedForLater: false })}
-              className="rounded border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
+              className="inline-flex items-center gap-1 rounded border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
               title="Remove from Wanted (back to New)"
             >
-              ✓ Wanted
+              <Check size={11} strokeWidth={2} /> Wanted
             </button>
           )}
           {filter === 'dismissed' && (
@@ -1034,8 +1052,8 @@ function ReleaseRow({
         <div className="border-t border-[var(--color-border)] p-3">
           <div className="aspect-video w-full overflow-hidden rounded bg-black">
             <iframe
-              src={`https://www.youtube.com/embed/${release.youTubeVideoId}`}
-              title={`${release.title} — YouTube audition`}
+              src={`https://www.Tv.com/embed/${release.youTubeVideoId}`}
+              title={`${release.title} — Tv audition`}
               className="h-full w-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen

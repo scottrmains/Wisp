@@ -19,6 +19,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<MixPlan> MixPlans => Set<MixPlan>();
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
     public DbSet<CuePoint> CuePoints => Set<CuePoint>();
+    public DbSet<DeviceCue> DeviceCues => Set<DeviceCue>();
     public DbSet<MetadataAuditLog> MetadataAuditLogs => Set<MetadataAuditLog>();
     public DbSet<ArtistProfile> ArtistProfiles => Set<ArtistProfile>();
     public DbSet<ExternalRelease> ExternalReleases => Set<ExternalRelease>();
@@ -81,6 +82,20 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
             .WithMany()
             .HasForeignKey(c => c.TrackId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        var deviceCue = b.Entity<DeviceCue>();
+        deviceCue.HasKey(c => c.Id);
+        deviceCue.Property(c => c.Kind).HasConversion<string>().HasMaxLength(20);
+        deviceCue.Property(c => c.Comment).HasMaxLength(200);
+        deviceCue.HasIndex(c => new { c.TrackId, c.StartSeconds });
+        deviceCue.HasOne(c => c.Track)
+            .WithMany()
+            .HasForeignKey(c => c.TrackId)
+            .OnDelete(DeleteBehavior.Cascade);
+        deviceCue.HasOne(c => c.SourceCuePoint)
+            .WithMany()
+            .HasForeignKey(c => c.SourceCuePointId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         var audit = b.Entity<MetadataAuditLog>();
         audit.HasKey(a => a.Id);
@@ -151,6 +166,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
 
         // Track.IsArchived flag — index it so the default `WHERE IsArchived = 0` filter is fast.
         track.HasIndex(t => t.IsArchived);
+        track.HasIndex(t => t.IsUnavailable);
         track.Property(t => t.ArchiveReason).HasConversion<string>().HasMaxLength(20);
 
         var tag = b.Entity<TrackTag>();

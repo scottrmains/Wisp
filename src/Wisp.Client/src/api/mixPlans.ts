@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from './client'
-import type { MixPlan, MixPlanSummary, MixPlanTrack, SuggestedRoute } from './types'
+import type { CdjExportPreflight, CdjExportResult, MixPlan, MixPlanSummary, MixPlanTrack, SuggestedRoute } from './types'
 
 async function apiSend<T>(method: 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -64,5 +64,17 @@ export const mixPlans = {
       fromMptId,
       toMptId,
       gapTracks,
+    }),
+  syncToUsb: (planId: string, targetFolder: string) =>
+    apiPost<{ copied: number; skipped: number; bytesCopied: number; trackCount: number; manifestPath: string }>(
+      `/api/mix-plans/${planId}/sync-to-usb`,
+      { targetFolder },
+    ),
+  cdjPreflight: (planId: string, targetFolder: string) =>
+    apiPost<CdjExportPreflight>(`/api/mix-plans/${planId}/cdj-export/preflight`, { targetFolder }),
+  exportToCdj: (planId: string, targetFolder: string, confirmReplaceExistingPioneerLibrary: boolean) =>
+    apiPost<CdjExportResult>(`/api/mix-plans/${planId}/export-to-cdj`, {
+      targetFolder,
+      confirmReplaceExistingPioneerLibrary,
     }),
 }

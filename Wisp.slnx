@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Wisp.Core.Tests/Wisp.Core.Tests.csproj" />
     <Project Path="tests/Wisp.Infrastructure.Tests/Wisp.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Wisp.Api.Tests/Wisp.Api.Tests.csproj" />
   </Folder>
 </Solution>

@@ -6,7 +6,22 @@ import { usePlayer } from '../../state/player'
 import { useUiPrefs, type InspectorTab as Tab } from '../../state/uiPrefs'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useCues } from '../cues/useCues'
-import { CuesTab, MetadataTab, NotesTab, OverviewTab, TagsTab } from '../inspector/tabContent'
+import {
+  AlertTriangle,
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Pause,
+  Play,
+  Plus,
+  Sparkles,
+  StickyNote,
+  Tag as TagIcon,
+  X,
+} from 'lucide-react'
+import { CueBank, CuesTab, MetadataTab, NotesTab, OverviewTab, TagsTab } from '../inspector/tabContent'
 import { BandedWaveform } from '../player/BandedWaveform'
 import { ConvertToMp3Button } from '../transcoder/ConvertToMp3'
 import { RecommendationsList } from './RecommendationPanel'
@@ -97,6 +112,7 @@ export function TrackPrepWorkspace({
   const togglePlay = usePlayer((s) => s.togglePlay)
   const seek = usePlayer((s) => s.seek)
   const playTrack = usePlayer((s) => s.playTrack)
+  const playerTrackId = usePlayer((s) => s.trackId)
   const clear = usePlayer((s) => s.clear)
   const liveTime = usePlayer((s) => s.position)
   const liveDuration = usePlayer((s) => s.duration)
@@ -116,9 +132,7 @@ export function TrackPrepWorkspace({
     [cuesHook.cues],
   )
 
-  const playLabel = useMemo(() =>
-    isPlaying ? '❚❚ Pause' : '▶ Play',
-  [isPlaying])
+  const playLabel = isPlaying ? 'Pause' : 'Play'
 
   const handleClose = () => {
     // Closing the workspace stops + unloads the player. (If the user just wanted
@@ -273,11 +287,13 @@ export function TrackPrepWorkspace({
       <div className="flex shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
         <button
           onClick={togglePlay}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-xs text-white"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-white"
           title={playLabel}
           aria-label={playLabel}
         >
-          {isPlaying ? '❚❚' : '▶'}
+          {isPlaying
+            ? <Pause size={12} fill="currentColor" />
+            : <Play size={12} fill="currentColor" className="translate-x-[1px]" />}
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" title={track.title ?? ''}>
@@ -294,15 +310,15 @@ export function TrackPrepWorkspace({
           title="Expand workspace"
           aria-label="Expand workspace"
         >
-          ▾
+          <ChevronDown size={16} strokeWidth={1.75} />
         </button>
         <button
           onClick={handleClose}
-          className="text-lg leading-none text-[var(--color-muted)] hover:text-white"
+          className="text-[var(--color-muted)] hover:text-white"
           title="Close workspace (stops playback)"
           aria-label="Close workspace"
         >
-          ×
+          <X size={16} strokeWidth={1.75} />
         </button>
       </div>
     )
@@ -311,46 +327,55 @@ export function TrackPrepWorkspace({
   return (
     <div className="flex shrink-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)]">
       {/* Top: waveform + close/collapse buttons floating top-right */}
-      <div className="relative px-3 pt-3">
-        <BandedWaveform
-          trackId={track.id}
-          duration={duration}
-          currentTime={liveTime}
-          onSeek={handleSeek}
-          cues={cueMarkers}
+      <div className="relative flex gap-3 px-3 pt-3">
+        <div className="min-w-0 flex-1">
+          <BandedWaveform
+            trackId={track.id}
+            duration={duration}
+            currentTime={liveTime}
+            onSeek={handleSeek}
+            cues={cueMarkers}
           // Click on a cue marker / section → seek + start playback from that
           // cue (matches Mixed-in-Key's "click section, play from there"
           // pattern). If the user wants to edit a cue's label/type, the Cues
           // tab is right there in the tab bar.
-          onCueClick={(id) => {
-            const c = cuesHook.cues.find((x) => x.id === id)
-            if (!c) return
-            // playTrack on the same id is a no-op for "load" but kicks audio
-            // back into play if it was paused; then seek lands the playhead.
-            playTrack(track.id)
-            setTimeout(() => seek(c.timeSeconds), 50)
+            onCueClick={(id) => {
+              const c = cuesHook.cues.find((x) => x.id === id)
+              if (!c) return
+              // playTrack on the same id is a no-op for "load" but kicks audio
+              // back into play if it was paused; then seek lands the playhead.
+              playTrack(track.id)
+              setTimeout(() => seek(c.timeSeconds), 50)
+            }}
+            onHoverChange={(t) => { hoverTimeRef.current = t }}
+            bpm={track.bpm}
+            firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
+            height={120}
+          />
+        </div>
+        <CueBank
+          track={track}
+          onJump={(seconds) => {
+            if (playerTrackId !== track.id) playTrack(track.id)
+            setTimeout(() => seek(seconds), 50)
           }}
-          onHoverChange={(t) => { hoverTimeRef.current = t }}
-          bpm={track.bpm}
-          firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
-          height={120}
         />
         <div className="absolute right-4 top-4 flex items-center gap-1">
           <button
             onClick={toggleCollapsed}
-            className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-xs text-[var(--color-muted)] hover:text-white"
+            className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-[var(--color-muted)] hover:text-white"
             title="Collapse workspace (keeps playback)"
             aria-label="Collapse workspace"
           >
-            ▴
+            <ChevronUp size={14} strokeWidth={1.75} />
           </button>
           <button
             onClick={handleClose}
-            className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-base leading-none text-[var(--color-muted)] hover:text-white"
+            className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-[var(--color-muted)] hover:text-white"
             title="Close workspace (stops playback)"
             aria-label="Close workspace"
           >
-            ×
+            <X size={14} strokeWidth={1.75} />
           </button>
         </div>
       </div>
@@ -383,55 +408,62 @@ export function TrackPrepWorkspace({
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
         <button
           onClick={togglePlay}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
+          className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
         >
+          {isPlaying
+            ? <Pause size={12} fill="currentColor" />
+            : <Play size={12} fill="currentColor" className="translate-x-[1px]" />}
           {playLabel}
         </button>
         {onAddToChain && (
-          <ActionButton onClick={() => onAddToChain(track.id)} title="Add to active mix plan">
-            + Add to mix
+          <ActionButton onClick={() => onAddToChain(track.id)} title="Add to active mix plan" icon={Plus}>
+            Add to mix
           </ActionButton>
         )}
         <ActionButton
           onClick={() => addCueAtCursorOrPlayhead()}
+          icon={Plus}
           title={track.bpm
             ? 'Add a cue at the hovered waveform position (or playhead), snapped to the nearest beat. Same as pressing Q. Shift+Q to place off-grid.'
             : 'Add a cue at the hovered waveform position (or playhead). Same as pressing Q.'}
         >
-          ＋ Cue
+          Cue
         </ActionButton>
-        <ActionButton onClick={() => switchTab('recommendations')} title="Find compatible tracks">
-          ✨ Find matches
+        <ActionButton onClick={() => switchTab('recommendations')} title="Find compatible tracks" icon={Sparkles}>
+          Find matches
         </ActionButton>
-        <ActionButton onClick={() => switchTab('tags')} title="Edit tags">
-          🏷 Tag
+        <ActionButton onClick={() => switchTab('tags')} title="Edit tags" icon={TagIcon}>
+          Tag
         </ActionButton>
-        <ActionButton onClick={() => switchTab('notes')} title="Edit notes">
-          📝 Notes
+        <ActionButton onClick={() => switchTab('notes')} title="Edit notes" icon={StickyNote}>
+          Notes
         </ActionButton>
         {(track.isDirtyName || track.isMissingMetadata) && onCleanup && (
           <ActionButton
             onClick={() => onCleanup(track)}
             tone="warn"
+            icon={AlertTriangle}
             title="Cleanup suggested"
           >
-            ⚠ Cleanup
+            Cleanup
           </ActionButton>
         )}
         {onArchive && (
           <ActionButton
             onClick={() => onArchive(track)}
+            icon={track.isArchived ? ArchiveRestore : Archive}
             title={track.isArchived ? 'Restore to active library' : 'Retire from active library'}
           >
-            {track.isArchived ? '♻ Restore' : '📦 Archive'}
+            {track.isArchived ? 'Restore' : 'Archive'}
           </ActionButton>
         )}
         {bridgeAvailable() && (
           <ActionButton
             onClick={() => { void bridge.openInExplorer(track.filePath) }}
+            icon={ExternalLink}
             title="Reveal in Explorer"
           >
-            ↗ Reveal
+            Reveal
           </ActionButton>
         )}
         <ConvertToMp3Button track={track} />
@@ -481,11 +513,13 @@ function ActionButton({
   onClick,
   title,
   tone,
+  icon: Icon,
   children,
 }: {
   onClick: () => void
   title?: string
   tone?: 'warn'
+  icon?: import('lucide-react').LucideIcon
   children: React.ReactNode
 }) {
   const cls = tone === 'warn'
@@ -495,8 +529,9 @@ function ActionButton({
     <button
       onClick={onClick}
       title={title}
-      className={`rounded-md border px-3 py-1.5 text-xs ${cls}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs ${cls}`}
     >
+      {Icon && <Icon size={12} strokeWidth={1.75} />}
       {children}
     </button>
   )

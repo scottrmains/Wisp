@@ -2,9 +2,12 @@ namespace Wisp.Infrastructure;
 
 public static class WispPaths
 {
-    public static string AppDataDir { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Wisp");
+    // Packaging smoke tests use an isolated profile; normal installs retain the
+    // same data directory as development builds, including across upgrades.
+    public static string AppDataDir { get; } =
+        Environment.GetEnvironmentVariable("WISP_DATA_DIR") is { Length: > 0 } dataDir
+            ? Path.GetFullPath(dataDir)
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Wisp");
 
     public static string DatabasePath { get; } = Path.Combine(AppDataDir, "wisp.db");
     public static string ConfigPath { get; } = Path.Combine(AppDataDir, "config.json");

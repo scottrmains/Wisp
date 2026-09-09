@@ -7,6 +7,7 @@
     <AssemblyName>Wisp</AssemblyName>
     <Product>Wisp</Product>
     <Description>Local DJ prep assistant</Description>
+    <OutputType Condition="'$(Configuration)' == 'Release' and '$(RuntimeIdentifier)' == 'win-x64'">WinExe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +18,7 @@
     </PackageReference>
     <PackageReference Include="Photino.NET" Version="4.0.16" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="YamlDotNet" Version="16.2.0" />
   </ItemGroup>
 
@@ -28,14 +30,31 @@
   <PropertyGroup>
     <SpaRoot>..\Wisp.Client\</SpaRoot>
     <SpaDist>wwwroot\</SpaDist>
-    <SlskdRoot>..\..\slskd-0.25.1-win-x64\</SlskdRoot>
-    <FfmpegBinary>..\..\tools\ffmpeg\ffmpeg.exe</FfmpegBinary>
+    <SlskdRoot Condition="'$(SlskdRoot)' == ''">..\..\slskd-0.25.1-win-x64\</SlskdRoot>
+    <FfmpegBinary Condition="'$(FfmpegBinary)' == ''">..\..\tools\ffmpeg\ffmpeg.exe</FfmpegBinary>
   </PropertyGroup>
 
-  <Target Name="BuildSpa" BeforeTargets="Publish">
+  <!-- Vite owns this directory. Publish adds its fresh output explicitly below,
+       avoiding stale or duplicate SDK static-web-asset entries. -->
+  <ItemGroup>
+    <Content Remove="wwwroot\**" />
+  </ItemGroup>
+
+  <Target Name="BuildSpa" AfterTargets="ComputeFilesToPublish">
     <Message Importance="high" Text="Building React client → wwwroot/" />
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install --no-audit --no-fund" Condition="!Exists('$(SpaRoot)node_modules')" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci --no-audit --no-fund" Condition="!Exists('$(SpaRoot)node_modules')" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+    <!-- Include the newly generated client even on the first clean checkout.
+         A BeforeTargets=Publish hook runs too late for the publish file list. -->
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('wwwroot'))" />
+      <_SpaPublishFiles Include="wwwroot\**" Exclude="wwwroot\.gitkeep" />
+      <ResolvedFileToPublish Include="@(_SpaPublishFiles)">
+        <RelativePath>%(_SpaPublishFiles.Identity)</RelativePath>
+        <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
   </Target>
 
   <!--

@@ -1,0 +1,82 @@
+import { HardDriveUpload } from 'lucide-react'
+import { cdjExport, type CdjExportSource } from '../../api/cdjExport'
+import { bridge, bridgeAvailable } from '../../bridge'
+import { alertDialog, confirmDialog } from '../../components/dialog'
+
+interface Props {
+  source: CdjExportSource
+  sourceId: string
+  sourceName: string
+  disabled?: boolean
+  className?: string
+}
+
+// A removable-drive export uses a separate player-accepted Pioneer USB as a
+// read-only database template. The template USB is never modified.
+const directCdjExportAvailable = true
+
+/// A deliberately prominent export entry point. The server performs the
+/// format/capacity checks again during the actual write; this preflight makes
+/// the important failures visible before the user confirms a USB change.
+export function CdjExportButton({ source, sourceId, sourceName, disabled = false, className = '' }: Props) {
+  const exportToCdj = async () => {
+    if (!bridgeAvailable()) return
+    const picked = await bridge.pickFolder()
+    if (!picked.path) return
+
+    const preflight = await cdjExport.preflight(source, sourceId, picked.path)
+    if (preflight.missingFiles.length || preflight.unsupportedFiles.length) {
+      await alertDialog({
+        title: 'CDJ export needs attention',
+        message: `${preflight.missingFiles.length} missing file(s) and ${preflight.unsupportedFiles.length} unsupported file(s) were found. All selected tracks must be MP3, AAC, WAV or AIFF.`,
+        tone: 'error',
+      })
+      return
+    }
+    if (preflight.requiredBytes > preflight.availableBytes) {
+      await alertDialog({
+        title: 'Not enough USB space',
+        message: 'CDJ export was not started because the selected USB does not have enough available space.',
+        tone: 'error',
+      })
+      return
+    }
+
+    const approved = await confirmDialog(preflight.needsPioneerReplacement
+      ? {
+        title: 'Replace the Pioneer library?',
+        message: 'WISP will move the existing PIONEER directory to WISP/backups before installing the prepared library. Existing audio stays on the USB, but only the new WISP library will be shown on the player.',
+        confirmLabel: 'Back up and replace',
+        danger: true,
+      }
+      : {
+        title: 'Run Memory Cue compatibility test?',
+        message: `WISP will copy ${preflight.trackCount} tracks, append its playlist and write ${preflight.deviceCueCount} WISP Memory Cue(s). This test retains the template catalogue; on the CDJ, open the WISP playlist, load each track and verify its Memory Cues.`,
+        confirmLabel: 'Create test USB',
+      })
+    if (!approved) return
+
+    const result = await cdjExport.export(source, sourceId, picked.path, preflight.needsPioneerReplacement)
+    await alertDialog({
+      title: 'CDJ Memory Cue test USB created',
+      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported. On the CDJ, open the WISP playlist, verify each copied track loads, then verify its WISP Memory Cues; template tracks are expected during this diagnostic.`,
+      confirmLabel: 'Done',
+    })
+  }
+
+  const unavailable = !bridgeAvailable()
+  const unavailableForHardware = !directCdjExportAvailable
+  return (
+    <button
+      onClick={() => void exportToCdj()}
+      disabled={disabled || unavailable || unavailableForHardware}
+      title={unavailableForHardware
+        ? 'Direct CDJ-850 export is disabled until it passes the physical-device compatibility test.'
+        : unavailable ? 'CDJ export is available in the WISP desktop app' : `Run the CDJ-850 hardware-validation export for “${sourceName}”`}
+      className={`inline-flex items-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
+    >
+      <HardDriveUpload size={14} strokeWidth={1.8} />
+      Export to CDJ USB
+    </button>
+  )
+}

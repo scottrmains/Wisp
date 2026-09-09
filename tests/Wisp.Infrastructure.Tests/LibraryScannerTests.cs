@@ -121,7 +121,7 @@ public class LibraryScannerTests : IDisposable
     }
 
     [Fact]
-    public async Task Removed_file_is_deleted_from_library()
+    public async Task Removed_file_is_retained_as_unavailable_so_prep_is_not_lost()
     {
         var folder = Path.Combine(_dir, "removed");
         Directory.CreateDirectory(folder);
@@ -135,7 +135,33 @@ public class LibraryScannerTests : IDisposable
         Assert.Equal(1, second.RemovedTracks);
 
         await using var db = NewContext();
-        Assert.Empty(db.Tracks);
+        var track = Assert.Single(db.Tracks);
+        Assert.True(track.IsUnavailable);
+        Assert.NotNull(track.UnavailableSince);
+    }
+
+    [Fact]
+    public async Task Reappearing_file_restores_its_existing_track_identity()
+    {
+        var folder = Path.Combine(_dir, "reappears");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "MK - Burning.mp3");
+        await File.WriteAllBytesAsync(path, new byte[] { 0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+
+        await RunScan(folder);
+        await using var firstDb = NewContext();
+        var originalId = Assert.Single(firstDb.Tracks).Id;
+
+        File.Delete(path);
+        await RunScan(folder);
+        await File.WriteAllBytesAsync(path, new byte[] { 0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+        await RunScan(folder);
+
+        await using var verify = NewContext();
+        var track = Assert.Single(verify.Tracks);
+        Assert.Equal(originalId, track.Id);
+        Assert.False(track.IsUnavailable);
+        Assert.Null(track.UnavailableSince);
     }
 
     [Fact]

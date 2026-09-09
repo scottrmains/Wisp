@@ -213,6 +213,48 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.ToTable("CuePoints");
                 });
 
+            modelBuilder.Entity("Wisp.Core.Cues.DeviceCue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("EndSeconds")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SourceCuePointId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("StartSeconds")
+                        .HasColumnType("REAL");
+
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceCuePointId");
+
+                    b.HasIndex("TrackId", "StartSeconds");
+
+                    b.ToTable("DeviceCues");
+                });
+
             modelBuilder.Entity("Wisp.Core.Discovery.DigitalMatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -668,7 +710,13 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsMissingMetadata")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsUnavailable")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("LastScannedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UnavailableSince")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("MusicalKey")
@@ -694,6 +742,8 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("IsArchived");
+
+                    b.HasIndex("IsUnavailable");
 
                     b.HasIndex("Artist", "Title");
 
@@ -771,6 +821,24 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TrackId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("Wisp.Core.Cues.DeviceCue", b =>
+                {
+                    b.HasOne("Wisp.Core.Cues.CuePoint", "SourceCuePoint")
+                        .WithMany()
+                        .HasForeignKey("SourceCuePointId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Wisp.Core.Tracks.Track", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SourceCuePoint");
 
                     b.Navigation("Track");
                 });

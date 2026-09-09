@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { AlertTriangle, Play, Plus } from 'lucide-react'
 import type { Track } from '../../api/types'
 import { usePlayer } from '../../state/player'
 import { formatDuration } from './format'
@@ -221,11 +222,11 @@ export function LibraryTable({
                     e.stopPropagation()
                     playTrack(t.id)
                   }}
-                  className="flex h-6 w-6 items-center justify-center rounded text-[11px] text-[var(--color-muted)] hover:bg-[var(--color-accent)] hover:text-white"
+                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-muted)] hover:bg-[var(--color-accent)] hover:text-white"
                   title="Play in mini-player"
                   aria-label="Play"
                 >
-                  ▶
+                  <Play size={11} fill="currentColor" />
                 </button>
                 {onAddToChain ? (
                   <button
@@ -233,18 +234,18 @@ export function LibraryTable({
                       e.stopPropagation()
                       onAddToChain(t.id)
                     }}
-                    className="flex h-6 w-6 items-center justify-center rounded text-base text-[var(--color-muted)] hover:bg-[var(--color-accent)] hover:text-white"
+                    className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-muted)] hover:bg-[var(--color-accent)] hover:text-white"
                     title="Add to active mix plan"
                     aria-label="Add to active mix plan"
                   >
-                    +
+                    <Plus size={12} strokeWidth={2} />
                   </button>
                 ) : (
                   <span
                     className="text-[var(--color-muted)]/30"
                     title="Create or select a mix plan to add tracks"
                   >
-                    +
+                    <Plus size={12} strokeWidth={2} />
                   </span>
                 )}
               </div>
@@ -267,7 +268,7 @@ export function LibraryTable({
                     }
                     aria-label="Open cleanup preview"
                   >
-                    ⚠
+                    <AlertTriangle size={13} strokeWidth={1.75} />
                   </button>
                 )}
               </div>

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { AlertTriangle, Pause, Play, X } from 'lucide-react'
 import { tracks as tracksApi } from '../../api/library'
 import { useAudioDeck } from '../../audio/useAudioDeck'
 import { usePlayer } from '../../state/player'
@@ -80,7 +81,7 @@ export function MiniPlayer() {
           aria-label={deck.isPlaying ? 'Pause' : 'Play'}
           title={deck.isPlaying ? 'Pause' : 'Play'}
         >
-          {deck.loading ? '…' : deck.isPlaying ? '❚❚' : '▶'}
+          {deck.loading ? '…' : deck.isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
         </button>
 
         {/* Title + artist */}
@@ -109,16 +110,16 @@ export function MiniPlayer() {
 
         <button
           onClick={clear}
-          className="shrink-0 text-lg leading-none text-[var(--color-muted)] hover:text-white"
+          className="shrink-0 text-[var(--color-muted)] hover:text-white"
           aria-label="Stop and close player"
           title="Stop and close player"
         >
-          ×
+          <X size={16} strokeWidth={1.75} />
         </button>
 
         {deck.error && (
-          <span className="ml-1 text-[11px] text-red-400" title={deck.error}>
-            ⚠ Error
+          <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-red-400" title={deck.error}>
+            <AlertTriangle size={12} strokeWidth={1.75} /> Error
           </span>
         )}
       </div>

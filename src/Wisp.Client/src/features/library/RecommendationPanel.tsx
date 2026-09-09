@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
 import { playlists as playlistsApi } from '../../api/playlists'
 import type { Recommendation, RecommendationMode, Track } from '../../api/types'
+import { ChevronDown, ChevronRight, Pause, Play, Plus } from 'lucide-react'
 import { useActivePlan } from '../../state/activePlan'
 import { usePlayer } from '../../state/player'
 import { useMixPlan } from '../mixchain/useMixPlans'
@@ -15,7 +16,7 @@ const MODES: { value: RecommendationMode; label: string }[] = [
   { value: 'SameVibe', label: 'Same vibe' },
   { value: 'Creative', label: 'Creative' },
   { value: 'Wildcard', label: 'Wildcard' },
-  { value: 'Party', label: '🪩 Party' },
+  { value: 'Party', label: 'Party' },
 ]
 
 interface RecommendationsListProps {
@@ -203,14 +204,15 @@ function RecommendationRow({
             ? (isPlaying ? 'Pause' : 'Resume')
             : 'Play this recommendation'}
         >
-          <p className="truncate text-sm font-medium" title={t.title ?? ''}>
+          <p className="flex items-center gap-1 truncate text-sm font-medium" title={t.title ?? ''}>
             {isLoaded && (
-              <span
-                className="mr-1 text-[var(--color-accent)]"
-                aria-hidden
-              >{isPlaying ? '❚❚' : '▶'}</span>
+              <span className="text-[var(--color-accent)]" aria-hidden>
+                {isPlaying
+                  ? <Pause size={11} fill="currentColor" />
+                  : <Play size={11} fill="currentColor" />}
+              </span>
             )}
-            {t.title ?? t.fileName}
+            <span className="truncate">{t.title ?? t.fileName}</span>
           </p>
           <p className="truncate text-xs text-[var(--color-muted)]" title={t.artist ?? ''}>
             {t.artist ?? 'Unknown'}
@@ -234,7 +236,7 @@ function RecommendationRow({
             onMouseDown={(e) => e.stopPropagation()}
             onClick={handlePlayClick}
             className={[
-              'rounded-md border px-2.5 py-1 text-xs font-medium',
+              'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium',
               isLoaded
                 ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white'
                 : 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
@@ -243,7 +245,11 @@ function RecommendationRow({
               ? (isPlaying ? 'Pause' : 'Resume')
               : 'Load + play in mini-player'}
           >
-            {isLoaded ? (isPlaying ? '❚❚ Pause' : '▶ Resume') : '▶ Play'}
+            {isLoaded
+              ? (isPlaying
+                  ? <><Pause size={11} fill="currentColor" /> Pause</>
+                  : <><Play size={11} fill="currentColor" /> Resume</>)
+              : <><Play size={11} fill="currentColor" /> Play</>}
           </button>
           {onAddToChain && (
             <button
@@ -251,24 +257,25 @@ function RecommendationRow({
               // (some browsers begin drag from mousedown on draggable parents).
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => onAddToChain(t.id)}
-              className="rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent)]/80"
+              className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent)]/80"
               title="Add to mix chain"
             >
-              + Add
+              <Plus size={12} strokeWidth={2.25} /> Add
             </button>
           )}
           <button
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setOpen((o) => !o)}
             className={[
-              'rounded-md border px-2 py-0.5 text-[11px] transition-colors',
+              'inline-flex items-center gap-0.5 rounded-md border px-2 py-0.5 text-[11px] transition-colors',
               open
                 ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white'
                 : 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
             ].join(' ')}
             aria-expanded={open}
           >
-            {open ? '▾ Why' : '▸ Why?'}
+            {open ? <ChevronDown size={11} strokeWidth={1.75} /> : <ChevronRight size={11} strokeWidth={1.75} />}
+            Why{open ? '' : '?'}
           </button>
         </div>
       </div>

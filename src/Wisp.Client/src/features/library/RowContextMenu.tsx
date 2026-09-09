@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
 
 export interface ContextMenuItem {
   /// Stable key (also used as the menu label fallback). Required.
   id: string
   label: string
-  icon?: string
+  icon?: LucideIcon
   /// Disabled items render greyed and with a tooltip explaining why.
   disabled?: boolean
   disabledReason?: string
@@ -96,7 +97,9 @@ export function RowContextMenu({ items, x, y, onClose }: Props) {
                 : 'hover:bg-[var(--color-accent)]/20 hover:text-white',
             ].join(' ')}
           >
-            <span className="w-4 text-center text-[var(--color-muted)]">{item.icon ?? ''}</span>
+            <span className="flex w-4 justify-center text-[var(--color-muted)]">
+              {item.icon ? <item.icon size={13} strokeWidth={1.75} /> : null}
+            </span>
             <span>{item.label}</span>
           </button>
         </div>

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { SoundTouchNode } from '@soundtouchjs/audio-worklet'
 import { ensureAudio } from './context'
 
+/* eslint-disable react-hooks/immutability -- HTMLAudioElement is an imperative browser resource; its source, volume and position must be mutated through the Web Audio API. */
+
 export type TempoMode = 'masterTempo' | 'pitch'
 
 export interface AudioDeck {
@@ -34,14 +36,14 @@ export interface AudioDeck {
 /// Using HTMLAudioElement (not AudioBufferSource) means we stream over Range
 /// requests instead of buffering the whole file before playback.
 export function useAudioDeck(trackId: string | null): AudioDeck {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  if (audioRef.current === null) {
+  // An Audio element is a stable external resource for the lifetime of this
+  // hook. Lazy state construction avoids reading/writing a ref during render.
+  const [audio] = useState(() => {
     const el = new Audio()
     el.preload = 'metadata'
     el.crossOrigin = 'anonymous'
-    audioRef.current = el
-  }
-  const audio = audioRef.current
+    return el
+  })
 
   const [gainNode, setGainNode] = useState<GainNode | null>(null)
   const stretchRef = useRef<SoundTouchNode | null>(null)
@@ -67,9 +69,8 @@ export function useAudioDeck(trackId: string | null): AudioDeck {
 
       // Insert SoundTouchNode between source and gain. If the worklet failed to
       // register (rare), fall back to a direct connection so audio still plays.
-      let stretch: SoundTouchNode | null = null
       try {
-        stretch = new SoundTouchNode(ctx)
+        const stretch = new SoundTouchNode(ctx)
         source.connect(stretch).connect(gain)
         stretchRef.current = stretch
       } catch (err) {

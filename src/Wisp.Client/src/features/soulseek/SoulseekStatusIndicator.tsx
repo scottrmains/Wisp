@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Check, Download, X } from 'lucide-react'
 import { useSoulseekStatus } from '../../state/soulseekStatus'
 import { useSoulseekTransfers } from './useSoulseekTransfers'
 
@@ -50,9 +51,11 @@ export function SoulseekStatusIndicator() {
     ? Math.round(inFlight.reduce((sum, t) => sum + (t.percentage || 0), 0) / inFlight.length)
     : 100
 
-  const label = hasInFlight
-    ? `📥 ${inFlight.length} downloading · ${aggregatePct}%`
-    : `✓ ${completed.length} downloaded`
+  const label = hasInFlight ? (
+    <><Download size={12} strokeWidth={1.75} /> {inFlight.length} downloading · {aggregatePct}%</>
+  ) : (
+    <><Check size={12} strokeWidth={2} /> {completed.length} downloaded</>
+  )
 
   const tone = hasInFlight
     ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/15 text-white'
@@ -68,7 +71,7 @@ export function SoulseekStatusIndicator() {
         ].join(' ')}
         title="Soulseek transfers"
       >
-        <span>{label}</span>
+        <span className="inline-flex items-center gap-1.5">{label}</span>
         {hasInFlight && (
           <span className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-white/10 sm:inline-block">
             <span
@@ -95,10 +98,10 @@ export function SoulseekStatusIndicator() {
               )}
               <button
                 onClick={() => setOpen(false)}
-                className="text-base leading-none text-[var(--color-muted)] hover:text-white"
+                className="text-[var(--color-muted)] hover:text-white"
                 aria-label="Close"
               >
-                ×
+                <X size={14} strokeWidth={1.75} />
               </button>
             </div>
           </header>
@@ -124,7 +127,11 @@ export function SoulseekStatusIndicator() {
                   <div className="mt-1 flex items-center gap-2">
                     <span className="text-[10px] text-[var(--color-muted)]">{t.username}</span>
                     <span className={`text-[10px] ${tone}`}>
-                      {done ? (succeeded ? '✓ done' : cancelled ? 'cancelled' : errored ? 'failed' : t.state) : t.state}
+                      {done
+                        ? (succeeded
+                            ? <span className="inline-flex items-center gap-0.5"><Check size={10} strokeWidth={2} /> done</span>
+                            : cancelled ? 'cancelled' : errored ? 'failed' : t.state)
+                        : t.state}
                     </span>
                     {!done && (
                       <span className="ml-auto tabular-nums text-[10px] text-[var(--color-muted)]">

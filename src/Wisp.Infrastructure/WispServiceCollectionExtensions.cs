@@ -12,6 +12,7 @@ using Wisp.Infrastructure.ExternalCatalog.YouTube;
 using Wisp.Infrastructure.FileSystem;
 using Wisp.Infrastructure.Library;
 using Wisp.Infrastructure.Tagging;
+using Wisp.Infrastructure.Usb;
 
 namespace Wisp.Infrastructure;
 
@@ -31,6 +32,9 @@ public static class WispServiceCollectionExtensions
 
         services.AddSingleton<RecommendationService>();
         services.AddSingleton<AiffTranscoder>();
+        services.AddSingleton<UsbFileSync>();
+        services.AddSingleton<PioneerDeviceLibraryWriter>();
+        services.AddSingleton<PioneerUsbExportService>();
 
         services.AddScoped<CleanupSuggestionService>();
         services.AddScoped<CleanupApplier>();

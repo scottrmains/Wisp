@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Check, Disc3, ExternalLink, X } from 'lucide-react'
 import type { WantedTrack } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { confirmDialog } from '../../components/dialog'
@@ -35,7 +36,7 @@ export function WantedPage() {
           <h1 className="text-lg font-semibold tracking-tight">Wanted</h1>
           <p className="text-xs text-[var(--color-muted)]">
             Tracks you've marked Want from Discover or Crate Digger. Anything in this list that
-            shows up in a future library scan gets a <span className="text-emerald-300">✓ in library</span> chip.
+            shows up in a future library scan gets a <span className="text-emerald-300">in-library</span> chip.
           </p>
         </div>
         {foundCount > 0 && (
@@ -87,8 +88,8 @@ export function WantedPage() {
                     <SourceBadge source={w.source} />
                     <span>· added {new Date(w.addedAt).toLocaleDateString()}</span>
                     {w.matchedLocalTrackId && (
-                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300">
-                        ✓ in library
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                        <Check size={10} strokeWidth={2} /> in library
                       </span>
                     )}
                   </p>
@@ -100,22 +101,22 @@ export function WantedPage() {
                       className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
                       title="Open source"
                     >
-                      ↗
+                      <ExternalLink size={12} strokeWidth={1.75} />
                     </button>
                   )}
                   <button
                     onClick={() => setSlskdFor(w.id)}
-                    className="rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+                    className="inline-flex items-center gap-1 rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
                     title="Search Soulseek"
                   >
-                    🎼 Soulseek
+                    <Disc3 size={11} strokeWidth={1.75} /> Soulseek
                   </button>
                   <button
                     onClick={() => handleRemove(w)}
                     className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-red-300"
                     title="Remove from Wanted"
                   >
-                    ✕
+                    <X size={12} strokeWidth={1.75} />
                   </button>
                 </div>
               </div>

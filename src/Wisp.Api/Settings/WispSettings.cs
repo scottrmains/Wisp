@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
 using Wisp.Infrastructure;
 
 namespace Wisp.Api.Settings;
@@ -84,7 +85,7 @@ public sealed class WispSettingsStore
         try
         {
             var json = File.ReadAllText(WispPaths.ConfigPath);
-            return JsonSerializer.Deserialize<WispSettings>(json, Json) ?? new WispSettings();
+            return UnprotectSecrets(JsonSerializer.Deserialize<WispSettings>(json, Json) ?? new WispSettings());
         }
         catch
         {
@@ -95,7 +96,76 @@ public sealed class WispSettingsStore
     private static void Save(WispSettings settings)
     {
         var tmp = WispPaths.ConfigPath + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(settings, Json));
+        // This app is Windows-only. Persist sensitive API keys and credentials
+        // encrypted for the current Windows user rather than as readable JSON.
+        // Non-sensitive configuration remains plain JSON for straightforward
+        // support and manual recovery.
+        File.WriteAllText(tmp, JsonSerializer.Serialize(ProtectSecrets(settings), Json));
         File.Move(tmp, WispPaths.ConfigPath, overwrite: true);
+    }
+
+    private static WispSettings ProtectSecrets(WispSettings settings) => settings with
+    {
+        Catalog = settings.Catalog is { } catalog ? catalog with
+        {
+            Spotify = catalog.Spotify is { } spotify
+                ? spotify with { ClientSecret = ProtectRequired(spotify.ClientSecret) } : null,
+            Discogs = catalog.Discogs is { } discogs
+                ? discogs with { PersonalAccessToken = ProtectRequired(discogs.PersonalAccessToken) } : null,
+            YouTube = catalog.YouTube is { } youTube
+                ? youTube with { ApiKey = ProtectRequired(youTube.ApiKey) } : null,
+            Soulseek = catalog.Soulseek is { } soulseek
+                ? soulseek with { ApiKey = ProtectRequired(soulseek.ApiKey), Password = ProtectOptional(soulseek.Password) } : null,
+        } : null,
+    };
+
+    private static WispSettings UnprotectSecrets(WispSettings settings) => settings with
+    {
+        Catalog = settings.Catalog is { } catalog ? catalog with
+        {
+            Spotify = catalog.Spotify is { } spotify
+                ? spotify with { ClientSecret = UnprotectRequired(spotify.ClientSecret) } : null,
+            Discogs = catalog.Discogs is { } discogs
+                ? discogs with { PersonalAccessToken = UnprotectRequired(discogs.PersonalAccessToken) } : null,
+            YouTube = catalog.YouTube is { } youTube
+                ? youTube with { ApiKey = UnprotectRequired(youTube.ApiKey) } : null,
+            Soulseek = catalog.Soulseek is { } soulseek
+                ? soulseek with { ApiKey = UnprotectRequired(soulseek.ApiKey), Password = UnprotectOptional(soulseek.Password) } : null,
+        } : null,
+    };
+
+    private const string ProtectedPrefix = "dpapi:";
+
+    private static string ProtectRequired(string value) => ProtectOptional(value) ?? string.Empty;
+
+    private static string? ProtectOptional(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.StartsWith(ProtectedPrefix, StringComparison.Ordinal)) return value;
+        if (!OperatingSystem.IsWindows()) return value;
+        var bytes = ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(value), null, DataProtectionScope.CurrentUser);
+        return ProtectedPrefix + Convert.ToBase64String(bytes);
+    }
+
+    private static string UnprotectRequired(string value) => UnprotectOptional(value) ?? string.Empty;
+
+    private static string? UnprotectOptional(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || !value.StartsWith(ProtectedPrefix, StringComparison.Ordinal)) return value;
+        if (!OperatingSystem.IsWindows()) return null;
+        try
+        {
+            var bytes = Convert.FromBase64String(value[ProtectedPrefix.Length..]);
+            return System.Text.Encoding.UTF8.GetString(ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser));
+        }
+        catch (CryptographicException)
+        {
+            // A config copied from another Windows account cannot be decrypted.
+            // Treat it as absent instead of accidentally sending cipher text to a service.
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 }

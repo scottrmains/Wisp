@@ -1,3 +1,5 @@
+import { Archive, ListMusic, Plus, Tag as TagIcon, X } from 'lucide-react'
+
 interface Props {
   count: number
   hasActivePlan: boolean
@@ -23,23 +25,23 @@ export function BulkActionBar({ count, hasActivePlan, onAddToMix, onArchive, onT
         disabled={!hasActivePlan}
         title={hasActivePlan ? 'Append all to the active mix plan' : 'Pick or create an active mix plan first'}
       >
-        ＋ Add to mix
+        <Plus size={12} strokeWidth={2} /> Add to mix
       </BarButton>
       <BarButton onClick={onArchive} title="Retire selection from the active library">
-        📦 Archive
+        <Archive size={12} strokeWidth={1.75} /> Archive
       </BarButton>
       <BarButton onClick={onTag} title="Apply a tag to every selected track">
-        🏷 Tag…
+        <TagIcon size={12} strokeWidth={1.75} /> Tag…
       </BarButton>
       <BarButton onClick={onAddToPlaylist} title="Add the selection to a playlist (or create a new one)">
-        🎶 Add to playlist…
+        <ListMusic size={12} strokeWidth={1.75} /> Add to playlist…
       </BarButton>
       <button
         onClick={onClear}
-        className="ml-auto text-xs text-[var(--color-muted)] hover:text-white"
+        className="ml-auto inline-flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-white"
         title="Clear selection (Esc)"
       >
-        ✕ Clear
+        <X size={12} strokeWidth={1.75} /> Clear
       </button>
     </div>
   )
@@ -61,7 +63,7 @@ function BarButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1 text-xs hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1 text-xs hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

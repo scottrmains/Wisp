@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import type { DiscoveredTrack, DiscoveryStatus } from '../../api/types'
 
 interface Props {
@@ -13,7 +14,7 @@ const STATUS_PILL: Record<DiscoveryStatus, { label: string; tone: string }> = {
   Ignore: { label: 'ignored', tone: 'bg-white/5 text-[var(--color-muted)]' },
   NoMatch: { label: 'no match', tone: 'bg-red-500/20 text-red-300' },
   VinylOnly: { label: 'vinyl only', tone: 'bg-amber-500/20 text-amber-300' },
-  DigitalAvailable: { label: 'digital ✓', tone: 'bg-emerald-500/30 text-emerald-200' },
+  DigitalAvailable: { label: 'digital available', tone: 'bg-emerald-500/30 text-emerald-200' },
   PossibleMatch: { label: 'possible', tone: 'bg-amber-400/20 text-amber-300' },
 }
 
@@ -64,8 +65,8 @@ export function DiscoveredTrackList({ tracks, loading, onSelect }: Props) {
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {t.isAlreadyInLibrary && (
-              <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300" title="Matched against your local library">
-                ✓ owned
+              <span className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300" title="Matched against your local library">
+                <Check size={10} strokeWidth={2} /> owned
               </span>
             )}
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL[t.status].tone}`}>

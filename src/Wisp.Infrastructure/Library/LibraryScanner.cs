@@ -58,6 +58,11 @@ public class LibraryScanner(
 
                     if (existingByPath.TryGetValue(path, out var existing))
                     {
+                        // The file is back after being unavailable (for example, an
+                        // external drive was reconnected). Preserve its stable Wisp
+                        // identity and all associated prep work.
+                        existing.IsUnavailable = false;
+                        existing.UnavailableSince = null;
                         if (existing.FileHash == hash)
                         {
                             existing.LastScannedAt = DateTime.UtcNow;
@@ -103,12 +108,16 @@ public class LibraryScanner(
                 }
             }
 
-            // 4. Anything under root we didn't see → removed.
+            // 4. Anything under root we didn't see is unavailable, not deleted.
+            // Deleting a Track cascades through CuePoints, Playlists, MixPlans and
+            // tags. A partial scan, network hiccup or moved USB must never erase
+            // the DJ's preparation data.
             foreach (var (storedPath, storedTrack) in existingByPath)
             {
                 if (!seenPaths.Contains(storedPath))
                 {
-                    db.Tracks.Remove(storedTrack);
+                    storedTrack.IsUnavailable = true;
+                    storedTrack.UnavailableSince ??= DateTime.UtcNow;
                     job.RemovedTracks++;
                 }
             }
