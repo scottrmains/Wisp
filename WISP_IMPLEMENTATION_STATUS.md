@@ -1,6 +1,27 @@
 # Wisp implementation status
 
-Last reviewed: 2026-07-28
+Last reviewed: 2026-09-09
+
+## 2026-09-09: current status and Windows packaging
+
+This summary supersedes the contradictory historical USB entries below.
+
+- **Hardware-confirmed:** a template-backed WISP playlist appeared and all three
+  tracks played on CDJ-850. Equivalent successful CDJ-900 acceptance is not recorded.
+- **Still unresolved:** exports retain the template catalogue, Memory Cue recall
+  has not been confirmed, and Pioneer waveforms/beatgrids are not generated.
+  A fresh USB still requires a separate player-accepted Pioneer database template.
+- **Next physical test:** select two clearly separated CDJ Memory cues on each of
+  the three known-working tracks, explicitly export, then browse the `WISP — …`
+  playlist and test stored Memory Cue recall on CDJ-850 and CDJ-900 separately.
+  Report playlist visibility, playback and cue timestamps for each player.
+  Extra template tracks and absent waveforms are expected with this diagnostic build.
+- **Windows installer implemented:** pushes to `main`, PRs into `main` and manual
+  workflow runs build a self-contained per-user installer. It bundles the client,
+  .NET, pristine slskd and FFmpeg; WebView2 is installed if missing. The existing
+  `%LOCALAPPDATA%\Wisp` library survives upgrades and uninstall. CI includes an
+  install/startup/reinstall/uninstall check. No automatic app updater or code
+  signing is configured. Packaging does not change CDJ export compatibility.
 
 > Current implementation status: **template-backed CDJ export is enabled for physical testing.** A removable-drive export no longer creates a DeviceSQL database from scratch. Wisp reads a separate, player-accepted `PIONEER/rekordbox/export.pdb` (for the present test setup, `F:`) as a **read-only** allocation template, appends Wisp tracks and playlists to a staged copy, validates the added rows, and installs that copy on the selected USB (for the present test setup, `H:`). The template drive is never written to.
 

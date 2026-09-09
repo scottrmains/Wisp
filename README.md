@@ -12,8 +12,8 @@ Reads BPM / Camelot key / energy from existing Mixed in Key tags — no audio an
 
 ## Requirements
 
-- .NET 10 SDK (preview channel — `dotnet --version` ≥ 10.0)
-- Node 20+ and npm 10+
+- .NET 10 SDK (`dotnet --version` ≥ 10.0) for development
+- Node 22+ and npm 10+ for development
 - Windows 10/11 with the WebView2 runtime (built into Win11; auto-installs from the evergreen bootstrapper on Win10)
 
 ## Run it
@@ -35,7 +35,40 @@ There are three launch profiles plus matching root npm scripts.
 npm run build
 ```
 
-This runs the SPA build (output → `src/Wisp.Api/wwwroot/`) and `dotnet publish -r win-x64 -c Release --self-contained` to `./publish/`. The result is a self-contained ~117 MB folder containing `Wisp.exe` plus runtime files. Double-click `Wisp.exe` to launch.
+This runs the SPA build (output → `src/Wisp.Api/wwwroot/`) and `dotnet publish -r win-x64 -c Release --self-contained` to `./publish/`. Double-click `publish/Wisp.exe` to launch without Visual Studio. Keep the executable together with the rest of the published folder; it contains the runtime, UI and supporting files.
+
+### Windows installer
+
+The **Windows installer** GitHub Actions workflow tests and packages every push to
+`main`, pull request into `main`, and manual run. Open the successful run under
+**Actions → Windows installer**, download its `Wisp-Setup-…-win-x64` artifact,
+extract the downloaded ZIP and run the setup EXE. Artifacts are retained for 90
+days. This produces a new installer, not an automatic update of installed apps.
+
+Setup installs into `%LOCALAPPDATA%\Programs\Wisp`, adds a Start menu shortcut
+and optionally a desktop shortcut. It includes the .NET runtime, FFmpeg and
+slskd. If WebView2 is missing, setup installs it using Microsoft's bootstrapper
+(internet access required in that case). Visual Studio, Node and the .NET SDK
+are not required to run the installed app. Builds are currently unsigned, so
+Windows may show an unknown-publisher/SmartScreen prompt.
+
+Run a newer installer to update. Your existing development library, cues and
+settings remain in `%LOCALAPPDATA%\Wisp`; upgrades and uninstall preserve that
+directory. Close an existing Wisp session before opening the installed copy.
+
+To build setup locally, install [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+alongside the development requirements, then run:
+
+```powershell
+pwsh tools/build-installer.ps1 -Version 0.1.0
+```
+
+The EXE and SHA-256 checksum appear in `artifacts/installers/`. Packaging fetches
+pristine, checksum-verified dependency archives, avoiding any local Soulseek
+configuration. CI verifies a fresh installation, serves the bundled UI from the
+installed executable, reinstalls it, then checks that uninstall preserves data.
+That startup test is headless; it does not verify the Photino window or CDJ USB
+compatibility. `WISP_DATA_DIR` selects a separate profile for isolated testing.
 
 ## Tests
 
