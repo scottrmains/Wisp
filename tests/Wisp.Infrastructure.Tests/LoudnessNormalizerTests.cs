@@ -58,6 +58,42 @@ public sealed class LoudnessNormalizerTests : IDisposable
         Assert.True(limited.Output.TruePeakDb <= -1);
     }
 
+    [Theory]
+    [InlineData(-13.59, 0.28, -14, true, false, "unchanged", 0)]
+    [InlineData(-13.59, 0.28, -8, true, false, "needs-limiting", 0)]
+    [InlineData(-13.59, 0.28, -8, true, true, "limit", 5.59)]
+    [InlineData(-7, 1, -8, true, true, "unchanged", 0)]
+    [InlineData(-22, -15, -14, true, false, "boost", 8)]
+    [InlineData(-22, -2, -14, true, false, "partial-boost", 0.8)]
+    [InlineData(-14.5, -3, -14, true, false, "unchanged", 0)]
+    [InlineData(-7, 1, -14, false, false, "reduce", -7)]
+    [InlineData(-13.59, 0.28, -14, false, false, "reduce", -1.48)]
+    public void Boost_only_plans_never_recommend_attenuation(double input, double peak, double target,
+        bool boostOnly, bool limiting, string action, double gain)
+    {
+        var plan = LoudnessNormalizer.Plan(new(input, peak, 3.4, input - 10, 0, 30), target, boostOnly, limiting);
+        Assert.Equal(action, plan.Action); Assert.Equal(gain, plan.GainDb, 5);
+        Assert.Equal(action is not ("unchanged" or "needs-limiting"), plan.CanCreate);
+        if (boostOnly) Assert.True(plan.GainDb >= 0);
+    }
+
+    [Fact]
+    public async Task Real_ffmpeg_can_match_a_louder_reference_with_opt_in_limiting()
+    {
+        var source = Signal(peaks: true);
+        var original = await File.ReadAllBytesAsync(source);
+        var measured = await _normalizer.MeasureAsync(source, -8, default);
+        var result = await _normalizer.RenderAsync(source, Path.Combine(_root, "reference-matched.wav"), measured, -8, true,
+            new Dictionary<string, string>(), default);
+        Assert.True(result.Limited);
+        Assert.True(result.Output.IntegratedLufs > measured.IntegratedLufs);
+        Assert.InRange(result.Output.IntegratedLufs, -9, -7);
+        Assert.True(result.Output.TruePeakDb <= -1);
+        Assert.Equal(original, await File.ReadAllBytesAsync(source));
+        using var reader = new WaveFileReader(Path.Combine(_root, "reference-matched.wav"));
+        Assert.InRange(reader.TotalTime.TotalSeconds, 11.99, 12.01);
+    }
+
     [Fact]
     public async Task Silence_and_cancellation_cannot_produce_a_successful_analysis()
     {
