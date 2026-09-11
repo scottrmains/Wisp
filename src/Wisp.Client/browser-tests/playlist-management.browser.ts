@@ -201,7 +201,7 @@ for (const choice of ['Skip existing', 'Add again', 'Cancel']) {
     const data = { items: [{ mimeType: 'application/x-wisp-track-ids', data: JSON.stringify(['track-0', 'track-1']) }],
       files: [fileURLToPath(import.meta.url)], dragOperationsMask: 1 }
     try {
-      for (const type of ['dragEnter', 'dragOver', 'drop'])
+      for (const type of ['dragEnter', 'dragOver', 'drop'] as const)
         await session.send('Input.dispatchDragEvent', { type, x: box!.x + 10, y: box!.y + 8, data })
     } finally { await session.detach() }
     const dialog = page.getByRole('dialog', { name: 'Already in this playlist' })
