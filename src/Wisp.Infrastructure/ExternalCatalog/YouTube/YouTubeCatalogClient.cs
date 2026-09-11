@@ -106,11 +106,9 @@ public sealed class YouTubeCatalogClient(
             .ToArray();
     }
 
-    /// Free-text video search used by Discover ("Anywhere" mode). 100 quota
-    /// units per call — same shape as SearchTopicChannelsAsync, just with
-    /// `type=video`. Filtered to YouTube's Music category (id=10) which
-    /// strongly biases toward Topic-channel uploads + actual music videos
-    /// over fan reaction content / interviews / mix recordings.
+    /// Free-text video search used by Discover ("Anywhere" mode).
+    /// Do not filter by category: many vinyl/fan uploads are not categorised
+    /// as Music. Preserve YouTube's relevance ordering for track-name queries.
     /// Caller (DiscoverEndpoints + YouTubeQuotaTracker) is responsible for
     /// caching + budgeting; this method just talks to the API and shapes
     /// the result.
@@ -120,8 +118,8 @@ public sealed class YouTubeCatalogClient(
         if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
 
         var http = httpFactory.CreateClient("Wisp.YouTube");
-        var url = $"{ApiBase}/search?part=snippet&type=video&videoCategoryId=10&maxResults={Math.Clamp(limit, 1, 25)}" +
-                  $"&q={Uri.EscapeDataString(query)}&key={Uri.EscapeDataString(options.ApiKey!)}";
+        var url = $"{ApiBase}/search?part=snippet&type=video&order=relevance&maxResults={Math.Clamp(limit, 1, 25)}" +
+                  $"&q={Uri.EscapeDataString(YouTubeSearchQuery.Normalize(query))}&key={Uri.EscapeDataString(options.ApiKey!)}";
 
         using var resp = await http.GetAsync(url, ct);
         await ThrowOnQuota(resp, ct);
@@ -134,8 +132,8 @@ public sealed class YouTubeCatalogClient(
             .Where(i => !string.IsNullOrEmpty(i.Id?.VideoId))
             .Select(i => new YouTubeVideoHit(
                 VideoId: i.Id!.VideoId!,
-                Title: i.Snippet?.Title ?? "(untitled)",
-                ChannelTitle: i.Snippet?.ChannelTitle ?? "(unknown channel)",
+                Title: WebUtility.HtmlDecode(i.Snippet?.Title ?? "(untitled)"),
+                ChannelTitle: WebUtility.HtmlDecode(i.Snippet?.ChannelTitle ?? "(unknown channel)"),
                 Url: $"https://www.youtube.com/watch?v={i.Id.VideoId}",
                 ThumbnailUrl: i.Snippet?.Thumbnails?.Medium?.Url ?? i.Snippet?.Thumbnails?.Default?.Url,
                 PublishedAt: i.Snippet?.PublishedAt,
@@ -143,13 +141,30 @@ public sealed class YouTubeCatalogClient(
             .ToArray();
     }
 
+    /// Look up an explicitly pasted video URL by ID, independently of search
+    /// ranking/category and without spending a search.list request.
+    public async Task<IReadOnlyList<YouTubeVideoHit>> GetVideoAsync(string videoId, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new YouTubeNotConfiguredException();
+        var http = httpFactory.CreateClient("Wisp.YouTube");
+        var url = $"{ApiBase}/videos?part=snippet&id={Uri.EscapeDataString(videoId)}&key={Uri.EscapeDataString(options.ApiKey!)}";
+        using var response = await http.GetAsync(url, ct);
+        await ThrowOnQuota(response, ct);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<YouTubeChannelDetailsResponse>(ct);
+        return (body?.Items ?? []).Where(i => i.Id == videoId && i.Snippet is not null)
+            .Select(i => new YouTubeVideoHit(i.Id!, WebUtility.HtmlDecode(i.Snippet!.Title ?? "(untitled)"),
+                WebUtility.HtmlDecode(i.Snippet.ChannelTitle ?? "(unknown channel)"), $"https://www.youtube.com/watch?v={i.Id}",
+                i.Snippet.Thumbnails?.Medium?.Url ?? i.Snippet.Thumbnails?.Default?.Url,
+                i.Snippet.PublishedAt, i.Snippet.Description)).ToArray();
+    }
+
     /// Resolve an artist's Topic channel and pull recent uploads as
     /// YouTubeVideoHit-shaped rows. Topic channels are auto-generated from
     /// licensed music feeds, so their uploads are the artist's actual
-    /// catalogue — way more relevant for Discover than what `search.list`
-    /// returns from general YouTube. Used alongside SearchVideosAsync; the
-    /// two are merged + deduped server-side so the user gets both Topic
-    /// catalogue and looser video matches in one result block.
+    /// catalogue. This helper is for explicit artist-catalogue browsing;
+    /// Discover's free-text search must not substitute these recent uploads
+    /// for ranked matches to a track title.
     ///
     /// Cost: 100 units (channel search) + 1 unit (channel resolve) + 1 per
     /// page of 50 uploads. So ~102 units to grab the latest 50 uploads,
