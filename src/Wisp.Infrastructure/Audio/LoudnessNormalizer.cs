@@ -7,6 +7,10 @@ namespace Wisp.Infrastructure.Audio;
 public sealed record LoudnessMeasurement(double IntegratedLufs, double TruePeakDb, double LoudnessRange,
     double Threshold, double TargetOffset, double DurationSeconds);
 public sealed record LoudnessRender(LoudnessMeasurement Output, double GainDb, bool Limited);
+public sealed record LoudnessPlan(double RequestedGainDb, double GainDb, bool Limited, string Action)
+{
+    public bool CanCreate => Action is "boost" or "partial-boost" or "limit" or "reduce";
+}
 
 public interface ILoudnessNormalizer
 {
@@ -22,6 +26,7 @@ public sealed class LoudnessNormalizer(Mp3Transcoder ffmpeg) : ILoudnessNormaliz
 {
     public const string FolderName = "WISP Normalized";
     public const double PeakCeiling = -1;
+    public static bool ValidTarget(double target) => double.IsFinite(target) && target is >= -30 and <= -5;
     public bool IsAvailable => ffmpeg.IsAvailable;
     private static string N(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
     private const string Format = "aformat=sample_rates=44100:channel_layouts=stereo";
@@ -29,9 +34,22 @@ public sealed class LoudnessNormalizer(Mp3Transcoder ffmpeg) : ILoudnessNormaliz
     public static double SafeGain(LoudnessMeasurement input, double target) =>
         Math.Min(target - input.IntegratedLufs, PeakCeiling - 0.2 - input.TruePeakDb);
 
+    public static LoudnessPlan Plan(LoudnessMeasurement input, double target, bool boostOnly, bool allowLimiting)
+    {
+        var requested = target - input.IntegratedLufs;
+        var safe = SafeGain(input, target);
+        if (boostOnly && requested <= 0.5) return new(requested, 0, false, "unchanged");
+        var limited = allowLimiting && safe < requested - 0.05;
+        if (boostOnly && !limited && safe <= 0.05) return new(requested, 0, false, "needs-limiting");
+        var gain = limited ? requested : safe;
+        return new(requested, gain, limited, limited ? "limit" : Math.Abs(gain) <= 0.05 ? "unchanged" :
+            gain < 0 ? "reduce" : safe < requested - 0.05 ? "partial-boost" : "boost");
+    }
+
     public async Task<LoudnessMeasurement> MeasureAsync(string source, double target, CancellationToken ct)
     {
-        var result = await Run(source, $"{Format},loudnorm=I={N(target)}:TP={PeakCeiling}:LRA=50:print_format=json",
+        if (!ValidTarget(target)) throw new TranscodeException("Choose a target between -30 and -5 LUFS.");
+        var result = await Run(source, $"{Format},loudnorm=I={N(target)}:TP=-1.2:LRA=50:print_format=json",
             null, null, ct);
         return Parse(result.Errors, result.Progress, input: true);
     }
@@ -40,6 +58,7 @@ public sealed class LoudnessNormalizer(Mp3Transcoder ffmpeg) : ILoudnessNormaliz
         double target, bool allowLimiting, IReadOnlyDictionary<string, string> metadata, CancellationToken ct)
     {
         if (File.Exists(output)) throw new TranscodeException("The output already exists. WISP will not overwrite it.");
+        if (!ValidTarget(target)) throw new TranscodeException("Choose a target between -30 and -5 LUFS.");
         var gain = SafeGain(measured, target);
         var limiting = allowLimiting && gain < target - measured.IntegratedLufs - 0.05;
         var filter = limiting
@@ -51,6 +70,8 @@ public sealed class LoudnessNormalizer(Mp3Transcoder ffmpeg) : ILoudnessNormaliz
             throw new TranscodeException("The generated copy exceeded the safe peak ceiling. It was not activated; your original is unchanged.");
         if (Math.Abs(actual.DurationSeconds - measured.DurationSeconds) > 0.05)
             throw new TranscodeException("The generated copy changed duration unexpectedly. It was not activated; your original and cue timing are unchanged.");
+        if (limiting && Math.Abs(actual.IntegratedLufs - target) > 1)
+            throw new TranscodeException("The limited copy could not reach the requested loudness within 1 LUFS. Try a quieter reference or target. Your original is unchanged.");
         return new(actual, limiting ? actual.IntegratedLufs - measured.IntegratedLufs : gain, limiting);
     }
 

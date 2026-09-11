@@ -14,14 +14,16 @@ namespace Wisp.Api.Library;
 public sealed record TrackLoudnessAnalysis(Guid Id, string SourcePath, string SourceHash, long SourceLength,
     DateTime SourceModifiedAt, double TargetLufs, LoudnessMeasurement Measurement, DateTime ScannedAt);
 public sealed record TrackNormalization(Guid AnalysisId, string SourceHash, string OutputHash, string OutputPath,
-    double TargetLufs, double GainDb, bool Limited, LoudnessMeasurement Measurement, DateTime CreatedAt);
+    double TargetLufs, double GainDb, bool Limited, LoudnessMeasurement Measurement, DateTime CreatedAt,
+    bool BoostOnly = false, Guid? ReferenceTrackId = null, string? ReferenceTitle = null, string? ReferenceSourceHash = null);
 public sealed record LoudnessState(TrackDto Track, TrackLoudnessAnalysis? Analysis, TrackNormalization? Normalization,
     string OriginalPath, bool OriginalExists, bool NormalizedExists, bool AnalysisStale);
 
 public static class LoudnessEndpoints
 {
     public sealed record ScanRequest(double TargetLufs = -14);
-    public sealed record CreateRequest(Guid AnalysisId, string MusicFolder, bool AllowLimiting = false);
+    public sealed record CreateRequest(Guid AnalysisId, string MusicFolder, bool AllowLimiting = false,
+        bool BoostOnly = true, Guid? ReferenceTrackId = null, Guid? ReferenceAnalysisId = null);
     public sealed record SwitchRequest(string Version, string ExpectedFilePath);
     public sealed record StatusRequest(IReadOnlyList<Guid>? TrackIds);
 
@@ -85,8 +87,8 @@ public static class LoudnessEndpoints
 
     private static Task<IResult> Scan(Guid id, ScanRequest body, WispDbContext db, ILoudnessNormalizer normalizer, CancellationToken ct) => Guard(async () =>
     {
-        if (!double.IsFinite(body.TargetLufs) || body.TargetLufs is < -30 or > -9)
-            return Results.BadRequest(new { message = "Choose a target between -30 and -9 LUFS." });
+        if (!LoudnessNormalizer.ValidTarget(body.TargetLufs))
+            return Results.BadRequest(new { message = "Choose a target between -30 and -5 LUFS." });
         var track = await db.Tracks.FindAsync([id], ct);
         if (track is null) return Results.NotFound();
         var source = Original(track);
@@ -106,6 +108,29 @@ public static class LoudnessEndpoints
         var analysis = Read<TrackLoudnessAnalysis>(track.LoudnessAnalysisJson);
         if (analysis is null || analysis.Id != body.AnalysisId || !Same(analysis.SourcePath, Original(track)))
             return Results.Conflict(new { code = "analysis_stale", message = "Scan this track again before creating a normalised copy." });
+        if (!LoudnessNormalizer.ValidTarget(analysis.TargetLufs))
+            return Results.Conflict(new { code = "analysis_stale", message = "Choose a supported target and scan again." });
+        Track? reference = null;
+        TrackLoudnessAnalysis? referenceAnalysis = null;
+        if (body.ReferenceTrackId.HasValue != body.ReferenceAnalysisId.HasValue)
+            return Results.BadRequest(new { message = "Measure the reference track before creating copies." });
+        if (body.ReferenceTrackId is { } referenceId)
+        {
+            if (referenceId == id) return Results.Conflict(new { code = "no_change", message = "The reference track stays unchanged." });
+            reference = await db.Tracks.FindAsync([referenceId], ct);
+            referenceAnalysis = reference is null ? null : Read<TrackLoudnessAnalysis>(reference.LoudnessAnalysisJson);
+            if (reference is null || referenceAnalysis is null || referenceAnalysis.Id != body.ReferenceAnalysisId ||
+                State(reference).AnalysisStale || !File.Exists(Original(reference)) ||
+                await Hash(Original(reference), ct) != referenceAnalysis.SourceHash ||
+                Math.Abs(referenceAnalysis.Measurement.IntegratedLufs - analysis.TargetLufs) > 0.001)
+                return Results.Conflict(new { code = "reference_stale", message = "The reference or target changed. Measure the reference again, then rescan the selected tracks." });
+        }
+        var plan = LoudnessNormalizer.Plan(analysis.Measurement, analysis.TargetLufs, body.BoostOnly, body.AllowLimiting);
+        if (!plan.CanCreate)
+            return Results.Conflict(new { code = plan.Action == "needs-limiting" ? "limiting_required" : "no_change",
+                message = plan.Action == "needs-limiting" ? "Cannot boost safely without limiting. Leave this track unchanged, or explicitly allow limiting and preview the new copy."
+                    : body.BoostOnly ? "This track is already loud enough or needs no adjustment. Boost-only never turns it down."
+                    : "These settings produce no useful gain change. If the track is still quiet, consider optional limiting." });
         if (Same(track.FilePath, track.NormalizedFilePath))
             return Results.Conflict(new { message = "Switch to the original before creating another normalised version." });
         if (string.IsNullOrWhiteSpace(body.MusicFolder) || !Path.IsPathFullyQualified(body.MusicFolder) || !Directory.Exists(body.MusicFolder))
@@ -123,8 +148,8 @@ public static class LoudnessEndpoints
         if (await Hash(analysis.SourcePath, ct) != analysis.SourceHash)
             return Results.Conflict(new { code = "analysis_stale", message = "The original audio changed after the scan. Scan again; nothing was created." });
         var previous = Read<TrackNormalization>(track.NormalizationJson);
-        var desiredLimited = body.AllowLimiting && LoudnessNormalizer.SafeGain(analysis.Measurement, analysis.TargetLufs) < analysis.TargetLufs - analysis.Measurement.IntegratedLufs - 0.05;
-        if (previous is not null && previous.AnalysisId == analysis.Id && previous.Limited == desiredLimited &&
+        if (previous is not null && previous.AnalysisId == analysis.Id && previous.Limited == plan.Limited &&
+            previous.BoostOnly == body.BoostOnly && previous.ReferenceTrackId == body.ReferenceTrackId && previous.ReferenceSourceHash == referenceAnalysis?.SourceHash &&
             Same(Path.GetDirectoryName(previous.OutputPath), folder) && File.Exists(previous.OutputPath) && await Hash(previous.OutputPath, ct) == previous.OutputHash)
             return Results.Ok(State(track)); // Lost-response retry must not make another copy.
 
@@ -142,8 +167,13 @@ public static class LoudnessEndpoints
             if (track.Album is { } album) tags["album"] = album;
             if (track.Genre is { } genre) tags["genre"] = genre;
             var rendered = await normalizer.RenderAsync(analysis.SourcePath, output, analysis.Measurement, analysis.TargetLufs, body.AllowLimiting, tags, ct);
+            // Re-measurement must confirm a real improvement, not just a planned
+            // positive gain. Never link a quieter/no-op copy in boost-only mode.
+            if (body.BoostOnly && rendered.Output.IntegratedLufs <= analysis.Measurement.IntegratedLufs + 0.05)
+                throw new TranscodeException("This copy did not become louder. It was discarded; the original and previous version are unchanged. Try a different reference or target.");
             var info = new TrackNormalization(analysis.Id, analysis.SourceHash, await Hash(output, ct), output,
-                analysis.TargetLufs, rendered.GainDb, rendered.Limited, rendered.Output, DateTime.UtcNow);
+                analysis.TargetLufs, rendered.GainDb, rendered.Limited, rendered.Output, DateTime.UtcNow,
+                body.BoostOnly, reference?.Id, reference?.Title ?? reference?.FileName, referenceAnalysis?.SourceHash);
             // Save only version fields: track metadata, memberships and all cues remain.
             track.OriginalFilePath = analysis.SourcePath;
             track.NormalizedFilePath = output;
