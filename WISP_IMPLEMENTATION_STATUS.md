@@ -2,7 +2,54 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Fix direct track-row dragging to Windows apps and folders
+
+- **Confirmed cause of the reported workflow:** Ctrl+A selected the tracks, but
+  dragging their rows only created WISP's internal HTML drag payload. Explorer
+  and rekordbox were not being offered a native multi-file selection. The separate
+  native handle was also incorrectly gated on `/Windows/` in the user agent:
+  [Photino.NET 4.0.16 identifies itself as `Photino WebView`](https://github.com/tryphotino/photino.NET/blob/v4.0.16/Photino.NET/PhotinoWindow.NET.cs).
+  Reproduced the disabled handle against the previous client build with that UA;
+  the earlier normal-browser mock test had missed it.
+- **Implemented:** query native desktop capabilities instead of guessing from
+  the user agent. On Windows, row dragging defaults to **Apps / folders** and
+  hands off the full selected ID set, including non-rendered/off-page tracks.
+  Ctrl+A then hold and drag any selected row; the separate handle also remains.
+  **Drag rows to → Within WISP** preserves internal multi-track drags to WISP
+  destinations. Removed the misleading single-file browser DownloadURL fallback.
+  A trailing browser click cannot collapse the selection after native dragging.
+- **Native lifecycle:** resolve files off the UI thread, return from the browser
+  callback, then post the OLE drag onto the desktop STA thread through Photino.
+  Direct `Invoke` from the callback previously ran inline; nested modal loops
+  are unsupported by [WebView2's threading contract](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model#reentrancy).
+  Catch exceptions inside native UI callbacks, prevent simultaneous drags in both
+  client and host, and log file counts, early release, OLE return code and effect.
+  Source paths are not added to these diagnostic messages. Copy-only CF_HDROP,
+  Unicode paths, whole-selection missing-file validation and the 20,000-track
+  cap remain. Audio files/library/clipboard are not modified by WISP's drag code.
+- **Feedback:** distinguish early release from an unaccepted/cancelled drop,
+  retain selection after errors for retry, explain destination/elevation checks,
+  and hide old feedback when changing playlist/filter scope. No target import
+  completion is claimed merely because Windows accepted the handoff.
+- **Verification:** 197 backend tests and 28 client unit tests pass; client build
+  and lint pass (13 existing lint warnings; existing NuGet advisories unchanged).
+  Seven new committed Playwright browser regressions pass: Photino UA/capabilities,
+  real mouse row gesture with all 1,205 IDs across pages, internal payload,
+  handle/row mutual exclusion, missing-file retry, early release, unsupported host
+  and capability error. Browser test code is type-checked by the client build;
+  tests run in validation CI using isolated mocks, never the working music library.
+  Existing resize/focus/persistence/800x600 layout checks also pass.
+- **Verification boundary:** browser tests mock native destination responses;
+  native file-data-object tests verify Windows COM/CF_HDROP, not a live drop into
+  Explorer or rekordbox. After installing the main-branch release, manually test
+  Ctrl+A → drag a selected row into an empty folder, then a rekordbox playlist.
+  This is still **audio files only**, not WISP memory cues, metadata or USB sync.
+  Work is delivered via develop PR; no local installer generated or running
+  installation replaced. Main-only installer packaging remains unchanged.
+
 ## 2026-09-11: Adjustable library workspace and multi-file rekordbox handoff
+
+The original external-handle/row behaviour below is superseded by the fix above.
 
 - **Layout:** library/playlist prep is now a bounded pane with a visible drag
   divider. Its preferred height is remembered across sessions; resize also works

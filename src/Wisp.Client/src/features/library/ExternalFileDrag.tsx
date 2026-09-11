@@ -1,14 +1,10 @@
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { Grip } from 'lucide-react'
-import { bridge, bridgeAvailable } from '../../bridge'
+import type { ExternalFileDragController } from './useExternalFileDrag'
 
-export function ExternalFileDrag({ ids }: { ids: string[] }) {
+export function ExternalFileDrag({ ids, controller }: { ids: string[]; controller: ExternalFileDragController }) {
   const start = useRef<{ x: number; y: number } | null>(null)
-  const inFlight = useRef(false)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-  const available = bridgeAvailable() && /Windows/i.test(navigator.userAgent)
+  const { available, busy, feedback, begin, explain, dismiss, capabilityError } = controller
   const disabled = !available || busy || ids.length === 0
   return <div className="flex min-w-0 flex-wrap items-center gap-2">
     <button type="button" disabled={disabled} draggable={false}
@@ -22,23 +18,19 @@ export function ExternalFileDrag({ ids }: { ids: string[] }) {
         e.currentTarget.setPointerCapture(e.pointerId)
       }}
       onPointerMove={(e) => {
-        if (!start.current || inFlight.current || !(e.buttons & 1)) return
+        if (!start.current || busy || !(e.buttons & 1)) return
         if (Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) < 6) return
         start.current = null
         e.currentTarget.releasePointerCapture(e.pointerId)
-        inFlight.current = true
-        setBusy(true); setMessage(null); setFailed(false)
-        void bridge.dragFiles(ids).then((result) => setMessage(result.dropAccepted
-          ? `${result.fileCount} files handed to the destination. Check rekordbox for import results.` : 'Drag cancelled. Hold the handle and drag into rekordbox.'))
-          .catch((err: Error) => { setFailed(true); setMessage(err.message) })
-          .finally(() => { inFlight.current = false; setBusy(false) })
+        void begin(ids)
       }}
       onPointerUp={() => { start.current = null }} onPointerCancel={() => { start.current = null }} onLostPointerCapture={() => { start.current = null }}
-      onClick={() => { if (!busy) { setFailed(false); setMessage('Hold this handle and drag into a rekordbox playlist. Files only—not WISP cues or playlist metadata.') } }}>
+      onClick={() => { if (!busy) explain('Hold this handle and drag into a rekordbox playlist or a folder. Files only—not WISP cues or playlist metadata.') }}>
       <Grip size={13} /> {busy ? 'Dragging files…' : `Drag ${ids.length} files to rekordbox`}
     </button>
     <span className="text-[11px] text-[var(--color-muted)]">Audio files only · no WISP cues</span>
-    {message && <><span role={failed ? 'alert' : 'status'} className={`max-w-xl break-words text-xs ${failed ? 'text-red-300' : 'text-[var(--color-muted)]'}`}>{message}</span>
-      <button onClick={() => setMessage(null)} aria-label="Dismiss file drag message" className="px-1 text-xs text-[var(--color-muted)]">×</button></>}
+    {capabilityError && <span role="alert" className="text-xs text-red-300">Desktop drag unavailable: {capabilityError}. Restart WISP after updating.</span>}
+    {feedback && <><span role={feedback.failed ? 'alert' : 'status'} className={`max-w-xl break-words text-xs ${feedback.failed ? 'text-red-300' : 'text-[var(--color-muted)]'}`}>{feedback.message}</span>
+      <button onClick={dismiss} aria-label="Dismiss file drag message" className="px-1 text-xs text-[var(--color-muted)]">×</button></>}
   </div>
 }

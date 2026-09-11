@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Runtime.Versioning;
 using System.Text;
+using Serilog;
 
 namespace Wisp.Api;
 
@@ -27,7 +28,7 @@ public static class FileDropPayload
 [SupportedOSPlatform("windows")]
 public static class NativeFileDrag
 {
-    public sealed record Result(bool DropAccepted, int FileCount);
+    public sealed record Result(bool DropAccepted, int FileCount, string? Reason = null);
 
     public static Result Start(string[] paths)
     {
@@ -35,16 +36,22 @@ public static class NativeFileDrag
             throw new InvalidOperationException("File dragging must run on WISP's desktop UI thread.");
         // If the user released while the bridge resolved files, don't start a
         // phantom drop at the current cursor position.
-        if ((GetAsyncKeyState(1) & 0x8000) == 0) return new(false, paths.Length);
+        if ((GetAsyncKeyState(1) & 0x8000) == 0)
+        {
+            Log.Information("File drag: mouse released before native drag started ({FileCount} files)", paths.Length);
+            return new(false, paths.Length, "released-before-start");
+        }
         Marshal.ThrowExceptionForHR(OleInitialize(IntPtr.Zero));
         try
         {
             var data = new FileDataObject(FileDropPayload.Create(paths));
             var source = new DropSource();
+            Log.Information("File drag: entering Windows OLE loop with {FileCount} files", paths.Length);
             var hr = DoDragDrop(data, source, 1 /* DROPEFFECT_COPY */, out var effect);
             GC.KeepAlive(data);
             GC.KeepAlive(source);
             Marshal.ThrowExceptionForHR(hr);
+            Log.Information("File drag: OLE returned {HResult:X8}, effect {Effect}, {FileCount} files", hr, effect, paths.Length);
             return new(hr == 0x40100 && (effect & 1) != 0, paths.Length);
         }
         finally { OleUninitialize(); }

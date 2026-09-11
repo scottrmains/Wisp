@@ -29,6 +29,9 @@ interface Props {
   /// (the row itself if not in selection, otherwise the whole selection) and return
   /// the ordered list of track ids to attach to the dataTransfer payload.
   onDragStartRow?: (track: Track) => Track[]
+  /// Native Windows file drag. When supplied, rows hand off to the host instead
+  /// of starting an HTML drag which external desktop apps cannot consume.
+  onExternalDragStart?: (track: Track) => void
 }
 
 interface Column {
@@ -76,8 +79,10 @@ export function LibraryTable({
   onCleanup,
   onContextMenu,
   onDragStartRow,
+  onExternalDragStart,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
+  const nativeRowDrag = useRef(false)
   const playTrack = usePlayer((s) => s.playTrack)
   const isMultiSelected = (id: string) => selectedIds?.has(id) ?? false
 
@@ -162,8 +167,14 @@ export function LibraryTable({
             <div
               key={t.id}
               role={onSelect ? 'button' : undefined}
-              draggable={!!onDragStartRow}
-              onClick={(e) => onSelect?.(t, { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey })}
+              draggable={!!onDragStartRow || !!onExternalDragStart}
+              onPointerDown={() => { nativeRowDrag.current = false }}
+              onClick={(e) => {
+                // Cancelling HTML drag can produce a trailing click on mouse-up.
+                // Don't let it replace Ctrl+A's selection after the native handoff.
+                if (nativeRowDrag.current) { nativeRowDrag.current = false; e.preventDefault(); return }
+                onSelect?.(t, { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey })
+              }}
               onDoubleClick={() => onActivate?.(t)}
               onContextMenu={(e) => {
                 if (!onContextMenu) return
@@ -171,6 +182,14 @@ export function LibraryTable({
                 onContextMenu(t, e.clientX, e.clientY)
               }}
               onDragStart={(e) => {
+                if (onExternalDragStart) {
+                  // Cancel Chromium's drag before posting the native request.
+                  // Running two simultaneous OLE drag loops loses the file drop.
+                  e.preventDefault()
+                  nativeRowDrag.current = true
+                  onExternalDragStart(t)
+                  return
+                }
                 if (!onDragStartRow) return
                 const ids = onDragStartRow(t)
                 if (ids.length === 0) {
@@ -180,28 +199,6 @@ export function LibraryTable({
                 e.dataTransfer.effectAllowed = 'copyMove'
                 // Internal payload — used by ChainDock / MixPlansPage drop handlers.
                 e.dataTransfer.setData('application/x-wisp-track-ids', JSON.stringify(ids.map((x) => x.id)))
-                // External (Explorer / Rekordbox) payload — only meaningful for a single track.
-                // Chromium's DownloadURL is one-file-per-drag; multi-row external drag would require
-                // DataTransferItemList which is unreliable across drop targets.
-                if (ids.length === 1) {
-                  const only = ids[0]
-                  const ext = (only.fileName.match(/\.[^./\\]+$/)?.[0] ?? '').toLowerCase()
-                  const mime =
-                    ext === '.mp3' ? 'audio/mpeg' :
-                    ext === '.wav' ? 'audio/wav' :
-                    ext === '.flac' ? 'audio/flac' :
-                    ext === '.m4a' ? 'audio/mp4' :
-                    ext === '.aiff' || ext === '.aif' ? 'audio/aiff' :
-                    'application/octet-stream'
-                  const safe = (only.artist && only.title)
-                    ? `${only.artist} - ${only.title}${ext}`
-                    : only.fileName
-                  const safeName = safe.replace(/[\\/:*?"<>|]/g, '_')
-                  const url = `${window.location.origin}/api/tracks/${only.id}/download`
-                  e.dataTransfer.setData('DownloadURL', `${mime}:${safeName}:${url}`)
-                  // Plain text fallback for apps that read it (like Explorer's address bar).
-                  e.dataTransfer.setData('text/uri-list', url)
-                }
               }}
               className={[
                 // The `group` class drives the hover-only action visibility below.
