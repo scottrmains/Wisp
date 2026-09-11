@@ -48,7 +48,8 @@ public sealed record TrackDto(
     string? Notes,
     bool IsArchived,
     DateTime? ArchivedAt,
-    string? ArchiveReason)
+    string? ArchiveReason,
+    Guid? PlaylistEntryId = null)
 {
     public static TrackDto From(Track t) => new(
         t.Id, t.FilePath, t.FileName,

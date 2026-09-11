@@ -5,6 +5,7 @@ import type { Track } from '../../api/types'
 import { usePlayer } from '../../state/player'
 import { formatDuration, formatTrackDate } from './format'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
+import { trackRowId } from './librarySelection'
 
 interface Props {
   tracks: Track[]
@@ -159,13 +160,16 @@ export function LibraryTable({
       <div style={{ height: virt.getTotalSize(), position: 'relative', minWidth: GRID_WIDTH }}>
         {virt.getVirtualItems().map((vRow) => {
           const t = tracks[vRow.index]
-          const isPrimary = selectedId === t.id
-          const isInSelection = isMultiSelected(t.id)
+          const rowId = trackRowId(t)
+          const isPrimary = selectedId === rowId
+          const isInSelection = isMultiSelected(rowId)
           // Either single-selected or part of a multi-selection — both get the accent treatment.
           const isHighlighted = isPrimary || isInSelection
           return (
             <div
-              key={t.id}
+              key={rowId}
+              data-playlist-entry-id={t.playlistEntryId ?? undefined}
+              data-track-id={t.id}
               role={onSelect ? 'button' : undefined}
               draggable={!!onDragStartRow || !!onExternalDragStart}
               onPointerDown={() => { nativeRowDrag.current = false }}

@@ -1,5 +1,8 @@
 import { apiDelete, apiGet, apiPost } from './client'
-import type { Playlist, PlaylistSummary, PlaylistTrack } from './types'
+import type { Playlist, PlaylistSummary } from './types'
+
+export type DuplicateHandling = 'ask' | 'skip' | 'add'
+export interface PlaylistAddResult { added: number; skipped: number }
 
 async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -27,10 +30,12 @@ export const playlists = {
   update: (id: string, body: { name?: string; notes?: string }) =>
     apiPatch<PlaylistSummary>(`/api/playlists/${id}`, body),
   delete: (id: string) => apiDelete<void>(`/api/playlists/${id}`),
-  addTrack: (playlistId: string, trackId: string) =>
-    apiPost<PlaylistTrack>(`/api/playlists/${playlistId}/tracks`, { trackId }),
-  addTracksBulk: (playlistId: string, trackIds: string[]) =>
-    apiPost<{ added: number; skipped: number }>(`/api/playlists/${playlistId}/tracks/bulk`, { trackIds }),
+  addTrack: (playlistId: string, trackId: string, duplicateHandling: DuplicateHandling = 'ask') =>
+    apiPost<PlaylistAddResult>(`/api/playlists/${playlistId}/tracks`, { trackId, duplicateHandling }),
+  addTracksBulk: (playlistId: string, trackIds: string[], duplicateHandling: DuplicateHandling = 'ask') =>
+    apiPost<PlaylistAddResult>(`/api/playlists/${playlistId}/tracks/bulk`, { trackIds, duplicateHandling }),
+  removeEntries: (playlistId: string, entryIds: string[]) =>
+    apiPost<{ removed: number }>(`/api/playlists/${playlistId}/entries/remove`, { entryIds }),
   removeTrack: (playlistId: string, trackId: string) =>
     apiDelete<void>(`/api/playlists/${playlistId}/tracks/${trackId}`),
 }

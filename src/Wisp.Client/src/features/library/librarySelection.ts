@@ -1,5 +1,8 @@
 import type { Track, TrackPage, TrackQuery } from '../../api/types'
 
+export const trackRowId = (track: Track): string => track.playlistEntryId ?? track.id
+export const uniqueTrackIds = (rows: Track[]): string[] => [...new Set(rows.map(t => t.id))]
+
 /// Resolve the complete filtered result, not just the rendered/virtualised page.
 /// Refuse an inconsistent snapshot rather than silently omitting tracks.
 export async function collectSelection(query: TrackQuery, list: (query: TrackQuery, signal?: AbortSignal) => Promise<TrackPage>, signal?: AbortSignal): Promise<Track[]> {
@@ -10,7 +13,7 @@ export async function collectSelection(query: TrackQuery, list: (query: TrackQue
     const batch = await list({ ...query, page, size: 1000 }, signal)
     expected ??= batch.total
     if (batch.total !== expected) throw new Error('The library changed while selecting tracks. Please try Select all again.')
-    for (const track of batch.items) result.set(track.id, track)
+    for (const track of batch.items) result.set(trackRowId(track), track)
     if (page * 1000 >= expected) break
     if (!batch.items.length) throw new Error('The complete selection could not be loaded. Please try again.')
   }

@@ -2,6 +2,54 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Playlist removal and explicit duplicate confirmation
+
+- **Remove from playlist:** available in the scoped library toolbar and the row
+  context menu, for one or many selected entries (including Ctrl+A across pages).
+  A WISP-styled modal names the target playlist and explains that only selected
+  entries are removed. Unselected copies, other playlists, library tracks, notes,
+  tags, editorial/device cues, mix plans and audio files are preserved. Playing a
+  removed playlist entry continues normally. Counts refresh, selection clears,
+  and paging returns to page 1 after removal. Failures remain visible for retry.
+- **Duplicate warning:** add-dialog and sidebar-drop paths now share the same
+  confirmation flow. The server checks before writing anything and returns
+  `409 playlist_duplicates` if any selected track is already present. Choose
+  **Add again**, **Skip existing**, or **Cancel**. Add again adds a new occurrence
+  for each unique selected track, not another audio file; Skip existing adds only
+  new members; Cancel makes no changes. Unknown tracks fail the whole batch.
+  Both single and bulk add APIs use this policy; successful adds return
+  `{ added, skipped }`. The default duplicate policy is now `ask`, not silent skip.
+- **Entry identity:** confirmed repeats have independent playlist-entry IDs and
+  appear as separate selectable rows. Filtering, sorting, pagination and Select
+  all operate on those entries. Playback, file dragging, tagging, archive and
+  subsequent playlist additions use underlying unique library-track IDs. Thus
+  removing one repeat does not remove every copy or lose the original prep data.
+- **Persistence:** `AllowRepeatedPlaylistEntries` changes the playlist/track index
+  from unique to non-unique without deleting or rewriting existing entries.
+  Transactional membership checks serialize concurrent ordinary adds. New entry-ID
+  bulk removal is scoped to its named playlist; the legacy track-ID DELETE removes
+  all occurrences of that track in that playlist. Both are safe to retry. Batches
+  are capped at 20,000. Downgrading the index to unique requires removing repeats
+  first; rollback must not silently discard entries to satisfy the old constraint.
+- **Modal resilience:** add/duplicate/remove dialogs use focus-trapping native
+  HTML dialogs styled with WISP tokens (not system prompts). Busy actions prevent
+  accidental resubmission/dismissal, queued global prompts no longer overwrite
+  one another, and retrying a failed create-and-add reuses the already-created
+  playlist instead of creating another empty one.
+- **Verified:** 205 backend + 34 client unit + 14 browser tests pass (253 total).
+  New backend tests upgrade a seeded previous-schema database, exercise all 18
+  library sorts with repeated entries, verify atomic duplicate checks, concurrent
+  adds, skip/add/cancel semantics, scoped removal and preservation of prep/audio.
+  Browser regressions cover toolbar/context removal, cancel/error/retry, continuing
+  playback, 1,002-entry all-page removal, all duplicate choices, sidebar drops and
+  an 800x600 modal layout. Existing native-drag browser regressions still pass.
+  Client build/type checks pass; lint has no errors and 13 pre-existing warnings.
+  Existing NuGet advisories are unchanged. All tests use isolated data/mocks; no
+  working library migration, music-file removal or live installation replacement
+  was performed. No USB/CDJ compatibility claims or export-format changes added.
+- **Delivery:** feature PR into develop. No local installer built; production
+  packaging remains restricted to main pushes.
+
 ## 2026-09-11: Fix direct track-row dragging to Windows apps and folders
 
 - **Confirmed cause of the reported workflow:** Ctrl+A selected the tracks, but

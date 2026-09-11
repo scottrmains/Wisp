@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { playlists as playlistsApi } from '../../api/playlists'
+import { addTracksToPlaylist } from './addTracksToPlaylist'
 
 interface Props {
   trackIds: string[]
@@ -14,6 +15,14 @@ interface Props {
 export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
   const qc = useQueryClient()
   const [newName, setNewName] = useState('')
+  const dialog = useRef<HTMLDialogElement>(null)
+  const createdPlaylist = useRef<{ id: string; name: string } | null>(null)
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const el = dialog.current!
+    el.showModal()
+    return () => { el.close(); previous?.focus() }
+  }, [])
 
   const list = useQuery({
     queryKey: ['playlists'],
@@ -28,10 +37,12 @@ export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
 
   const addToExisting = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const res = await playlistsApi.addTracksBulk(id, trackIds)
-      return { name, ...res }
+      const res = await addTracksToPlaylist(id, trackIds)
+      return res ? { name, ...res } : null
     },
-    onSuccess: ({ name, added, skipped }) => {
+    onSuccess: (result) => {
+      if (!result) return
+      const { name, added, skipped } = result
       invalidate()
       onAdded?.(name, added, skipped)
       onClose()
@@ -40,34 +51,38 @@ export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
 
   const createAndAdd = useMutation({
     mutationFn: async (name: string) => {
-      const created = await playlistsApi.create(name)
-      const res = await playlistsApi.addTracksBulk(created.id, trackIds)
-      return { name: created.name, ...res }
+      // If creation succeeded but adding failed, retry that same playlist.
+      const created = createdPlaylist.current?.name === name ? createdPlaylist.current : await playlistsApi.create(name)
+      createdPlaylist.current = created
+      void qc.invalidateQueries({ queryKey: ['playlists'] })
+      const res = await addTracksToPlaylist(created.id, trackIds)
+      return res ? { name: created.name, ...res } : null
     },
-    onSuccess: ({ name, added, skipped }) => {
+    onSuccess: (result) => {
+      if (!result) return
+      const { name, added, skipped } = result
       invalidate()
       onAdded?.(name, added, skipped)
       onClose()
     },
   })
 
+  const busy = addToExisting.isPending || createAndAdd.isPending
   const handleCreate = () => {
     const name = newName.trim()
-    if (!name) return
+    if (!name || busy) return
     createAndAdd.mutate(name)
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="w-full max-w-md rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 shadow-2xl">
-        <h2 className="text-base font-semibold">
+    <dialog ref={dialog} aria-labelledby="add-playlist-title"
+      onCancel={e => { e.preventDefault(); if (!busy) onClose() }} onKeyDown={e => e.stopPropagation()}
+      className="m-auto max-h-[85vh] w-[min(28rem,calc(100vw-2rem))] overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 text-[var(--color-text)] shadow-2xl backdrop:bg-black/70">
+        <h2 id="add-playlist-title" className="text-base font-semibold">
           Add {trackIds.length} {trackIds.length === 1 ? 'track' : 'tracks'} to a playlist
         </h2>
         <p className="mt-1 text-xs text-[var(--color-muted)]">
-          Tracks already in the chosen playlist are skipped silently.
+          If a track is already in the playlist, you can add it again, skip existing tracks, or cancel.
         </p>
 
         <div className="mt-3">
@@ -85,7 +100,7 @@ export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
               <li key={p.id}>
                 <button
                   onClick={() => addToExisting.mutate({ id: p.id, name: p.name })}
-                  disabled={addToExisting.isPending}
+                  disabled={busy}
                   className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-40"
                 >
                   <span className="truncate">{p.name}</span>
@@ -103,6 +118,7 @@ export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
           <div className="flex gap-2">
             <input
               value={newName}
+              disabled={busy}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
               placeholder="New playlist name"
@@ -111,7 +127,7 @@ export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
             />
             <button
               onClick={handleCreate}
-              disabled={!newName.trim() || createAndAdd.isPending}
+              disabled={!newName.trim() || busy}
               className="rounded bg-[var(--color-accent)] px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
             >
               {createAndAdd.isPending ? 'Creating…' : `Create + add ${trackIds.length}`}
@@ -120,7 +136,7 @@ export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
         </div>
 
         {(addToExisting.isError || createAndAdd.isError) && (
-          <p className="mt-2 text-xs text-red-400">
+          <p role="alert" className="mt-2 text-xs text-red-400">
             {((addToExisting.error ?? createAndAdd.error) as Error)?.message}
           </p>
         )}
@@ -128,12 +144,12 @@ export function AddToPlaylistDialog({ trackIds, onClose, onAdded }: Props) {
         <div className="mt-4 flex justify-end">
           <button
             onClick={onClose}
+            disabled={busy}
             className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white"
           >
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </dialog>
   )
 }

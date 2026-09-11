@@ -32,5 +32,6 @@ public sealed record PlaylistTrackDto(
 public sealed record CreatePlaylistRequest(string Name, string? Notes);
 public sealed record UpdatePlaylistRequest(string? Name, string? Notes);
 
-public sealed record AddTrackToPlaylistRequest(Guid TrackId);
-public sealed record AddTracksToPlaylistRequest(IReadOnlyList<Guid> TrackIds);
+public sealed record AddTrackToPlaylistRequest(Guid TrackId, string DuplicateHandling = "ask");
+public sealed record AddTracksToPlaylistRequest(IReadOnlyList<Guid> TrackIds, string DuplicateHandling = "ask");
+public sealed record RemovePlaylistEntriesRequest(IReadOnlyList<Guid> EntryIds);
