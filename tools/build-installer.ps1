@@ -25,7 +25,7 @@ try {
         "-p:FfmpegBinary=$($dependencies.FfmpegBinary)"
     if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
 
-    foreach ($file in @('Wisp.exe', 'Wisp.dll', 'coreclr.dll', 'wwwroot/index.html', 'slskd/slskd.exe', 'ffmpeg.exe')) {
+    foreach ($file in @('Wisp.exe', 'Wisp.dll', 'coreclr.dll', 'wwwroot/index.html', 'wwwroot/branding/wispa.svg', 'wwwroot/branding/wisp.ico', 'Assets/wisp.ico', 'slskd/slskd.exe', 'ffmpeg.exe')) {
         if (!(Test-Path (Join-Path $output $file))) { throw "Incomplete publish: missing $file" }
     }
     if (!(Get-ChildItem (Join-Path $output 'wwwroot/assets') -Filter '*.js')) { throw 'Published client assets are missing.' }

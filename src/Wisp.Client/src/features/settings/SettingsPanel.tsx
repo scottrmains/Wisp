@@ -6,6 +6,7 @@ import { cleanup } from '../../api/cleanup'
 import { transcoder } from '../../api/transcoder'
 import type { SystemInfo } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
+import { WispLogo } from '../../components/WispLogo'
 
 interface Props {
   onClose: () => void
@@ -34,8 +35,8 @@ export function SettingsPanel({ onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
       <div className="flex max-h-full w-full max-w-xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl">
         <header className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-          <h2 className="text-base font-semibold">Settings</h2>
-          <button onClick={onClose} className="text-xl leading-none text-[var(--color-muted)] hover:text-white">
+          <h2 className="flex items-center gap-2 text-base font-semibold"><WispLogo size={32} />Wisp settings</h2>
+          <button onClick={onClose} aria-label="Close settings" className="text-xl leading-none text-[var(--color-muted)] hover:text-white">
             ×
           </button>
         </header>

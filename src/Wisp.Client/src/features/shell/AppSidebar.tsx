@@ -16,6 +16,7 @@ import { useActivePlaylist } from '../../state/activePlaylist'
 import { useCurrentPage, type AppPage } from '../../state/currentPage'
 import { useUiPrefs } from '../../state/uiPrefs'
 import { confirmDialog, promptDialog } from '../../components/dialog'
+import { WispLogo } from '../../components/WispLogo'
 import { CreatePlaylistDialog } from '../library/CreatePlaylistDialog'
 import { useWantedTracks } from '../wanted/useWantedTracks'
 
@@ -110,14 +111,19 @@ export function AppSidebar() {
       ].join(' ')}
     >
       <div className="flex h-12 items-center justify-between border-b border-[var(--color-border)] px-3">
-        {!collapsed && <span className="text-sm font-semibold tracking-tight">Wisp</span>}
+        {!collapsed && (
+          <div className="flex items-center gap-2">
+            <WispLogo size={30} />
+            <span className="text-sm font-semibold tracking-tight">Wisp</span>
+          </div>
+        )}
         <button
           onClick={toggle}
-          className="ml-auto text-[var(--color-muted)] hover:text-white"
+          className={`flex items-center justify-center rounded text-[var(--color-muted)] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] ${collapsed ? '-mx-1 h-8 w-8' : 'ml-auto h-8 w-8'}`}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? '›' : '‹'}
+          {collapsed ? <WispLogo size={30} /> : '‹'}
         </button>
       </div>
 
