@@ -405,6 +405,7 @@ public class Program
                     PhotinoHost.Run(
                         url,
                         app.Services.GetRequiredService<WispSettingsStore>(),
+                        app.Services,
                         devToolsEnabled: app.Environment.IsDevelopment());
                 }
                 finally

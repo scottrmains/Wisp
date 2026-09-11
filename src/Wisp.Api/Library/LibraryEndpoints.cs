@@ -478,6 +478,8 @@ public static class LibraryEndpoints
             _ => q.OrderBy(t => t.Artist == null).ThenBy(t => t.Artist).ThenBy(t => t.Title),
         };
 
+        // Stable tie-break for paging/select-all, including repeated artist/title/BPM values.
+        q = ((IOrderedQueryable<Track>)q).ThenBy(t => t.Id);
         var total = await q.CountAsync(ct);
         var items = await q.Skip((page - 1) * size).Take(size).ToListAsync(ct);
 

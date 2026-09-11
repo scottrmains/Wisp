@@ -2,6 +2,55 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Adjustable library workspace and multi-file rekordbox handoff
+
+- **Layout:** library/playlist prep is now a bounded pane with a visible drag
+  divider. Its preferred height is remembered across sessions; resize also works
+  with arrow keys, Home/End, and double-click reset. Bounds account for the actual
+  surrounding toolbars so smaller windows retain track-list space. A fixed
+  transport header remains accessible while prep contents scroll independently.
+  Focus list collapses prep without stopping playback; Expand prep restores it.
+  Waveform/cue bank, detail tabs, and library filters can be shown/hidden separately
+  with persisted settings. Sidebar collapse remains available. Hidden active
+  filters are flagged in the toolbar. Empty playlists no longer hide the player.
+- **Selection:** Select all / Ctrl+A collects the full filtered library or active
+  playlist across API pages, not just the initial 500 rows or rendered viewport.
+  Counts, cancellation and failures are visible. Stable ID sort tie-breaking and
+  consistency checks prevent silently incomplete selections. Selection survives
+  page navigation but is discarded on playlist/filter/sort changes; revisiting a
+  previous scope does not restore stale selection. Previous/Next controls expose
+  the formerly unreachable pages. Existing Ctrl/Shift and internal WISP dragging
+  continue to work, with complete cross-page row payloads retained.
+- **External file drag:** the separate "Drag N files to rekordbox" handle starts
+  a Windows OLE copy-only drag with a standard Unicode CF_HDROP file list. The
+  desktop bridge accepts existing WISP track IDs and resolves the original files
+  from the library, rather than trusting arbitrary client-supplied paths. Missing
+  or removed files reject the whole request with an explanation; no silent
+  partial drag. Up to 20,000 selected tracks per native drag; Escape/releasing the
+  mouse cancels normally. No clipboard replacement, audio conversion, source
+  movement or WISP-library write is performed. Normal row drags retain their
+  internal WISP semantics; use the labelled handle for an external multi-file drag.
+- **Important distinction:** this hands off existing audio files, not a rekordbox
+  database, USB sync, WISP cues, or WISP-only playlist/metadata. Drop into the
+  desired rekordbox playlist and let rekordbox import/analyse the tracks. The UI
+  labels this as files-only and does not claim the target completed its import.
+- **Verified:** 197 backend + 28 client tests pass (9 new test cases), client build
+  and lint pass with 13 pre-existing warnings. A Windows native-data-object test
+  verifies COM IDataObject exposure, format enumeration, Unicode multi-file reads
+  via DragQueryFileW, and drag cancellation/drop feedback. Isolated Edge tests
+  verify pointer/keyboard resizing, uninterrupted playback in list-focus mode,
+  filters/toggle persistence, all 1,205 playlist IDs sent across multiple pages,
+  page navigation, scope-reset safety, and usable list bounds at 800x600.
+  Browser tests simulate the Photino bridge; no real rekordbox import was made.
+  **A live WISP-to-rekordbox desktop drop remains a user smoke check**, including
+  target file-format support and matching privilege level if Windows refuses a
+  cross-application drop. No USB/CDJ compatibility claims are added.
+- **Workflow:** feature PR into develop; no standalone executable or installer
+  generated. Existing NuGet advisories are unchanged. Working library, music and
+  settings were not changed during verification.
+- Native protocol references: [Windows file-drop formats](https://learn.microsoft.com/en-us/windows/win32/shell/clipboard),
+  [OLE drop-source behaviour](https://learn.microsoft.com/en-us/windows/win32/api/oleidl/nn-oleidl-idropsource).
+
 ## 2026-09-11: Track-file recovery and safe library removal
 
 - **Diagnosis:** the Olive entry still referenced the deleted filename ending
