@@ -34,12 +34,16 @@ public sealed record DiscoveredTrackDto(
     bool IsAlreadyInLibrary,
     Guid? MatchedLocalTrackId,
     DateTime ImportedAt,
+    DateTime? PublishedAt,
     DateTime? LastMatchedAt)
 {
     public static DiscoveredTrackDto From(DiscoveredTrack t) => new(
         t.Id, t.DiscoverySourceId, t.SourceVideoId, t.SourceUrl, t.RawTitle, t.ThumbnailUrl,
         t.ParsedArtist, t.ParsedTitle, t.MixVersion, t.ReleaseYear,
-        t.Status, t.IsAlreadyInLibrary, t.MatchedLocalTrackId, t.ImportedAt, t.LastMatchedAt);
+        t.Status, t.IsAlreadyInLibrary, t.MatchedLocalTrackId,
+        DateTime.SpecifyKind(t.ImportedAt, DateTimeKind.Utc),
+        t.PublishedAt is { } published ? DateTime.SpecifyKind(published, DateTimeKind.Utc) : null,
+        t.LastMatchedAt);
 }
 
 public sealed record DigitalMatchDto(

@@ -41,6 +41,8 @@ public sealed record TransferDto(
     DateTimeOffset? StartedAt,
     DateTimeOffset? EndedAt)
 {
+    public Guid? ImportScanId { get; init; }
+
     public static TransferDto From(SoulseekTransfer t) => new(
         t.Id, t.Username, t.Filename, t.Size, t.BytesTransferred, t.Percentage,
         t.State, t.StartedAt, t.EndedAt);

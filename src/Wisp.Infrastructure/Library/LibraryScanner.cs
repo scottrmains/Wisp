@@ -58,6 +58,7 @@ public class LibraryScanner(
 
                     if (existingByPath.TryGetValue(path, out var existing))
                     {
+                        existing.FileModifiedAt = File.GetLastWriteTimeUtc(path);
                         // The file is back after being unavailable (for example, an
                         // external drive was reconnected). Preserve its stable Wisp
                         // identity and all associated prep work.
@@ -222,6 +223,7 @@ public class LibraryScanner(
         track.FilePath = path;
         track.FileName = Path.GetFileName(path);
         track.FileHash = hash;
+        track.FileModifiedAt = File.GetLastWriteTimeUtc(path);
 
         track.Artist = meta.Artist;
         track.Title = meta.Title;

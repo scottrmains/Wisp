@@ -137,6 +137,7 @@ public sealed class SlskdSidecar(
         WindowsJobObject.Assign(proc);
 
         _process = proc;
+        options.ActiveDownloadFolder = downloads;
         log.LogInformation("slskd sidecar: spawned (pid {Pid}) at {Url}", proc.Id, $"http://127.0.0.1:{SlskdPort}");
     }
 

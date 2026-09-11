@@ -7,10 +7,12 @@ import type {
   DiscoverySource,
   DiscoveryScanProgress,
   DiscoveryStatus,
+  DiscoverySort,
 } from '../../api/types'
 import { DiscoveredTrackList } from './DiscoveredTrackList'
 import { DiscoveredTrackDetail } from './DiscoveredTrackDetail'
 import { useDiscoveryScans } from './useDiscoveryScans'
+import { useUiPrefs } from '../../state/uiPrefs'
 
 const STATUS_FILTERS: { label: string; value: DiscoveryStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -32,6 +34,9 @@ export function CrateDiggerPage() {
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<DiscoveryStatus | 'all'>('all')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const sort = useUiPrefs((s) => s.discoverySort)
+  const setSort = useUiPrefs((s) => s.setDiscoverySort)
   const [selectedTrack, setSelectedTrack] = useState<DiscoveredTrack | null>(null)
   const scans = useDiscoveryScans()
 
@@ -48,14 +53,21 @@ export function CrateDiggerPage() {
   }, [activeSourceId, sources.data])
 
   const tracks = useQuery({
-    queryKey: ['discovery-tracks', activeSourceId, statusFilter, search],
+    queryKey: ['discovery-tracks', activeSourceId, statusFilter, search, sort, page],
     queryFn: () =>
       discovery.listTracks(activeSourceId!, {
         status: statusFilter === 'all' ? undefined : statusFilter,
         search: search || undefined,
+        sort,
+        page,
         size: 500,
       }),
     enabled: !!activeSourceId,
+  })
+
+  const rescan = useMutation({
+    mutationFn: (sourceId: string) => discovery.scanSource(sourceId),
+    onSuccess: (_, sourceId) => scans.trackScan(sourceId),
   })
 
   const addSource = useMutation({
@@ -63,6 +75,7 @@ export function CrateDiggerPage() {
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['discovery-sources'] })
       setActiveSourceId(created.id)
+      setPage(1)
       // The backend auto-queues an initial scan on create — start tracking its progress
       // immediately so the user sees a spinner instead of an empty source row.
       scans.trackScan(created.id)
@@ -105,7 +118,7 @@ export function CrateDiggerPage() {
           sources={sources.data ?? []}
           activeId={activeSourceId}
           progress={scans.progress}
-          onSelect={setActiveSourceId}
+          onSelect={(id) => { setActiveSourceId(id); setPage(1) }}
           onAdd={handleAddSource}
           onTrackScan={scans.trackScan}
           adding={addSource.isPending}
@@ -115,22 +128,42 @@ export function CrateDiggerPage() {
           {activeSourceId ? (
             <>
               {activeSourceId in scans.progress && (
-                <ScanBanner progress={scans.progress[activeSourceId]} />
+                <ScanBanner progress={scans.progress[activeSourceId]} reconnecting={scans.connectionErrors[activeSourceId]} />
+              )}
+              {!(activeSourceId in scans.progress) && scans.results[activeSourceId] && (
+                <ScanBanner progress={scans.results[activeSourceId]} onDismiss={() => scans.dismissResult(activeSourceId)} />
               )}
               <FilterBar
                 search={search}
-                onSearch={setSearch}
+                onSearch={(value) => { setSearch(value); setPage(1) }}
                 statusFilter={statusFilter}
-                onStatusFilter={setStatusFilter}
+                onStatusFilter={(value) => { setStatusFilter(value); setPage(1) }}
+                sort={sort}
+                onSort={(value) => { setSort(value); setPage(1) }}
                 total={tracks.data?.total ?? 0}
               />
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-muted)]">
+                <span className="flex-1">{(tracks.data?.undatedCount ?? 0) > 0
+                  ? `${tracks.data!.undatedCount.toLocaleString()} ${tracks.data!.undatedCount === 1 ? 'video has' : 'videos have'} no upload date. Rescan older imports to fetch dates; unknown dates sort last.`
+                  : 'Upload date is when the video was posted to YouTube, not the track’s release year.'}</span>
+                <button onClick={() => rescan.mutate(activeSourceId)} disabled={rescan.isPending || activeSourceId in scans.progress}
+                  className="shrink-0 rounded border border-[var(--color-border)] px-3 py-1 hover:text-white disabled:opacity-40">
+                  {rescan.isPending ? 'Queuing…' : activeSourceId in scans.progress ? 'Scanning…' : 'Rescan source'}</button>
+              </div>
+              {rescan.isError && <p role="alert" className="px-4 py-2 text-xs text-red-400">{rescan.error.message}</p>}
+              {tracks.isError && <p role="alert" className="px-4 py-2 text-sm text-red-400">{tracks.error.message}</p>}
+              <div key={`${activeSourceId}:${sort}:${page}:${statusFilter}:${search}`} className="min-h-0 flex-1 overflow-y-auto">
                 <DiscoveredTrackList
                   tracks={tracks.data?.items ?? []}
                   loading={tracks.isLoading}
                   onSelect={setSelectedTrack}
                 />
               </div>
+              {(tracks.data?.total ?? 0) > 500 && <nav aria-label="Discovery pages" className="flex items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-2 text-xs">
+                <button disabled={page === 1 || tracks.isFetching} onClick={() => setPage(p => p - 1)} className="rounded border border-[var(--color-border)] px-3 py-1 disabled:opacity-40">Previous</button>
+                <span>Page {page} of {Math.ceil((tracks.data?.total ?? 0) / 500)}</span>
+                <button disabled={page * 500 >= (tracks.data?.total ?? 0) || tracks.isFetching} onClick={() => setPage(p => p + 1)} className="rounded border border-[var(--color-border)] px-3 py-1 disabled:opacity-40">Next</button>
+              </nav>}
             </>
           ) : (
             <p className="p-8 text-sm text-[var(--color-muted)]">
@@ -252,6 +285,7 @@ function SourceRow({
               : scanProgress.status
           : `${source.importedCount} imported${source.lastScannedAt ? ` · ${new Date(source.lastScannedAt).toLocaleDateString()}` : ''}`}
       </div>
+      {startScan.isError && <p role="alert" className="mt-1 text-xs text-red-400">Could not start scan: {startScan.error.message}</p>}
       <div className="mt-1 flex items-center gap-2 text-[10px] opacity-0 transition-opacity group-hover:opacity-100">
         <button
           onClick={(e) => {
@@ -283,12 +317,14 @@ function SourceRow({
   )
 }
 
-function ScanBanner({ progress }: { progress: DiscoveryScanProgress }) {
+function ScanBanner({ progress, onDismiss, reconnecting }: { progress: DiscoveryScanProgress; onDismiss?: () => void; reconnecting?: boolean }) {
+  const active = progress.status === 'Pending' || progress.status === 'Running'
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-2.5 text-sm">
-      <Spinner />
+    <div role={progress.status === 'Failed' ? 'alert' : 'status'} className="flex items-center gap-3 border-b border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-2.5 text-sm">
+      {active && <Spinner />}
       <span className="flex-1">
-        {progress.status === 'Pending' && 'Scan queued…'}
+        {reconnecting && active ? 'Reconnecting to scan progress… the scan may still be running.' : <>
+        {progress.status === 'Pending' && 'Scan queued — waiting to start…'}
         {progress.status === 'Running' && (
           progress.totalImported > 0
             ? `Importing — ${progress.newItems} new of ${progress.totalImported} so far`
@@ -297,10 +333,21 @@ function ScanBanner({ progress }: { progress: DiscoveryScanProgress }) {
         {progress.status === 'Failed' && (
           <span className="text-red-300">Scan failed{progress.error ? `: ${progress.error}` : ''}</span>
         )}
+        {progress.status === 'Cancelled' && 'Scan cancelled. Rescan the source to try again.'}
+        {progress.status === 'Completed' && <>
+          {progress.newItems === 0 ? 'No new tracks found.' : `Scan complete — ${progress.newItems} new ${progress.newItems === 1 ? 'track' : 'tracks'} added.`}
+          {(progress.updatedDates ?? 0) > 0 && ` Updated upload dates for ${progress.updatedDates} ${progress.updatedDates === 1 ? 'track' : 'tracks'}.`}
+          <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
+            Checked {(progress.checkedItems ?? progress.totalImported).toLocaleString()} videos
+            {progress.finishedAt && ` · ${new Date(progress.finishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}.
+          </span>
+        </>}
+        </>}
       </span>
-      <span className="text-xs text-[var(--color-muted)]">
+      {active && !reconnecting && <span className="text-xs text-[var(--color-muted)]">
         Tracks will appear automatically when done.
-      </span>
+      </span>}
+      {onDismiss && <button onClick={onDismiss} aria-label="Dismiss scan result" className="shrink-0 rounded border border-[var(--color-border)] px-2 py-1 text-xs hover:bg-white/5">Dismiss</button>}
     </div>
   )
 }
@@ -319,12 +366,16 @@ function FilterBar({
   onSearch,
   statusFilter,
   onStatusFilter,
+  sort,
+  onSort,
   total,
 }: {
   search: string
   onSearch: (s: string) => void
   statusFilter: DiscoveryStatus | 'all'
   onStatusFilter: (s: DiscoveryStatus | 'all') => void
+  sort: DiscoverySort
+  onSort: (sort: DiscoverySort) => void
   total: number
 }) {
   return (
@@ -336,6 +387,16 @@ function FilterBar({
         placeholder="Search title or artist"
         className="min-w-[14rem] flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
       />
+      <label className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
+        Sort by
+        <select aria-label="Sort discoveries" value={sort} onChange={(e) => onSort(e.target.value as DiscoverySort)}
+          className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 text-[var(--color-text)] focus:border-[var(--color-accent)] focus:outline-none">
+          <option value="-published">YouTube upload · newest first</option>
+          <option value="published">YouTube upload · oldest first</option>
+          <option value="-imported">Imported into WISP · newest first</option>
+          <option value="imported">Imported into WISP · oldest first</option>
+        </select>
+      </label>
       <div className="flex flex-wrap gap-1">
         {STATUS_FILTERS.map((f) => (
           <button
@@ -353,7 +414,7 @@ function FilterBar({
         ))}
       </div>
       <span className="ml-auto text-xs text-[var(--color-muted)]">
-        {total.toLocaleString()} tracks
+        {total.toLocaleString()} {total === 1 ? 'track' : 'tracks'}
       </span>
     </div>
   )

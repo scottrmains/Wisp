@@ -56,10 +56,14 @@ public sealed class WispSettingsStore
     };
 
     private readonly Lock _lock = new();
+    private readonly string _configPath;
     private WispSettings _current;
 
-    public WispSettingsStore()
+    public WispSettingsStore() : this(WispPaths.ConfigPath) { }
+
+    public WispSettingsStore(string configPath)
     {
+        _configPath = Path.GetFullPath(configPath);
         _current = Load();
     }
 
@@ -72,19 +76,20 @@ public sealed class WispSettingsStore
     {
         lock (_lock)
         {
-            _current = mutate(_current);
-            Save(_current);
+            var next = mutate(_current);
+            Save(next);
+            _current = next;
         }
     }
 
-    private static WispSettings Load()
+    private WispSettings Load()
     {
-        if (!File.Exists(WispPaths.ConfigPath))
+        if (!File.Exists(_configPath))
             return new WispSettings();
 
         try
         {
-            var json = File.ReadAllText(WispPaths.ConfigPath);
+            var json = File.ReadAllText(_configPath);
             return UnprotectSecrets(JsonSerializer.Deserialize<WispSettings>(json, Json) ?? new WispSettings());
         }
         catch
@@ -93,15 +98,16 @@ public sealed class WispSettingsStore
         }
     }
 
-    private static void Save(WispSettings settings)
+    private void Save(WispSettings settings)
     {
-        var tmp = WispPaths.ConfigPath + ".tmp";
+        Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
+        var tmp = _configPath + ".tmp";
         // This app is Windows-only. Persist sensitive API keys and credentials
         // encrypted for the current Windows user rather than as readable JSON.
         // Non-sensitive configuration remains plain JSON for straightforward
         // support and manual recovery.
         File.WriteAllText(tmp, JsonSerializer.Serialize(ProtectSecrets(settings), Json));
-        File.Move(tmp, WispPaths.ConfigPath, overwrite: true);
+        File.Move(tmp, _configPath, overwrite: true);
     }
 
     private static WispSettings ProtectSecrets(WispSettings settings) => settings with

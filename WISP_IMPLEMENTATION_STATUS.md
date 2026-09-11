@@ -2,6 +2,93 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Crate Digger rescan verification and feedback
+
+- **Fixed:** the rescan endpoint returned an empty HTTP 202 response while the
+  frontend expected JSON. The background scan ran, but the resulting parse error
+  prevented progress tracking. The endpoint now returns a JSON acknowledgement.
+- **Implemented:** visible queued/running states and persistent, dismissible
+  completion results: "No new tracks found", new-track counts, upload-date update
+  counts, videos checked and completion time. Failures remain visible, connection
+  interruptions show a reconnecting message, and both rescan controls report
+  start-request errors. Results remain while the Crate Digger page is mounted;
+  they are not a durable cross-restart scan history.
+- **Reliability:** duplicate requests for a queued/running source enqueue only
+  once. The progress bus retains and replays the latest result so fast scans and
+  reconnecting subscribers cannot miss completion. A new run resets that result.
+  Unexpected worker errors also terminate progress instead of leaving it pending.
+- **Live verified:** two actual YouTube rescans of `mastercarper`, using an
+  isolated copy of the user's database/configuration. Both checked 76 videos and
+  found no new tracks; the first backfilled 76 upload dates and the second updated
+  zero dates. Browser automation confirmed the result stayed visible until
+  dismissed, another rescan worked, and a simulated quota failure displayed an
+  alert. The working library/configuration were not modified by these tests.
+- **Regression coverage:** JSON scan acceptance, duplicate POSTs/queue requests,
+  late completed/failed/cancelled subscribers, restart after completion, scanner
+  counts, date backfill and post-completion SSE replay. Full .NET suites and
+  frontend tests/build pass; pre-existing lint/dependency warnings remain.
+- **Local delivery:** standalone Windows build `artifacts/rescan-release/Wisp.exe`
+  (0.1.7). This does not replace the installed app or update its shortcut.
+
+## 2026-09-11: Crate Digger upload-date ordering
+
+- **Implemented:** a persistent Sort by dropdown for newest/oldest YouTube
+  uploads and newest/oldest WISP imports. Newest upload is the default. Sorting
+  happens in SQLite before pagination and composes with source, search and status
+  filters; stable ID tie-breaks prevent random order within a scan batch.
+- **Cause addressed:** discovery scans previously assigned a single ImportedAt
+  timestamp to the whole batch and the API sorted only by that timestamp. The
+  video publication date was fetched but never persisted.
+- **Date semantics:** nullable UTC PublishedAt comes only from YouTube's
+  `contentDetails.videoPublishedAt`; `snippet.publishedAt` describes addition to
+  a playlist and must not masquerade as an upload date. Rows display upload dates;
+  unknown dates sort last, with a rescan hint and a visible Rescan source action.
+  Reference: https://developers.google.com/youtube/v3/docs/playlistItems
+- **Existing sources:** rescan once to backfill available upload dates. Rescans
+  preserve imported dates, IDs, manual parse corrections, statuses and library
+  matches, and deduplicate repeated videos across pages. Initial automated tests
+  mocked YouTube; the later rescan verification above also checks a real source
+  in an isolated profile, without changing the working library.
+- **Pagination:** Previous/Next controls expose all imported records, 500 per
+  page, resetting to page one when source/filter/order changes. This does not
+  remove the existing scan caps (5,000 channel uploads / 1,000 playlist items); sorting applies to records
+  WISP has imported, not unseen YouTube items beyond that cap.
+- **Regression coverage:** both upload directions, both import directions,
+  unknown dates, UTC, equal-date page boundaries, filtering and source scope,
+  plus channel/playlist rescans with date backfill and preserved user preparation.
+
+## 2026-09-11: library dates and Soulseek download destination
+
+- **Implemented:** library and playlist-scoped views expose date-added and
+  file-date-modified sorting in both directions, plus an added-within filter
+  (24 hours / 7 / 30 / 90 days). Newest-added is the initial default; the selected
+  sort survives navigation and relaunch. Date columns are sortable too.
+- **Date semantics:** added means first imported into WISP, not filesystem creation
+  or playlist membership. Rescanning does not reset it. Modified means the file's
+  UTC last-write time; scans and WISP tag writes refresh it. A nullable-column
+  migration and startup backfill populate dates for accessible existing files
+  without changing prep data. Missing dates sort last. External edits require a
+  rescan; this is not a live filesystem watcher.
+- **Implemented:** Settings → Soulseek download folder remains editable after
+  connection setup without re-entering or clearing credentials. It shows the
+  daemon's active directory and the next-launch destination, supports a desktop
+  folder picker, a detected music-folder suggestion, and restoring the default.
+  Custom destinations must be existing absolute paths.
+- **Safety:** saves affect future managed downloads after restarting WISP; no
+  existing audio is moved, renamed or deleted. Completed downloads keep slskd's
+  subfolders and are indexed in place. The importer follows the daemon's active
+  directory rather than a pending preference. External slskd directories remain
+  controlled by that daemon. Import scan IDs let the UI refresh on real scan
+  completion instead of guessing with short delays.
+- **Default location:** `%LOCALAPPDATA%\Wisp\slskd\downloads` (or the equivalent
+  under `WISP_DATA_DIR`). A library can index multiple folders without physically
+  combining them. Setting the destination to an existing music folder keeps
+  future downloads beneath that folder; migrating older downloads is separate.
+- **Regression coverage:** date sorting/filtering with playlist scope and
+  pagination, UTC serialization, rescan/backfill preservation, settings persistence
+  and credential preservation, invalid/external path rejection, importer path
+  precedence, deduplication and retry, and preservation of same-named files.
+
 ## 2026-09-11: Wispa branding
 
 The approved Labrador/record logo is now a scalable vector master with generated

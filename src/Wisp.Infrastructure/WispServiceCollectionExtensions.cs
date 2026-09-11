@@ -29,6 +29,7 @@ public static class WispServiceCollectionExtensions
 
         services.AddScoped<LibraryScanner>();
         services.AddHostedService<ScanWorker>();
+        services.AddHostedService<TrackFileDateBackfill>();
 
         services.AddSingleton<RecommendationService>();
         services.AddSingleton<AiffTranscoder>();

@@ -22,6 +22,9 @@ public class Track
     public TimeSpan Duration { get; set; }
 
     public DateTime AddedAt { get; set; }
+    /// File-system last-write time in UTC, refreshed by scans and Wisp tag writes.
+    /// Distinct from import time and scan time; null when the file cannot be read.
+    public DateTime? FileModifiedAt { get; set; }
     public DateTime? LastScannedAt { get; set; }
 
     public bool IsMissingMetadata { get; set; }

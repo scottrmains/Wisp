@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { AlertTriangle, Play, Plus } from 'lucide-react'
 import type { Track } from '../../api/types'
 import { usePlayer } from '../../state/player'
-import { formatDuration } from './format'
+import { formatDuration, formatTrackDate } from './format'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
 
 interface Props {
@@ -54,11 +54,14 @@ const columns: Column[] = [
   // it without a value-converter migration. Add `sortKey: 'duration'` once the converter
   // ships in a future schema change.
   { key: 'duration', label: 'Duration', width: '5rem', align: 'right' },
+  { key: 'addedAt', label: 'Date added', width: '12rem', sortKey: 'added' },
+  { key: 'fileModifiedAt', label: 'Date modified', width: '12rem', sortKey: 'modified' },
   { key: 'fileName', label: 'File', width: '20rem' },
 ]
 
 const ROW_HEIGHT = 36
 const GRID_TEMPLATE = columns.map((c) => c.width).join(' ')
+const GRID_WIDTH = `calc(${columns.map((c) => c.width).join(' + ')})`
 
 export function LibraryTable({
   tracks,
@@ -81,6 +84,10 @@ export function LibraryTable({
   // asc → desc → off, parameterised on the column's sort key.
   const cycleSort = (sortKey: string) => {
     if (!onSortChange) return
+    if (sortKey === 'added' || sortKey === 'modified') {
+      onSortChange(sort === `-${sortKey}` ? sortKey : `-${sortKey}`)
+      return
+    }
     if (sort === sortKey) onSortChange(`-${sortKey}`)
     else if (sort === `-${sortKey}`) onSortChange(undefined)
     else onSortChange(sortKey)
@@ -105,7 +112,7 @@ export function LibraryTable({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-[var(--color-muted)]">
         <span>No tracks match these filters.</span>
-        <span className="text-xs">Clear the search box or BPM range to see your library again.</span>
+        <span className="text-xs">Try a wider date range or clear your search and filters.</span>
       </div>
     )
   }
@@ -114,7 +121,7 @@ export function LibraryTable({
     <div ref={parentRef} className="h-full overflow-auto">
       <div
         className="sticky top-0 z-10 grid border-b border-[var(--color-border)] bg-[var(--color-surface)] text-xs uppercase tracking-wide text-[var(--color-muted)]"
-        style={{ gridTemplateColumns: GRID_TEMPLATE }}
+        style={{ gridTemplateColumns: GRID_TEMPLATE, minWidth: GRID_WIDTH }}
       >
         {columns.map((c) => {
           const isActive = c.sortKey && (sort === c.sortKey || sort === `-${c.sortKey}`)
@@ -144,7 +151,7 @@ export function LibraryTable({
         })}
       </div>
 
-      <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
+      <div style={{ height: virt.getTotalSize(), position: 'relative', minWidth: GRID_WIDTH }}>
         {virt.getVirtualItems().map((vRow) => {
           const t = tracks[vRow.index]
           const isPrimary = selectedId === t.id
@@ -281,6 +288,8 @@ export function LibraryTable({
               <PillCell><EnergyPill energy={t.energy} /></PillCell>
               <Cell value={t.genre} muted tertiary />
               <Cell value={formatDuration(t.durationSeconds)} align="right" muted />
+              <Cell value={formatTrackDate(t.addedAt)} muted />
+              <Cell value={formatTrackDate(t.fileModifiedAt)} muted />
               <Cell value={t.fileName} truncate muted tertiary />
             </div>
           )

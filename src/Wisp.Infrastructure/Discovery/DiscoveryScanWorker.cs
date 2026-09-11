@@ -6,6 +6,7 @@ namespace Wisp.Infrastructure.Discovery;
 
 public class DiscoveryScanWorker(
     DiscoveryScanQueue queue,
+    DiscoveryScanProgressBus progress,
     IServiceScopeFactory scopeFactory,
     ILogger<DiscoveryScanWorker> log) : BackgroundService
 {
@@ -28,6 +29,9 @@ public class DiscoveryScanWorker(
             catch (Exception ex)
             {
                 log.LogError(ex, "Discovery scan worker errored on source {Id}", request.SourceId);
+                progress.Publish(new(request.SourceId, DiscoveryScanStatus.Failed, 0, 0, 0,
+                    "The scan could not finish. Try rescanning the source.") { FinishedAt = DateTime.UtcNow });
+                progress.Complete(request.SourceId);
             }
         }
     }

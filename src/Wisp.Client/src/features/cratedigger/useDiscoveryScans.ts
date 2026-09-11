@@ -10,6 +10,8 @@ import type { DiscoveryScanProgress } from '../../api/types'
 export function useDiscoveryScans() {
   const qc = useQueryClient()
   const [progress, setProgress] = useState<Record<string, DiscoveryScanProgress>>({})
+  const [results, setResults] = useState<Record<string, DiscoveryScanProgress>>({})
+  const [connectionErrors, setConnectionErrors] = useState<Record<string, boolean>>({})
   const teardownsRef = useRef<Map<string, () => void>>(new Map())
 
   // Tear down all subscriptions on unmount.
@@ -25,6 +27,7 @@ export function useDiscoveryScans() {
     (sourceId: string) => {
       // Skip if already subscribed for this source.
       if (teardownsRef.current.has(sourceId)) return
+      setResults(prev => { const next = { ...prev }; delete next[sourceId]; return next })
 
       // Seed an immediate "pending" so the UI shows a spinner before the first SSE event lands.
       setProgress((prev) => ({
@@ -41,9 +44,11 @@ export function useDiscoveryScans() {
 
       const teardown = subscribeToDiscoveryScan(sourceId, {
         onProgress: (p) => {
+          setConnectionErrors(prev => ({ ...prev, [sourceId]: false }))
           setProgress((prev) => ({ ...prev, [sourceId]: p }))
         },
         onComplete: (p) => {
+          setResults(prev => ({ ...prev, [sourceId]: p }))
           setProgress((prev) => {
             const next = { ...prev }
             delete next[sourceId]
@@ -56,6 +61,7 @@ export function useDiscoveryScans() {
             qc.invalidateQueries({ queryKey: ['discovery-tracks', sourceId] })
           }
         },
+        onError: () => setConnectionErrors(prev => ({ ...prev, [sourceId]: true })),
       })
 
       teardownsRef.current.set(sourceId, teardown)
@@ -63,5 +69,8 @@ export function useDiscoveryScans() {
     [qc],
   )
 
-  return { progress, trackScan }
+  const dismissResult = (sourceId: string) => setResults(prev => {
+    const next = { ...prev }; delete next[sourceId]; return next
+  })
+  return { progress, results, connectionErrors, trackScan, dismissResult }
 }

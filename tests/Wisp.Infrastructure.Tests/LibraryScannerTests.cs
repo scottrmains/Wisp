@@ -63,6 +63,26 @@ public class LibraryScannerTests : IDisposable
     }
 
     [Fact]
+    public async Task Rescan_updates_file_date_without_changing_import_date_or_identity()
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_dir, "file-dates")).FullName;
+        var path = Path.Combine(folder, "Artist - Track.mp3");
+        await File.WriteAllBytesAsync(path, [0x49, 0x44, 0x33, 0x04, 0, 0, 0, 0, 0, 0]);
+        await RunScan(folder);
+        await using var originalDb = NewContext();
+        var original = Assert.Single(originalDb.Tracks);
+        Assert.Equal(File.GetLastWriteTimeUtc(path), original.FileModifiedAt);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-10));
+        await RunScan(folder);
+        await using var updatedDb = NewContext();
+        var updated = Assert.Single(updatedDb.Tracks);
+        Assert.Equal(original.Id, updated.Id);
+        Assert.Equal(original.AddedAt, updated.AddedAt);
+        Assert.Equal(File.GetLastWriteTimeUtc(path), updated.FileModifiedAt);
+        Assert.NotEqual(original.FileModifiedAt, updated.FileModifiedAt);
+    }
+
+    [Fact]
     public async Task Empty_folder_completes_cleanly()
     {
         var folder = Path.Combine(_dir, "empty");

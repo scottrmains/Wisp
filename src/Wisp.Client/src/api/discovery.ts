@@ -6,6 +6,7 @@ import type {
   DiscoveryScanProgress,
   DiscoverySource,
   DiscoveryStatus,
+  DiscoverySort,
 } from './types'
 
 export const discovery = {
@@ -16,7 +17,7 @@ export const discovery = {
   scanSource: (id: string) => apiPost<void>(`/api/discovery/sources/${id}/scan`),
   listTracks: (
     id: string,
-    opts: { status?: DiscoveryStatus; search?: string; page?: number; size?: number } = {},
+    opts: { status?: DiscoveryStatus; search?: string; sort?: DiscoverySort; page?: number; size?: number } = {},
   ) =>
     apiGet<DiscoveredTrackPage>(
       `/api/discovery/sources/${id}/tracks`,

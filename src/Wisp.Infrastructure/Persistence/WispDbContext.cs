@@ -41,6 +41,8 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         track.Property(t => t.FileHash).IsRequired();
         track.HasIndex(t => t.FilePath).IsUnique();
         track.HasIndex(t => t.FileHash);
+        track.HasIndex(t => t.AddedAt);
+        track.HasIndex(t => t.FileModifiedAt);
         track.HasIndex(t => new { t.Artist, t.Title });
         track.Property(t => t.Bpm).HasPrecision(6, 2);
         // SQLite stores TimeSpan as ticks via EF default converter
@@ -138,6 +140,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         discoTrk.Property(t => t.RawTitle).IsRequired();
         discoTrk.Property(t => t.Status).HasConversion<string>().HasMaxLength(30);
         discoTrk.HasIndex(t => t.DiscoverySourceId);
+        discoTrk.HasIndex(t => new { t.DiscoverySourceId, t.PublishedAt });
         discoTrk.HasIndex(t => new { t.DiscoverySourceId, t.SourceVideoId }).IsUnique();
         discoTrk.HasOne(t => t.Source)
             .WithMany()

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet } from '../../api/client'
+import { library } from '../../api/library'
 import { soulseek } from '../../api/soulseek'
 import { useSoulseekStatus } from '../../state/soulseekStatus'
 
@@ -18,13 +19,12 @@ interface SoulseekConfigStatus {
 ///   - Only enabled when slskd is configured AND someone has flipped
 ///     `useSoulseekStatus().pollingActive` (e.g. by queueing a download).
 ///   - Auto-stops when the list contains no in-flight transfers.
-///   - Side effect: when transfers complete, invalidates `['tracks']` after a short
-///     delay so the library refetches and the new files appear without a manual scan.
+///   - Follows the import scan to completion, then refreshes the library.
 export function useSoulseekTransfers() {
   const qc = useQueryClient()
   const pollingActive = useSoulseekStatus((s) => s.pollingActive)
   const stopPolling = useSoulseekStatus((s) => s.stopPolling)
-  const completedSeenRef = useRef<Set<string>>(new Set())
+  const refreshedScans = useRef(new Set<string>())
 
   const status = useQuery({
     queryKey: ['soulseek-status'],
@@ -38,7 +38,8 @@ export function useSoulseekTransfers() {
     queryFn: () => soulseek.listDownloads(),
     enabled: slskdConfigured && pollingActive,
     refetchInterval: (q) => {
-      const data = q.state.data ?? []
+      const data = q.state.data
+      if (!data) return POLL_INTERVAL_MS
       const stillActive = data.some((t) => !t.state.includes('Completed'))
       if (!stillActive) {
         // Defer the state flip so we don't mutate during a TanStack callback.
@@ -50,23 +51,26 @@ export function useSoulseekTransfers() {
     retry: false,
   })
 
-  // Newly-completed transfers trigger a library refresh — same logic that used to
-  // live inside SoulseekPanel; lifting it here means the refresh happens regardless
-  // of which page the user is on when the completion lands.
+  const scanIds = [...new Set((transfers.data ?? []).flatMap(t => t.importScanId ? [t.importScanId] : []))]
+  const importScans = useQueries({ queries: scanIds.map(id => ({
+    queryKey: ['soulseek-import-scan', id],
+    queryFn: () => library.getScan(id),
+    staleTime: Infinity,
+    refetchInterval: (q: { state: { data?: { status: string } } }) =>
+      q.state.data && ['Completed', 'Failed', 'Cancelled'].includes(q.state.data.status) ? false : POLL_INTERVAL_MS,
+    retry: 1,
+  })) })
+
+  // Follow actual scan completion, independently of transfer polling. Fixed
+  // delays missed slow scans and could be cancelled by the next transfer poll.
   useEffect(() => {
-    const newlyDone = (transfers.data ?? []).filter(
-      (t) => t.state.includes('Completed') && t.id && !completedSeenRef.current.has(t.id),
-    )
-    if (newlyDone.length === 0) return
-    for (const t of newlyDone) completedSeenRef.current.add(t.id)
-    // Two refetches catch both "scanner already finished" and "scanner still going".
-    const earlyId = setTimeout(() => qc.invalidateQueries({ queryKey: ['tracks'] }), 1_500)
-    const lateId = setTimeout(() => qc.invalidateQueries({ queryKey: ['tracks'] }), 6_000)
-    return () => {
-      clearTimeout(earlyId)
-      clearTimeout(lateId)
+    for (const scan of importScans) {
+      const job = scan.data
+      if (!job || !['Completed', 'Failed', 'Cancelled'].includes(job.status) || refreshedScans.current.has(job.id)) continue
+      refreshedScans.current.add(job.id)
+      void qc.invalidateQueries({ queryKey: ['tracks'] })
     }
-  }, [transfers.data, qc])
+  }, [importScans, qc])
 
   return {
     slskdConfigured,
