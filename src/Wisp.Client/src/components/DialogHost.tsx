@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useDialogStore, type AlertOptions, type ConfirmOptions, type PromptOptions } from './dialog'
+import { useDialogStore, type AlertOptions, type ConfirmOptions, type PromptOptions, type ChoiceOptions } from './dialog'
 
 /// Renders the modal for whichever dialog is currently pending. Mounted once
 /// at App root via main.tsx. Listens to the dialog store and routes to the
@@ -15,7 +15,7 @@ export function DialogHost() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (current.kind === 'confirm') current.resolve(false)
-        else if (current.kind === 'prompt') current.resolve(null)
+        else if (current.kind === 'prompt' || current.kind === 'choice') current.resolve(null)
         else current.resolve()
       }
     }
@@ -27,7 +27,7 @@ export function DialogHost() {
 
   const cancel = () => {
     if (current.kind === 'confirm') current.resolve(false)
-    else if (current.kind === 'prompt') current.resolve(null)
+    else if (current.kind === 'prompt' || current.kind === 'choice') current.resolve(null)
     else current.resolve()
   }
 
@@ -39,8 +39,30 @@ export function DialogHost() {
       {current.kind === 'confirm' && <ConfirmBody opts={current.opts} resolve={current.resolve} />}
       {current.kind === 'prompt' && <PromptBody opts={current.opts} resolve={current.resolve} />}
       {current.kind === 'alert' && <AlertBody opts={current.opts} resolve={current.resolve} />}
+      {current.kind === 'choice' && <ChoiceBody key={current.opts.title + current.opts.message} opts={current.opts} resolve={current.resolve} />}
     </div>
   )
+}
+
+function ChoiceBody({ opts, resolve }: { opts: ChoiceOptions; resolve: (v: string | null) => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const dialog = ref.current!
+    dialog.showModal()
+    return () => { dialog.close(); previous?.focus() }
+  }, [])
+  return <dialog ref={ref} aria-labelledby="playlist-choice-title"
+    onCancel={e => { e.preventDefault(); resolve(null) }} onKeyDown={e => e.stopPropagation()}
+    className="m-auto w-[min(32rem,calc(100vw-2rem))] max-h-[85vh] overflow-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-text)] shadow-2xl backdrop:bg-black/70">
+    <h2 id="playlist-choice-title" className="text-base font-semibold">{opts.title}</h2>
+    <p className="mt-3 whitespace-pre-line break-words text-sm text-[var(--color-muted)]">{opts.message}</p>
+    <div className="mt-5 flex flex-wrap justify-end gap-2">
+      <button onClick={() => resolve(null)} className="rounded border border-[var(--color-border)] px-3 py-2 text-sm">Cancel</button>
+      {opts.choices.map(choice => <button key={choice.value} onClick={() => resolve(choice.value)}
+        className="rounded bg-[var(--color-accent)]/20 px-3 py-2 text-sm hover:bg-[var(--color-accent)]/40">{choice.label}</button>)}
+    </div>
+  </dialog>
 }
 
 function ConfirmBody({ opts, resolve }: { opts: ConfirmOptions; resolve: (v: boolean) => void }) {

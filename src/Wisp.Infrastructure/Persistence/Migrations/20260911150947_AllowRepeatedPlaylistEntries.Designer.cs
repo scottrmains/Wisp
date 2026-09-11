@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Wisp.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using Wisp.Infrastructure.Persistence;
 namespace Wisp.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(WispDbContext))]
-    partial class WispDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911150947_AllowRepeatedPlaylistEntries")]
+    partial class AllowRepeatedPlaylistEntries
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -723,22 +726,10 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("LastScannedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("LoudnessAnalysisJson")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("MusicalKey")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("NormalizationJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("NormalizedFilePath")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Notes")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("OriginalFilePath")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("ReleaseYear")

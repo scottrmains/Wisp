@@ -2,8 +2,12 @@ export type ScanStatus = 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cance
 
 export interface Track {
   id: string
+  /** Identity of this occurrence in a scoped playlist; the audio track ID stays unchanged. */
+  playlistEntryId?: string | null
   filePath: string
   fileName: string
+  audioVersion?: 'original' | 'normalized'
+  hasNormalizedVersion?: boolean
   artist: string | null
   title: string | null
   version: string | null

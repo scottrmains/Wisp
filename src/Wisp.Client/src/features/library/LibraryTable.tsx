@@ -5,6 +5,7 @@ import type { Track } from '../../api/types'
 import { usePlayer } from '../../state/player'
 import { formatDuration, formatTrackDate } from './format'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
+import { trackRowId } from './librarySelection'
 
 interface Props {
   tracks: Track[]
@@ -29,9 +30,6 @@ interface Props {
   /// (the row itself if not in selection, otherwise the whole selection) and return
   /// the ordered list of track ids to attach to the dataTransfer payload.
   onDragStartRow?: (track: Track) => Track[]
-  /// Native Windows file drag. When supplied, rows hand off to the host instead
-  /// of starting an HTML drag which external desktop apps cannot consume.
-  onExternalDragStart?: (track: Track) => void
 }
 
 interface Column {
@@ -79,10 +77,8 @@ export function LibraryTable({
   onCleanup,
   onContextMenu,
   onDragStartRow,
-  onExternalDragStart,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
-  const nativeRowDrag = useRef(false)
   const playTrack = usePlayer((s) => s.playTrack)
   const isMultiSelected = (id: string) => selectedIds?.has(id) ?? false
 
@@ -159,20 +155,19 @@ export function LibraryTable({
       <div style={{ height: virt.getTotalSize(), position: 'relative', minWidth: GRID_WIDTH }}>
         {virt.getVirtualItems().map((vRow) => {
           const t = tracks[vRow.index]
-          const isPrimary = selectedId === t.id
-          const isInSelection = isMultiSelected(t.id)
+          const rowId = trackRowId(t)
+          const isPrimary = selectedId === rowId
+          const isInSelection = isMultiSelected(rowId)
           // Either single-selected or part of a multi-selection — both get the accent treatment.
           const isHighlighted = isPrimary || isInSelection
           return (
             <div
-              key={t.id}
+              key={rowId}
+              data-playlist-entry-id={t.playlistEntryId ?? undefined}
+              data-track-id={t.id}
               role={onSelect ? 'button' : undefined}
-              draggable={!!onDragStartRow || !!onExternalDragStart}
-              onPointerDown={() => { nativeRowDrag.current = false }}
+              draggable={!!onDragStartRow}
               onClick={(e) => {
-                // Cancelling HTML drag can produce a trailing click on mouse-up.
-                // Don't let it replace Ctrl+A's selection after the native handoff.
-                if (nativeRowDrag.current) { nativeRowDrag.current = false; e.preventDefault(); return }
                 onSelect?.(t, { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey })
               }}
               onDoubleClick={() => onActivate?.(t)}
@@ -182,14 +177,6 @@ export function LibraryTable({
                 onContextMenu(t, e.clientX, e.clientY)
               }}
               onDragStart={(e) => {
-                if (onExternalDragStart) {
-                  // Cancel Chromium's drag before posting the native request.
-                  // Running two simultaneous OLE drag loops loses the file drop.
-                  e.preventDefault()
-                  nativeRowDrag.current = true
-                  onExternalDragStart(t)
-                  return
-                }
                 if (!onDragStartRow) return
                 const ids = onDragStartRow(t)
                 if (ids.length === 0) {
@@ -197,7 +184,8 @@ export function LibraryTable({
                   return
                 }
                 e.dataTransfer.effectAllowed = 'copyMove'
-                // Internal payload — used by ChainDock / MixPlansPage drop handlers.
+                // Rows are always internal: playlists, ChainDock and MixPlansPage.
+                // Native audio-file transfer belongs only to ExternalFileDrag.
                 e.dataTransfer.setData('application/x-wisp-track-ids', JSON.stringify(ids.map((x) => x.id)))
               }}
               className={[
@@ -288,7 +276,10 @@ export function LibraryTable({
               <Cell value={formatDuration(t.durationSeconds)} align="right" muted />
               <Cell value={formatTrackDate(t.addedAt)} muted />
               <Cell value={formatTrackDate(t.fileModifiedAt)} muted />
-              <Cell value={t.fileName} truncate muted tertiary />
+              <div className="flex min-w-0 items-center gap-2 px-3 text-sm text-[var(--color-muted)]/70" title={t.filePath}>
+                {t.hasNormalizedVersion && <span className="shrink-0 rounded border border-[var(--color-accent)]/40 px-1 text-[10px] text-[var(--color-accent)]">{t.audioVersion === 'normalized' ? 'Normalised' : 'Original · copy saved'}</span>}
+                <span className="truncate">{t.fileName}</span>
+              </div>
             </div>
           )
         })}
