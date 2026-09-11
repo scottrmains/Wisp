@@ -8,6 +8,7 @@ namespace Wisp.Api;
 public static class PhotinoHost
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static int _fileDragActive;
 
     private const int MinWidth = 800;
     private const int MinHeight = 600;
@@ -97,6 +98,29 @@ public static class PhotinoHost
         if (request is null || string.IsNullOrEmpty(request.Method))
             return;
 
+        if (request.Method == "dragFiles")
+        {
+            if (Interlocked.CompareExchange(ref _fileDragActive, 1, 0) != 0)
+            {
+                Reply(window, request.Id, null, "A file drag is already running. Finish it or press Escape before trying again.");
+                return;
+            }
+            // Return from WebMessageReceived BEFORE entering OLE's modal drag loop.
+            // Photino.Invoke runs inline on the UI thread; using it directly here
+            // nests DoDragDrop inside a WebView2 callback (unsupported reentrancy).
+            // From this worker Invoke posts back to the UI message queue instead.
+            _ = Task.Run(() =>
+            {
+                try { HandleRequest(window, request, services); }
+                finally { Interlocked.Exchange(ref _fileDragActive, 0); }
+            });
+            return;
+        }
+        HandleRequest(window, request, services);
+    }
+
+    private static void HandleRequest(PhotinoWindow window, BridgeRequest request, IServiceProvider services)
+    {
         try
         {
             var result = Dispatch(window, request, services);
@@ -112,6 +136,7 @@ public static class PhotinoHost
     private static object? Dispatch(PhotinoWindow window, BridgeRequest request, IServiceProvider services) => request.Method switch
     {
         "pickFolder" => PickFolder(window, request.Args),
+        "desktopCapabilities" => new { externalFileDrag = OperatingSystem.IsWindows(), maxDragTracks = Library.LibraryFileDrag.MaxTracks },
         "dragFiles" => DragFiles(window, request.Args, services),
         "pickAudioFile" => PickAudioFile(window, request.Args),
         "openInExplorer" => OpenInExplorer(request.Args),
@@ -147,8 +172,16 @@ public static class PhotinoHost
         using var scope = services.CreateScope();
         var resolver = new Library.LibraryFileDrag(scope.ServiceProvider.GetRequiredService<Wisp.Infrastructure.Persistence.WispDbContext>());
         var paths = resolver.Resolve(ids);
+        Log.Information("File drag: resolved {RequestedCount} track IDs to {FileCount} files", ids.Length, paths.Length);
         NativeFileDrag.Result? result = null;
-        window.Invoke(() => { if (OperatingSystem.IsWindows()) result = NativeFileDrag.Start(paths); });
+        Exception? dragError = null;
+        // Never let a managed exception escape the reverse-P/Invoke UI callback.
+        window.Invoke(() =>
+        {
+            try { if (OperatingSystem.IsWindows()) result = NativeFileDrag.Start(paths); }
+            catch (Exception ex) { dragError = ex; }
+        });
+        if (dragError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(dragError).Throw();
         return result;
     }
 
@@ -187,7 +220,8 @@ public static class PhotinoHost
     private static void Reply(PhotinoWindow window, string? id, object? result, string? error)
     {
         var payload = JsonSerializer.Serialize(new BridgeResponse(id, result, error), Json);
-        window.SendWebMessage(payload);
+        try { window.SendWebMessage(payload); }
+        catch (Exception ex) { Log.Warning(ex, "Bridge: could not deliver reply {Id}; the window may have closed", id); }
     }
 
     private sealed record BridgeRequest(string? Id, string Method, JsonElement? Args);
