@@ -117,6 +117,11 @@ public static class LibraryEndpoints
     {
         var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (track is null) return Results.Json(new { code = "track_removed", message = "This track has been removed from WISP." }, statusCode: 404);
+        return await StreamTrackAudio(track, transcoder, log, ct);
+    }
+
+    internal static async Task<IResult> StreamTrackAudio(Track track, AiffTranscoder transcoder, ILogger<AiffTranscoder> log, CancellationToken ct)
+    {
         if (!File.Exists(track.FilePath))
             return Results.Json(new { code = "file_missing", message = "Audio file not found. Connect its drive or use Relink audio file to choose a replacement." }, statusCode: 410);
 
@@ -371,14 +376,6 @@ public static class LibraryEndpoints
             }
         }
 
-        // Playlist scope — restrict to tracks that are members of the given playlist.
-        // EXISTS subquery via the join table; composes cleanly with the other filters.
-        if (playlistId.HasValue && playlistId.Value != Guid.Empty)
-        {
-            var pid = playlistId.Value;
-            q = q.Where(t => db.PlaylistTracks.Any(pt => pt.PlaylistId == pid && pt.TrackId == t.Id));
-        }
-
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim();
@@ -404,86 +401,97 @@ public static class LibraryEndpoints
             q = q.Where(t => t.AddedAt >= cutoff);
         }
 
+        IQueryable<TrackListing> rows = playlistId is { } pid && pid != Guid.Empty
+            ? q.Join(db.PlaylistTracks.Where(pt => pt.PlaylistId == pid),
+                t => t.Id, pt => pt.TrackId, (track, entry) => new TrackListing { Track = track, EntryId = entry.Id })
+            : q.Select(track => new TrackListing { Track = track, EntryId = null });
+
         // Camelot key sort: map "1A, 1B, 2A, 2B … 12A, 12B" → 1..24 so 9A < 9B < 10A.
         // For non-Camelot strings (rare; tracks with raw key tags) the CASE returns 99
         // and they fall to the end. Composing OrderBy on this CASE expression is fine
         // for SQLite at single-user scale; if it becomes hot, materialise into a column.
-        IOrderedQueryable<Track> KeyOrder(IQueryable<Track> source, bool descending)
+        IOrderedQueryable<TrackListing> KeyOrder(IQueryable<TrackListing> source, bool descending)
         {
             // SQLite: substr(key, 1, 1) handles "1A", "9B"; substr(key, 1, 2) handles "10A", "12B".
             // We match against the literal codes to keep this provider-agnostic.
             var ordered = source.OrderBy(t =>
-                t.MusicalKey == "1A" ? 1 : t.MusicalKey == "1B" ? 2 :
-                t.MusicalKey == "2A" ? 3 : t.MusicalKey == "2B" ? 4 :
-                t.MusicalKey == "3A" ? 5 : t.MusicalKey == "3B" ? 6 :
-                t.MusicalKey == "4A" ? 7 : t.MusicalKey == "4B" ? 8 :
-                t.MusicalKey == "5A" ? 9 : t.MusicalKey == "5B" ? 10 :
-                t.MusicalKey == "6A" ? 11 : t.MusicalKey == "6B" ? 12 :
-                t.MusicalKey == "7A" ? 13 : t.MusicalKey == "7B" ? 14 :
-                t.MusicalKey == "8A" ? 15 : t.MusicalKey == "8B" ? 16 :
-                t.MusicalKey == "9A" ? 17 : t.MusicalKey == "9B" ? 18 :
-                t.MusicalKey == "10A" ? 19 : t.MusicalKey == "10B" ? 20 :
-                t.MusicalKey == "11A" ? 21 : t.MusicalKey == "11B" ? 22 :
-                t.MusicalKey == "12A" ? 23 : t.MusicalKey == "12B" ? 24 :
+                t.Track.MusicalKey == "1A" ? 1 : t.Track.MusicalKey == "1B" ? 2 :
+                t.Track.MusicalKey == "2A" ? 3 : t.Track.MusicalKey == "2B" ? 4 :
+                t.Track.MusicalKey == "3A" ? 5 : t.Track.MusicalKey == "3B" ? 6 :
+                t.Track.MusicalKey == "4A" ? 7 : t.Track.MusicalKey == "4B" ? 8 :
+                t.Track.MusicalKey == "5A" ? 9 : t.Track.MusicalKey == "5B" ? 10 :
+                t.Track.MusicalKey == "6A" ? 11 : t.Track.MusicalKey == "6B" ? 12 :
+                t.Track.MusicalKey == "7A" ? 13 : t.Track.MusicalKey == "7B" ? 14 :
+                t.Track.MusicalKey == "8A" ? 15 : t.Track.MusicalKey == "8B" ? 16 :
+                t.Track.MusicalKey == "9A" ? 17 : t.Track.MusicalKey == "9B" ? 18 :
+                t.Track.MusicalKey == "10A" ? 19 : t.Track.MusicalKey == "10B" ? 20 :
+                t.Track.MusicalKey == "11A" ? 21 : t.Track.MusicalKey == "11B" ? 22 :
+                t.Track.MusicalKey == "12A" ? 23 : t.Track.MusicalKey == "12B" ? 24 :
                 99);
             return descending
                 ? source.OrderByDescending(t =>
-                    t.MusicalKey == "1A" ? 1 : t.MusicalKey == "1B" ? 2 :
-                    t.MusicalKey == "2A" ? 3 : t.MusicalKey == "2B" ? 4 :
-                    t.MusicalKey == "3A" ? 5 : t.MusicalKey == "3B" ? 6 :
-                    t.MusicalKey == "4A" ? 7 : t.MusicalKey == "4B" ? 8 :
-                    t.MusicalKey == "5A" ? 9 : t.MusicalKey == "5B" ? 10 :
-                    t.MusicalKey == "6A" ? 11 : t.MusicalKey == "6B" ? 12 :
-                    t.MusicalKey == "7A" ? 13 : t.MusicalKey == "7B" ? 14 :
-                    t.MusicalKey == "8A" ? 15 : t.MusicalKey == "8B" ? 16 :
-                    t.MusicalKey == "9A" ? 17 : t.MusicalKey == "9B" ? 18 :
-                    t.MusicalKey == "10A" ? 19 : t.MusicalKey == "10B" ? 20 :
-                    t.MusicalKey == "11A" ? 21 : t.MusicalKey == "11B" ? 22 :
-                    t.MusicalKey == "12A" ? 23 : t.MusicalKey == "12B" ? 24 :
+                    t.Track.MusicalKey == "1A" ? 1 : t.Track.MusicalKey == "1B" ? 2 :
+                    t.Track.MusicalKey == "2A" ? 3 : t.Track.MusicalKey == "2B" ? 4 :
+                    t.Track.MusicalKey == "3A" ? 5 : t.Track.MusicalKey == "3B" ? 6 :
+                    t.Track.MusicalKey == "4A" ? 7 : t.Track.MusicalKey == "4B" ? 8 :
+                    t.Track.MusicalKey == "5A" ? 9 : t.Track.MusicalKey == "5B" ? 10 :
+                    t.Track.MusicalKey == "6A" ? 11 : t.Track.MusicalKey == "6B" ? 12 :
+                    t.Track.MusicalKey == "7A" ? 13 : t.Track.MusicalKey == "7B" ? 14 :
+                    t.Track.MusicalKey == "8A" ? 15 : t.Track.MusicalKey == "8B" ? 16 :
+                    t.Track.MusicalKey == "9A" ? 17 : t.Track.MusicalKey == "9B" ? 18 :
+                    t.Track.MusicalKey == "10A" ? 19 : t.Track.MusicalKey == "10B" ? 20 :
+                    t.Track.MusicalKey == "11A" ? 21 : t.Track.MusicalKey == "11B" ? 22 :
+                    t.Track.MusicalKey == "12A" ? 23 : t.Track.MusicalKey == "12B" ? 24 :
                     99)
                 : ordered;
         }
 
         // SQLite's default puts NULLs first on ascending sort, which means a paged query
         // (size=500) fills up entirely with null-valued tracks before any real values appear.
-        // For every nullable sort field we prefix `OrderBy(t => t.X == null)` (false before true)
+        // For every nullable sort field we prefix `OrderBy(t => t.Track.X == null)` (false before true)
         // so NULLs always sort to the END regardless of direction. Applies to both asc and desc
         // for consistency — null-BPM tracks belong at the bottom no matter which way you sort.
-        q = (sort?.ToLowerInvariant()) switch
+        rows = (sort?.ToLowerInvariant()) switch
         {
-            "artist" => q.OrderBy(t => t.Artist == null).ThenBy(t => t.Artist).ThenBy(t => t.Title),
-            "-artist" => q.OrderBy(t => t.Artist == null).ThenByDescending(t => t.Artist).ThenByDescending(t => t.Title),
-            "title" => q.OrderBy(t => t.Title == null).ThenBy(t => t.Title),
-            "-title" => q.OrderBy(t => t.Title == null).ThenByDescending(t => t.Title),
-            "bpm" => q.OrderBy(t => t.Bpm == null).ThenBy(t => t.Bpm),
-            "-bpm" => q.OrderBy(t => t.Bpm == null).ThenByDescending(t => t.Bpm),
-            "energy" => q.OrderBy(t => t.Energy == null).ThenBy(t => t.Energy),
-            "-energy" => q.OrderBy(t => t.Energy == null).ThenByDescending(t => t.Energy),
+            "artist" => rows.OrderBy(t => t.Track.Artist == null).ThenBy(t => t.Track.Artist).ThenBy(t => t.Track.Title),
+            "-artist" => rows.OrderBy(t => t.Track.Artist == null).ThenByDescending(t => t.Track.Artist).ThenByDescending(t => t.Track.Title),
+            "title" => rows.OrderBy(t => t.Track.Title == null).ThenBy(t => t.Track.Title),
+            "-title" => rows.OrderBy(t => t.Track.Title == null).ThenByDescending(t => t.Track.Title),
+            "bpm" => rows.OrderBy(t => t.Track.Bpm == null).ThenBy(t => t.Track.Bpm),
+            "-bpm" => rows.OrderBy(t => t.Track.Bpm == null).ThenByDescending(t => t.Track.Bpm),
+            "energy" => rows.OrderBy(t => t.Track.Energy == null).ThenBy(t => t.Track.Energy),
+            "-energy" => rows.OrderBy(t => t.Track.Energy == null).ThenByDescending(t => t.Track.Energy),
             // KeyOrder's inline CASE already returns 99 for null/non-Camelot keys, so they
             // naturally sort last in both directions without an extra null-prefix.
-            "key" => KeyOrder(q, descending: false).ThenBy(t => t.Artist),
-            "-key" => KeyOrder(q, descending: true).ThenBy(t => t.Artist),
-            "genre" => q.OrderBy(t => t.Genre == null).ThenBy(t => t.Genre).ThenBy(t => t.Artist),
-            "-genre" => q.OrderBy(t => t.Genre == null).ThenByDescending(t => t.Genre).ThenBy(t => t.Artist),
+            "key" => KeyOrder(rows, descending: false).ThenBy(t => t.Track.Artist),
+            "-key" => KeyOrder(rows, descending: true).ThenBy(t => t.Track.Artist),
+            "genre" => rows.OrderBy(t => t.Track.Genre == null).ThenBy(t => t.Track.Genre).ThenBy(t => t.Track.Artist),
+            "-genre" => rows.OrderBy(t => t.Track.Genre == null).ThenByDescending(t => t.Track.Genre).ThenBy(t => t.Track.Artist),
             // Duration sort intentionally omitted: SQLite stores TimeSpan as TEXT and refuses to
             // ORDER BY it. Fixing properly requires a value converter (long ticks) + migration that
             // re-encodes existing data — not worth the schema churn for a column most users sort
             // by infrequently. Frontend should not expose a sortKey for the duration column.
-            "year" => q.OrderBy(t => t.ReleaseYear == null).ThenBy(t => t.ReleaseYear),
-            "-year" => q.OrderBy(t => t.ReleaseYear == null).ThenByDescending(t => t.ReleaseYear),
-            "added" => q.OrderBy(t => t.AddedAt).ThenBy(t => t.Id),
-            "-added" => q.OrderByDescending(t => t.AddedAt).ThenBy(t => t.Id),
-            "modified" => q.OrderBy(t => t.FileModifiedAt == null).ThenBy(t => t.FileModifiedAt).ThenBy(t => t.Id),
-            "-modified" => q.OrderBy(t => t.FileModifiedAt == null).ThenByDescending(t => t.FileModifiedAt).ThenBy(t => t.Id),
-            _ => q.OrderBy(t => t.Artist == null).ThenBy(t => t.Artist).ThenBy(t => t.Title),
+            "year" => rows.OrderBy(t => t.Track.ReleaseYear == null).ThenBy(t => t.Track.ReleaseYear),
+            "-year" => rows.OrderBy(t => t.Track.ReleaseYear == null).ThenByDescending(t => t.Track.ReleaseYear),
+            "added" => rows.OrderBy(t => t.Track.AddedAt).ThenBy(t => t.Track.Id),
+            "-added" => rows.OrderByDescending(t => t.Track.AddedAt).ThenBy(t => t.Track.Id),
+            "modified" => rows.OrderBy(t => t.Track.FileModifiedAt == null).ThenBy(t => t.Track.FileModifiedAt).ThenBy(t => t.Track.Id),
+            "-modified" => rows.OrderBy(t => t.Track.FileModifiedAt == null).ThenByDescending(t => t.Track.FileModifiedAt).ThenBy(t => t.Track.Id),
+            _ => rows.OrderBy(t => t.Track.Artist == null).ThenBy(t => t.Track.Artist).ThenBy(t => t.Track.Title),
         };
 
         // Stable tie-break for paging/select-all, including repeated artist/title/BPM values.
-        q = ((IOrderedQueryable<Track>)q).ThenBy(t => t.Id);
-        var total = await q.CountAsync(ct);
-        var items = await q.Skip((page - 1) * size).Take(size).ToListAsync(ct);
+        rows = ((IOrderedQueryable<TrackListing>)rows).ThenBy(t => t.Track.Id).ThenBy(t => t.EntryId);
+        var total = await rows.CountAsync(ct);
+        var items = await rows.Skip((page - 1) * size).Take(size).ToListAsync(ct);
 
-        return Results.Ok(new TrackPageDto(items.Select(TrackDto.From).ToList(), total, page, size));
+        return Results.Ok(new TrackPageDto(items.Select(row => TrackDto.From(row.Track) with { PlaylistEntryId = row.EntryId }).ToList(), total, page, size));
+    }
+
+    private sealed class TrackListing
+    {
+        public Track Track { get; init; } = null!;
+        public Guid? EntryId { get; init; }
     }
 
     private static async Task<IResult> GetTrack(Guid id, WispDbContext db, CancellationToken ct)

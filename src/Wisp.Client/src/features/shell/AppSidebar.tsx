@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Compass,
@@ -15,7 +15,8 @@ import { playlists } from '../../api/playlists'
 import { useActivePlaylist } from '../../state/activePlaylist'
 import { useCurrentPage, type AppPage } from '../../state/currentPage'
 import { useUiPrefs } from '../../state/uiPrefs'
-import { confirmDialog, promptDialog } from '../../components/dialog'
+import { alertDialog, confirmDialog, promptDialog } from '../../components/dialog'
+import { addTracksToPlaylist } from '../library/addTracksToPlaylist'
 import { WispLogo } from '../../components/WispLogo'
 import { CreatePlaylistDialog } from '../library/CreatePlaylistDialog'
 import { useWantedTracks } from '../wanted/useWantedTracks'
@@ -277,6 +278,8 @@ function PlaylistRow({
   const qc = useQueryClient()
   const [isDropTarget, setIsDropTarget] = useState(false)
   const [recentlyAdded, setRecentlyAdded] = useState<number | null>(null)
+  const dropBusy = useRef(false)
+  const [dropPending, setDropPending] = useState(false)
 
   // Auto-clear the "+N" indicator after 2.5s.
   useEffect(() => {
@@ -301,23 +304,31 @@ function PlaylistRow({
     if (!isWispDrag(e)) return
     e.preventDefault()
     setIsDropTarget(false)
+    if (dropBusy.current) return
+    dropBusy.current = true
+    setDropPending(true)
     try {
-      const ids = JSON.parse(e.dataTransfer.getData(WISP_DRAG_TYPE)) as string[]
-      const res = await playlists.addTracksBulk(id, ids)
+      const ids: unknown = JSON.parse(e.dataTransfer.getData(WISP_DRAG_TYPE))
+      if (!Array.isArray(ids) || !ids.every(x => typeof x === 'string')) throw new Error('Invalid track selection. Select the tracks again.')
+      const res = await addTracksToPlaylist(id, ids)
+      if (!res) return
       // Bump the recently-added count for the indicator. If the user drops twice in
       // quick succession, accumulate so they see the running total instead of a flicker.
       setRecentlyAdded((prev) => (prev ?? 0) + res.added)
       qc.invalidateQueries({ queryKey: ['playlists'] })
       qc.invalidateQueries({ queryKey: ['tracks'] })
     } catch (err) {
-      console.error('Drop on playlist failed', err)
+      await alertDialog({ title: 'Could not add to playlist', message: (err as Error).message, tone: 'error' })
     }
+    finally { dropBusy.current = false; setDropPending(false) }
   }
 
   return (
     <li>
       <button
         onClick={onClick}
+        disabled={dropPending}
+        aria-busy={dropPending}
         onContextMenu={(e) => {
           e.preventDefault()
           onContextMenu(e.clientX, e.clientY)

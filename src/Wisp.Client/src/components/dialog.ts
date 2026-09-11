@@ -49,22 +49,37 @@ export interface AlertOptions {
   confirmLabel?: string
 }
 
+export interface ChoiceOptions {
+  title: string
+  message: string
+  choices: { value: string; label: string }[]
+}
+
 export type Pending =
   | { kind: 'confirm'; opts: ConfirmOptions; resolve: (v: boolean) => void }
   | { kind: 'prompt'; opts: PromptOptions; resolve: (v: string | null) => void }
   | { kind: 'alert'; opts: AlertOptions; resolve: () => void }
+  | { kind: 'choice'; opts: ChoiceOptions; resolve: (v: string | null) => void }
 
 interface DialogStore {
   current: Pending | null
+  queue: Pending[]
   open: (p: Pending) => void
   close: () => void
 }
 
 export const useDialogStore = create<DialogStore>((set) => ({
   current: null,
-  open: (p) => set({ current: p }),
-  close: () => set({ current: null }),
+  queue: [],
+  open: (p) => set(s => s.current ? { queue: [...s.queue, p] } : { current: p }),
+  close: () => set(s => ({ current: s.queue[0] ?? null, queue: s.queue.slice(1) })),
 }))
+
+export function choiceDialog(opts: ChoiceOptions): Promise<string | null> {
+  return new Promise(resolve => useDialogStore.getState().open({ kind: 'choice', opts,
+    resolve: value => { useDialogStore.getState().close(); resolve(value) },
+  }))
+}
 
 export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
   return new Promise<boolean>((resolve) => {

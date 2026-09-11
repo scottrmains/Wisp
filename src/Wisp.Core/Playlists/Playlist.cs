@@ -4,7 +4,7 @@ namespace Wisp.Core.Playlists;
 
 /// User-curated bucket of tracks. Distinct from MixPlan in two ways:
 ///   1. **Unordered** — playlists don't carry transition / cue / chain semantics.
-///      They're just sets of tracks the user grouped together.
+///      They group tracks, including explicitly confirmed repeated entries.
 ///   2. **Reusable as a recommendation scope** — a MixPlan can point at a playlist
 ///      via `RecommendationScopePlaylistId` to constrain what gets suggested when
 ///      building it. That's the real payoff.

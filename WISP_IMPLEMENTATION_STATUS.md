@@ -2,6 +2,184 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Non-destructive loudness normalisation and linked audio versions
+
+- **Workflow:** select one or many library/playlist tracks (Ctrl+A spans pages),
+  then use **Loudness & versions…** in the toolbar or **Loudness & audio versions…**
+  in the row menu. Scan selected originals, review LUFS/true peaks/safe gain and
+  flags, choose the main music folder, and explicitly create normalised copies.
+  Creation leaves the original active. Preview either version without activating
+  it, then use **Use normalised / Use original** per track or the batch controls.
+  Switching pauses the loaded track and invalidates cached audio/waveforms.
+- **Audio processing:** FFmpeg `loudnorm` performs full-track EBU R128 measurement
+  on the stereo/44.1 kHz render format. Target is configurable from -30 to -9 LUFS
+  (default -14, not claimed as a DJ standard). Default safe mode uses constant gain
+  `min(target - measured LUFS, -1.2 - measured true peak)`; it preserves dynamics
+  and flags tracks that cannot reach target without limiting. **Allow limiting**
+  is off by default and explicitly enables measured two-pass dynamic loudnorm
+  where needed. Output is re-measured, checked against a -1 dBTP ceiling (0.05 dB
+  measurement tolerance) and a 0.05-second duration tolerance before linking.
+  This does not denoise/declick/remaster vinyl rips; gain raises their noise too.
+- **Files:** new stereo 24-bit PCM WAV, 44.1 kHz, under
+  `<chosen music folder>/WISP Normalized/<track ID>/<name>-normalized-<unique ID>.wav`.
+  No original overwrite, replacement or MP3 re-encoding. Curated title/artist/
+  album/genre and a normalisation comment accompany copied source metadata where
+  WAV supports it; WISP prep stays on the same library identity. Source audio,
+  cue timestamps, tags, notes, playlist entries and mix membership are preserved.
+  The chosen folder is remembered; WAV copies can be substantially larger.
+- **Persistent version metadata:** nullable track fields store the original path,
+  latest normalised path, analysis/source SHA-256 fingerprint and measurements,
+  target, actual gain, limiting choice, output fingerprint and creation time.
+  FilePath always denotes the explicitly active version, so existing playback,
+  drag and export paths consume that version consistently. The library File
+  column shows **Normalised** or **Original · copy saved**. Version details expose
+  both paths and processing information. Regeneration never deletes older output
+  files; the UI links the original and latest generated version, not a full history.
+- **Safety/integration:** full source fingerprint revalidation rejects stale
+  analysis; read sharing blocks source edits while processing on Windows. Native
+  operations use a shared library/file gate, argument-list process invocation,
+  cancellation/timeout process termination and unique no-overwrite output paths.
+  Failed uncommitted outputs are removed; crashes may leave unlinked files in the
+  reserved folder, which is excluded from imports. Create retries reuse a verified
+  existing output for the same analysis/options. Missing/changed files block
+  activation with actionable feedback. Junction/symlink output trees are rejected.
+  Rescans ignore inactive originals and generated copies as new tracks, while
+  checking availability of the active generated version. Cleanup requires the
+  original active; source renames update the original link and invalidate analysis.
+  Relink explicitly detaches version metadata (with a warning) without deleting
+  either file. Version switching supersedes unsafe old cleanup undo records.
+- **Migration:** `20260911161546_AddTrackAudioVersions` adds four nullable columns;
+  existing library/prep rows survive. Downgrade refuses to discard original links
+  while normalised copies are active; switch back first. Downgrade removes stored
+  analysis/version links but never deletes music files.
+- **Verified:** 222 backend + 38 client unit + 27 browser tests pass (287 total).
+  Real FFmpeg fixtures verify target matching, peak-capped constant gain, explicit
+  limiting, silence rejection, cancellation, output format/duration and original
+  byte preservation. Isolated API tests cover switching/drag-path resolution,
+  retained cues/playlists, stale/missing files, failed-render cleanup, idempotent
+  retries, regeneration, persistence, scanner exclusion and downgrade protection.
+  Browser tests cover the batch scan/create/switch flow, target changes, opt-in
+  limiting, error/retry, cancellation across result pages and missing FFmpeg;
+  the 800x600 modal screenshot was visually checked. Client build/lint pass (13
+  existing warnings); EF reports no pending model changes. Existing NuGet
+  advisories are unchanged. CI now prepares FFmpeg for real audio validation;
+  installers remain exclusive to main pushes.
+- **Boundary:** tests used generated audio, isolated databases/config and mocked
+  browser responses—not the user's music, live library or installed application.
+  No local installer was generated. Normalised files have not been hardware-tested
+  on CDJs, and this feature makes no new USB-format/cue compatibility claim.
+
+## 2026-09-11: Playlist duplicate scan and confirmed cleanup
+
+- **Entry point:** open a playlist and use **Scan for duplicates…** in its toolbar.
+  No selection is needed. A WISP-styled modal scans the whole playlist, independent
+  of library filters or pagination, and lists repeated tracks and extra-entry
+  counts. Clean/empty playlists explicitly report **No duplicates found**.
+- **Confirmation:** nothing is changed by scanning or cancelling. **Remove N
+  duplicates** keeps the oldest-added entry of each repeated library track (entry
+  ID breaks equal-timestamp ties). It removes extra playlist memberships only;
+  source audio, library tracks, cues, notes, tags, other playlists and mix plans
+  remain untouched. Different library tracks with matching titles are not merged.
+- **Safety:** read-only `GET /api/playlists/{id}/duplicates` returns a membership
+  snapshot. `POST /api/playlists/{id}/duplicates/remove` validates that snapshot
+  and deletes extras in one write transaction. Changed membership returns
+  `409 playlist_scan_stale` without deleting anything; the UI requires a new scan
+  and confirmation. Losing the originally kept entry cannot cause a stale scan
+  to delete the final copy. Cleanup is scoped to the named playlist.
+- **Resilience:** scan/loading/error/empty states, retry and fresh-scan actions,
+  pending-action guards, keyboard focus restoration and a scroll-bounded modal.
+  Counts refresh, selection clears and paging returns to the first page after
+  removal; playback is not reset. No extra database migration is needed beyond
+  the existing repeated-entry support in this PR.
+- **Verified:** 210 backend + 34 client unit + 23 browser tests pass (267 total).
+  Five new backend cases cover preservation, 1,003-entry scanning, same-title
+  distinct files, stale/cross-playlist snapshots, safe retries and empty/missing
+  playlists. Seven new browser cases cover confirmation, 1,002-entry full-playlist
+  cleanup from page two, cancel, clean/empty results, failure/retry, stale scans and
+  busy guards. The 800x600 confirmation screenshot was visually checked. Build
+  and lint pass with 13 pre-existing lint warnings and unchanged NuGet advisories.
+  Tests use isolated databases and mocked browser data; no working library/files
+  or installed app were modified. Included in the existing playlist PR to develop;
+  no local installer generated and production remains main-only.
+
+## 2026-09-11: Playlist removal and explicit duplicate confirmation
+
+- **Remove from playlist:** available in the scoped library toolbar and the row
+  context menu, for one or many selected entries (including Ctrl+A across pages).
+  A WISP-styled modal names the target playlist and explains that only selected
+  entries are removed. Unselected copies, other playlists, library tracks, notes,
+  tags, editorial/device cues, mix plans and audio files are preserved. Playing a
+  removed playlist entry continues normally. Counts refresh, selection clears,
+  and paging returns to page 1 after removal. Failures remain visible for retry.
+- **Duplicate warning:** add-dialog and sidebar-drop paths now share the same
+  confirmation flow. The server checks before writing anything and returns
+  `409 playlist_duplicates` if any selected track is already present. Choose
+  **Add again**, **Skip existing**, or **Cancel**. Add again adds a new occurrence
+  for each unique selected track, not another audio file; Skip existing adds only
+  new members; Cancel makes no changes. Unknown tracks fail the whole batch.
+  Both single and bulk add APIs use this policy; successful adds return
+  `{ added, skipped }`. The default duplicate policy is now `ask`, not silent skip.
+- **Entry identity:** confirmed repeats have independent playlist-entry IDs and
+  appear as separate selectable rows. Filtering, sorting, pagination and Select
+  all operate on those entries. Playback, file dragging, tagging, archive and
+  subsequent playlist additions use underlying unique library-track IDs. Thus
+  removing one repeat does not remove every copy or lose the original prep data.
+- **Persistence:** `AllowRepeatedPlaylistEntries` changes the playlist/track index
+  from unique to non-unique without deleting or rewriting existing entries.
+  Transactional membership checks serialize concurrent ordinary adds. New entry-ID
+  bulk removal is scoped to its named playlist; the legacy track-ID DELETE removes
+  all occurrences of that track in that playlist. Both are safe to retry. Batches
+  are capped at 20,000. Downgrading the index to unique requires removing repeats
+  first; rollback must not silently discard entries to satisfy the old constraint.
+- **Modal resilience:** add/duplicate/remove dialogs use focus-trapping native
+  HTML dialogs styled with WISP tokens (not system prompts). Busy actions prevent
+  accidental resubmission/dismissal, queued global prompts no longer overwrite
+  one another, and retrying a failed create-and-add reuses the already-created
+  playlist instead of creating another empty one.
+- **Verified with the internal-drag fix below:** 205 backend + 34 client unit +
+  16 browser tests pass (255 total).
+  New backend tests upgrade a seeded previous-schema database, exercise all 18
+  library sorts with repeated entries, verify atomic duplicate checks, concurrent
+  adds, skip/add/cancel semantics, scoped removal and preservation of prep/audio.
+  Browser regressions cover toolbar/context removal, cancel/error/retry, continuing
+  playback, 1,002-entry all-page removal, all duplicate choices, sidebar drops and
+  an 800x600 modal layout. Real row-to-sidebar dragging also opens duplicate
+  confirmation for repeated playlist selections; external-handle tests pass.
+  Client build/type checks pass; lint has no errors and 13 pre-existing warnings.
+  Existing NuGet advisories are unchanged. All tests use isolated data/mocks; no
+  working library migration, music-file removal or live installation replacement
+  was performed. No USB/CDJ compatibility claims or export-format changes added.
+- **Delivery:** feature PR into develop. No local installer built; production
+  packaging remains restricted to main pushes.
+
+## 2026-09-11: Restore internal playlist dragging; separate external file transfer
+
+- **Regression:** the earlier Windows drag change made ordinary track rows start
+  native CF_HDROP transfers by default. WISP playlist targets require internal
+  track IDs, so those drops could not add playlist membership. The previous tests
+  checked the optional internal mode's payload, not the default end-to-end drop.
+- **Implemented:** row dragging always carries only WISP track IDs again, for
+  sidebar playlists and mix-plan targets. Removed the drag-destination selector
+  and native row callback. Ctrl+A keeps the complete selection across pages;
+  dragging an unselected row uses only that track. The separate **Drag N files to
+  rekordbox** handle remains the explicit native file-transfer gesture for other
+  apps/folders. No DownloadURL or file-path payload is attached to track rows.
+- **Drop safety:** the app shell rejects unhandled files/URLs and prevents the
+  embedded browser's default drop navigation/download. Existing child handlers
+  still receive internal playlist/mix payloads; this guard does not import music.
+- **Verification:** all nine committed browser regressions pass, including real
+  mouse drops into sidebar playlists with 1,205 selected tracks from page one and
+  page two, an unselected-row drop, and internal dragging on an unsupported native
+  host. They assert membership requests and no native bridge calls/downloads.
+  Separate handle coverage checks all-page payload, busy guard, missing-file retry
+  and early release. Stray file/URL rejection uses synthetic browser events.
+  Combined with playlist removal/duplicates: 205 backend, 34 client unit and
+  16 browser tests pass. Client build and lint pass (13 pre-existing warnings).
+- **Boundary:** native responses/API data are mocked in browser tests; a real
+  installed WebView2/rekordbox handoff still needs user verification. No music,
+  working database or installation was changed and no installer was generated.
+  This section supersedes the native-row default described immediately below.
+
 ## 2026-09-11: Fix direct track-row dragging to Windows apps and folders
 
 - **Confirmed cause of the reported workflow:** Ctrl+A selected the tracks, but

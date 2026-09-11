@@ -27,7 +27,7 @@ public class FileScanner : IFileScanner
 
         foreach (var path in Directory.EnumerateFiles(root, "*", options))
         {
-            if (AudioExtensions.Contains(Path.GetExtension(path)))
+            if (AudioExtensions.Contains(Path.GetExtension(path)) && !Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path))
                 yield return path;
         }
     }

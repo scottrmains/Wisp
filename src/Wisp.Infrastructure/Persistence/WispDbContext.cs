@@ -212,8 +212,9 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
 
         var playlistTrack = b.Entity<PlaylistTrack>();
         playlistTrack.HasKey(t => t.Id);
-        // Same track can't appear twice in the same playlist — adds become idempotent.
-        playlistTrack.HasIndex(t => new { t.PlaylistId, t.TrackId }).IsUnique();
+        // Entries have their own identity; repeating a track requires explicit
+        // confirmation in playlist writes, not a uniqueness constraint.
+        playlistTrack.HasIndex(t => new { t.PlaylistId, t.TrackId });
         playlistTrack.HasIndex(t => t.TrackId); // for "which playlists is this track in?" lookups
         playlistTrack.HasOne(t => t.Track)
             .WithMany()

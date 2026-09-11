@@ -38,7 +38,8 @@ public static class TrackFileEndpoints
             if (!string.Equals(track.FilePath, body.ExpectedFilePath, StringComparison.OrdinalIgnoreCase))
                 return Results.Conflict(new { code = "track_changed", message = "This track's file link changed. Close this dialog and reopen it before trying again." });
             // Compare case-insensitively even though the SQLite path index is case-sensitive.
-            var paths = await db.Tracks.Where(t => t.Id != id).Select(t => t.FilePath).ToListAsync(ct);
+            var linked = await db.Tracks.Where(t => t.Id != id).Select(t => new { t.FilePath, t.OriginalFilePath, t.NormalizedFilePath }).ToListAsync(ct);
+            var paths = linked.SelectMany(t => new[] { t.FilePath, t.OriginalFilePath, t.NormalizedFilePath });
             if (paths.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase)))
                 return Results.Conflict(new { code = "already_linked", message = "This file is already linked to another WISP track. No changes were made. Keep that entry, or remove it from WISP first after checking its cues and playlists." });
             if (!File.Exists(path)) return Results.BadRequest(new { code = "file_missing", message = "The selected file could not be found. Check that its drive is connected." });
@@ -50,6 +51,10 @@ public static class TrackFileEndpoints
             var meta = metadata.Read(path);
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             track.FilePath = path;
+            // Explicit relinking starts a new source lineage; existing generated
+            // files remain on disk, but are no longer claimed as this replacement.
+            track.OriginalFilePath = null; track.NormalizedFilePath = null;
+            track.LoudnessAnalysisJson = null; track.NormalizationJson = null;
             track.FileName = Path.GetFileName(path);
             track.FileHash = hash;
             track.Duration = duration;

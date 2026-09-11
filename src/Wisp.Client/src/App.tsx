@@ -70,7 +70,19 @@ function App() {
   const showMiniPlayer = !libraryWorkspaceActive
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full"
+      onDragOver={(e) => {
+        // Child WISP drop targets handle their own payloads first. Reject stray
+        // native files/URLs (including our external handle dropped back here).
+        if (!e.defaultPrevented && e.dataTransfer.types.some((type) =>
+          type === 'Files' || type === 'text/uri-list' || type === 'DownloadURL')) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'none'
+        }
+      }}
+      // Never let an unhandled drop navigate the embedded browser or download.
+      // Bubbling preserves playlist/mix handlers; no files are imported here.
+      onDrop={(e) => e.preventDefault()}>
       <AppSidebar />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">

@@ -81,6 +81,7 @@ public class Program
                 return new Wisp.Infrastructure.Audio.Mp3Transcoder(log, () => settings.Current.FfmpegPath);
             });
             builder.Services.AddWispLibrary();
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.ILoudnessNormalizer, Wisp.Infrastructure.Audio.LoudnessNormalizer>();
             // Sidecar that owns the bundled slskd.exe lifecycle. Defers cleanly to an
             // externally-running slskd if port 5030 is taken; respects the
             // ManageSlskd toggle in settings.
@@ -168,6 +169,7 @@ public class Program
 
             app.MapLibrary();
             app.MapTrackFiles();
+            app.MapLoudness();
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();

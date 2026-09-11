@@ -21,6 +21,7 @@ using Wisp.Infrastructure.Tagging;
 
 namespace Wisp.Api.Tests;
 
+[Collection("Library file operations")]
 public sealed class TrackFileRecoveryTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "wisp-recovery-" + Guid.NewGuid().ToString("N"));

@@ -40,7 +40,10 @@ import { useTrackFileDialog } from './TrackFileDialog'
 import { ResizablePrepPane } from './ResizablePrepPane'
 import { ExternalFileDrag } from './ExternalFileDrag'
 import { useExternalFileDrag } from './useExternalFileDrag'
-import { collectSelection, selectionScope } from './librarySelection'
+import { RemoveFromPlaylistDialog, type PlaylistRemoval } from './RemoveFromPlaylistDialog'
+import { PlaylistDuplicatesDialog } from './PlaylistDuplicatesDialog'
+import { LoudnessDialog } from './LoudnessDialog'
+import { collectSelection, selectionScope, trackRowId, uniqueTrackIds } from './librarySelection'
 
 const EMPTY_SELECTION = new Set<string>()
 
@@ -49,14 +52,13 @@ const EMPTY_SELECTION = new Set<string>()
 /// library body: filters, bulk bar, table, inspector, plus modals scoped
 /// to library actions (cleanup, archive, bulk archive, bulk tag, context menu).
 export function LibraryPage() {
-  const [rowDragTarget, setRowDragTarget] = useState<'external' | 'wisp'>('external')
   const [query, setQuery] = useState<TrackQuery>(() => ({ page: 1, size: 500, sort: useUiPrefs.getState().librarySort }))
   const changeQuery = (next: TrackQuery) => {
     setQuery(next)
     useUiPrefs.getState().setLibrarySort(next.sort ?? 'artist')
   }
   const [storedSelected, setSelected] = useState<Track | null>(null)
-  const [selection, setSelection] = useState({ scope: '', ids: new Set<string>() })
+  const [selection, setSelection] = useState({ scope: '', ids: new Set<string>(), rows: new Map<string, Track>() })
   const selectionTracks = useRef(new Map<string, Track>())
   const selectionRequest = useRef<AbortController | null>(null)
   const [selectionStatus, setSelectionStatus] = useState({ scope: '', pending: false, error: null as string | null })
@@ -71,6 +73,10 @@ export function LibraryPage() {
   const [bulkTagIds, setBulkTagIds] = useState<string[] | null>(null)
   const [addToPlaylistIds, setAddToPlaylistIds] = useState<string[] | null>(null)
   const [contextMenu, setContextMenu] = useState<{ track: Track; x: number; y: number } | null>(null)
+  const [playlistRemoval, setPlaylistRemoval] = useState<PlaylistRemoval | null>(null)
+  const [loudnessIds, setLoudnessIds] = useState<string[] | null>(null)
+  const [duplicateScan, setDuplicateScan] = useState<{ id: string; name: string } | null>(null)
+  const [playlistNotice, setPlaylistNotice] = useState<{ scope: string; message: string } | null>(null)
 
   const qc = useQueryClient()
   const setPage = useCurrentPage((s) => s.setPage)
@@ -117,7 +123,7 @@ export function LibraryPage() {
   // returning to an earlier playlist could revive a stale all-track selection.
   if (previousScope !== scopeKey) {
     setPreviousScope(scopeKey)
-    setSelection({ scope: scopeKey, ids: new Set() })
+    setSelection({ scope: scopeKey, ids: new Set(), rows: new Map() })
     setSelected(null)
     setSelectionStatus({ scope: scopeKey, pending: false, error: null })
   }
@@ -125,10 +131,15 @@ export function LibraryPage() {
   const selectionError = selectionStatus.scope === scopeKey ? selectionStatus.error : null
   const selectedIds = selection.scope === scopeKey ? selection.ids : EMPTY_SELECTION
   const selected = selection.scope === scopeKey ? storedSelected : null
-  const setSelectedIds = (next: SetStateAction<Set<string>>) => setSelection((previous) => ({
-    scope: scopeKey,
-    ids: typeof next === 'function' ? next(previous.scope === scopeKey ? previous.ids : EMPTY_SELECTION) : next,
-  }))
+  const setSelectedIds = (next: SetStateAction<Set<string>>) => {
+    // Snapshot cached rows when an event changes selection; render from state,
+    // not a mutable ref, so off-page entry/track identities stay in sync.
+    const known = new Map(selectionTracks.current)
+    setSelection((previous) => ({
+      scope: scopeKey, rows: known,
+      ids: typeof next === 'function' ? next(previous.scope === scopeKey ? previous.ids : EMPTY_SELECTION) : next,
+    }))
+  }
 
   useEffect(() => {
     // A filter/playlist change must cancel an in-flight all-pages selection.
@@ -147,8 +158,8 @@ export function LibraryPage() {
     try {
       const all = await collectSelection(effectiveQuery, tracks.list, controller.signal)
       if (controller.signal.aborted) return
-      selectionTracks.current = new Map(all.map((t) => [t.id, t]))
-      setSelectedIds(new Set(all.map((t) => t.id)))
+      selectionTracks.current = new Map(all.map((t) => [trackRowId(t), t]))
+      setSelectedIds(new Set(all.map(trackRowId)))
       setSelected(all[0] ?? null)
     } catch (e) {
       if (!controller.signal.aborted) setSelectionStatus({ scope: scopeKey, pending: false, error: (e as Error).message })
@@ -169,8 +180,21 @@ export function LibraryPage() {
   useEffect(() => {
     // Keep row payloads for manual Ctrl/Shift selections across page changes,
     // as well as for Select all, so internal WISP drags don't truncate either.
-    for (const track of tracksQuery.data?.items ?? []) selectionTracks.current.set(track.id, track)
+    for (const track of tracksQuery.data?.items ?? []) selectionTracks.current.set(trackRowId(track), track)
   }, [tracksQuery.data])
+
+  // UI selection uses playlist-entry IDs; library/audio actions use track IDs.
+  const pageRows = new Map(items.map(t => [trackRowId(t), t]))
+  const selectedRows = [...selectedIds].map(id =>
+    pageRows.get(id) ?? selection.rows.get(id))
+    .filter((t): t is Track => !!t)
+  const selectedTrackIds = uniqueTrackIds(selectedRows)
+  const removeFromPlaylist = (rows: Track[]) => {
+    if (!activePlaylistId) return
+    const entryIds = rows.flatMap(t => t.playlistEntryId ? [t.playlistEntryId] : [])
+    if (entryIds.length === 0) return
+    setPlaylistRemoval({ playlistId: activePlaylistId, playlistName: activePlaylist?.name ?? 'this playlist', entryIds })
+  }
 
   const hasActiveFilters = !!(
     query.search || query.key || query.bpmMin || query.bpmMax ||
@@ -187,23 +211,23 @@ export function LibraryPage() {
 
   const onSelectRow = (t: Track, mods: { meta: boolean; shift: boolean }) => {
     selectionRequest.current?.abort()
-    selectionTracks.current.set(t.id, t)
+    selectionTracks.current.set(trackRowId(t), t)
     setFocusTab(null)
     if (mods.meta) {
       setSelectedIds((prev) => {
         const next = new Set(prev)
-        if (next.has(t.id)) next.delete(t.id)
-        else next.add(t.id)
+        if (next.has(trackRowId(t))) next.delete(trackRowId(t))
+        else next.add(trackRowId(t))
         return next
       })
-      anchorIdRef.current = t.id
+      anchorIdRef.current = trackRowId(t)
       setSelected(t)
       return
     }
     if (mods.shift && anchorIdRef.current) {
-      const ids = items.map((x) => x.id)
+      const ids = items.map(trackRowId)
       const aIdx = ids.indexOf(anchorIdRef.current)
-      const bIdx = ids.indexOf(t.id)
+      const bIdx = ids.indexOf(trackRowId(t))
       if (aIdx >= 0 && bIdx >= 0) {
         const [lo, hi] = aIdx < bIdx ? [aIdx, bIdx] : [bIdx, aIdx]
         setSelectedIds(new Set(ids.slice(lo, hi + 1)))
@@ -212,8 +236,8 @@ export function LibraryPage() {
       }
     }
     setSelected(t)
-    setSelectedIds(new Set([t.id]))
-    anchorIdRef.current = t.id
+    setSelectedIds(new Set([trackRowId(t)]))
+    anchorIdRef.current = trackRowId(t)
   }
   const onActivateRow = (t: Track) => playTrack(t.id)
   const clearSelection = () => {
@@ -224,22 +248,14 @@ export function LibraryPage() {
   }
 
   const onDragStartRow = (t: Track): Track[] => {
-    if (selectedIds.has(t.id) && selectedIds.size > 1) {
-      const known = new Map([...selectionTracks.current, ...items.map((x) => [x.id, x] as const)])
+    if (selectedIds.has(trackRowId(t)) && selectedIds.size > 1) {
+      const known = new Map([...selectionTracks.current, ...items.map((x) => [trackRowId(x), x] as const)])
       return [...selectedIds].map((id) => known.get(id)).filter((x): x is Track => !!x)
     }
     setSelected(t)
-    setSelectedIds(new Set([t.id]))
-    anchorIdRef.current = t.id
+    setSelectedIds(new Set([trackRowId(t)]))
+    anchorIdRef.current = trackRowId(t)
     return [t]
-  }
-
-  const onExternalDragStart = (t: Track) => {
-    // Resolve by IDs, not rendered rows: Ctrl+A may include thousands of tracks
-    // on other pages. Starting a drag must not collapse the existing selection.
-    const ids = selectedIds.has(t.id) ? [...selectedIds] : [t.id]
-    if (!selectedIds.has(t.id)) onSelectRow(t, { meta: false, shift: false })
-    void fileDrag.begin(ids)
   }
 
   // Workspace now drives off the player's loaded track, not the row selection.
@@ -256,8 +272,8 @@ export function LibraryPage() {
   }, [workspaceActive, setLibraryWorkspaceActive])
 
   const buildMenuItems = (rowTrack: Track): ContextMenuItem[] => {
-    const opIds = selectedIds.has(rowTrack.id) && selectedIds.size > 1
-      ? Array.from(selectedIds)
+    const opIds = selectedIds.has(trackRowId(rowTrack)) && selectedIds.size > 1
+      ? selectedTrackIds
       : [rowTrack.id]
     const isMulti = opIds.length > 1
     const hasPlan = !!activePlanId
@@ -299,6 +315,11 @@ export function LibraryPage() {
         label: isMulti ? `Add ${opIds.length} to playlist…` : 'Add to playlist…',
         onSelect: () => setAddToPlaylistIds(opIds),
       },
+      { id: 'loudness', icon: Sparkles, label: 'Loudness & audio versions…', onSelect: () => setLoudnessIds(opIds) },
+      ...(activePlaylistId ? [{
+        id: 'remove-from-playlist', icon: X, label: 'Remove from playlist…',
+        onSelect: () => removeFromPlaylist(selectedIds.has(trackRowId(rowTrack)) ? selectedRows : [rowTrack]),
+      }] : []),
       {
         id: 'notes', icon: StickyNote, label: 'Notes',
         disabled: isMulti, disabledReason: 'Single track only',
@@ -321,8 +342,8 @@ export function LibraryPage() {
       },
       {
         id: 'cleanup', icon: AlertTriangle, label: 'Cleanup…',
-        disabled: isMulti || (!rowTrack.isDirtyName && !rowTrack.isMissingMetadata),
-        disabledReason: isMulti ? 'Single track only' : 'No cleanup suggested',
+        disabled: isMulti || rowTrack.audioVersion === 'normalized' || (!rowTrack.isDirtyName && !rowTrack.isMissingMetadata),
+        disabledReason: isMulti ? 'Single track only' : rowTrack.audioVersion === 'normalized' ? 'Switch to original before cleanup' : 'No cleanup suggested',
         onSelect: () => setCleanupTarget(rowTrack),
       },
       {
@@ -346,22 +367,22 @@ export function LibraryPage() {
   }
 
   const onContextMenuRow = (t: Track, x: number, y: number) => {
-    if (!(selectedIds.has(t.id) && selectedIds.size > 1)) {
+    if (!(selectedIds.has(trackRowId(t)) && selectedIds.size > 1)) {
       setSelected(t)
-      setSelectedIds(new Set([t.id]))
-      anchorIdRef.current = t.id
+      setSelectedIds(new Set([trackRowId(t)]))
+      anchorIdRef.current = trackRowId(t)
     }
     setContextMenu({ track: t, x, y })
   }
 
   const bulkAddToMix = () => {
     if (!activePlanId) return
-    for (const id of selectedIds) addToActivePlan(id)
+    for (const id of selectedTrackIds) addToActivePlan(id)
     clearSelection()
   }
-  const bulkArchive = () => setBulkArchiveIds(Array.from(selectedIds))
-  const bulkTag = () => setBulkTagIds(Array.from(selectedIds))
-  const bulkAddToPlaylist = () => setAddToPlaylistIds(Array.from(selectedIds))
+  const bulkArchive = () => setBulkArchiveIds(selectedTrackIds)
+  const bulkTag = () => setBulkTagIds(selectedTrackIds)
+  const bulkAddToPlaylist = () => setAddToPlaylistIds(selectedTrackIds)
 
   // Keyboard shortcuts. Skipped while typing in inputs / textareas.
   useEffect(() => {
@@ -399,22 +420,22 @@ export function LibraryPage() {
         e.preventDefault()
       }
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length > 0) {
-        const idx = selected ? items.findIndex((t) => t.id === selected.id) : -1
+        const idx = selected ? items.findIndex((t) => trackRowId(t) === trackRowId(selected)) : -1
         const next = e.key === 'ArrowDown'
           ? Math.min(items.length - 1, idx + 1)
           : Math.max(0, idx - 1)
         const nt = items[next]
         if (nt) {
           if (e.shiftKey && anchorIdRef.current) {
-            const ids = items.map((x) => x.id)
+            const ids = items.map(trackRowId)
             const aIdx = ids.indexOf(anchorIdRef.current)
             const [lo, hi] = aIdx < next ? [aIdx, next] : [next, aIdx]
             setSelectedIds(new Set(ids.slice(lo, hi + 1)))
             setSelected(nt)
           } else {
             setSelected(nt)
-            setSelectedIds(new Set([nt.id]))
-            anchorIdRef.current = nt.id
+            setSelectedIds(new Set([trackRowId(nt)]))
+            anchorIdRef.current = trackRowId(nt)
           }
           setFocusTab(null)
           e.preventDefault()
@@ -500,17 +521,18 @@ export function LibraryPage() {
           {selectingAll ? 'Selecting all pages…' : `Select all ${total.toLocaleString()} tracks`}
         </button>
         {selectingAll && <button onClick={() => selectionRequest.current?.abort()} className="underline">Cancel selection</button>}
-        {fileDrag.available && <label className="flex items-center gap-1 text-[var(--color-muted)]">
-          Drag rows to
-          <select aria-label="Track row drag destination" value={rowDragTarget} disabled={fileDrag.busy}
-            onChange={(e) => setRowDragTarget(e.target.value as 'external' | 'wisp')}
-            className="rounded border border-[var(--color-border)] bg-[var(--color-panel)] px-2 py-1 text-[var(--color-text)]">
-            <option value="external">Apps / folders</option><option value="wisp">Within WISP</option>
-          </select>
-        </label>}
-        <ExternalFileDrag key={scopeKey} ids={[...selectedIds]} controller={fileDrag} />
+        <span className="text-[var(--color-muted)]">Drag rows to WISP playlists</span>
+        <button disabled={!selectedTrackIds.length} onClick={() => setLoudnessIds(selectedTrackIds)} className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40">Loudness & versions…</button>
+        {activePlaylist && <button onClick={() => setDuplicateScan({ id: activePlaylist.id, name: activePlaylist.name })}
+          title="Check the whole playlist for repeated tracks, then review before removing."
+          className="rounded border border-[var(--color-border)] px-2 py-1">Scan for duplicates…</button>}
+        <ExternalFileDrag key={scopeKey} ids={selectedTrackIds} controller={fileDrag} />
+        {activePlaylistId && <button disabled={selectedRows.length === 0} onClick={() => removeFromPlaylist(selectedRows)}
+          title="Remove selected playlist entries only. Keep the tracks in your library and on disk."
+          className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40">Remove from playlist…</button>}
         <span className="ml-auto text-[var(--color-muted)]">{selectedIds.size.toLocaleString()} selected · {total.toLocaleString()} matching</span>
         {selectionError && <span role="alert" className="basis-full text-red-300">{selectionError}</span>}
+        {playlistNotice?.scope === scopeKey && <span role="status" className="basis-full text-[var(--color-muted)]">{playlistNotice.message}</span>}
       </div>
       {filtersVisible && <div className="max-h-40 shrink-0 overflow-y-auto"><LibraryFilters query={query} onChange={changeQuery} total={total} /></div>}
       {selectedIds.size > 1 && (
@@ -528,7 +550,7 @@ export function LibraryPage() {
         <LibraryTable
           tracks={items}
           loading={tracksQuery.isLoading}
-          selectedId={selected?.id ?? null}
+          selectedId={selected ? trackRowId(selected) : null}
           selectedIds={selectedIds}
           sort={query.sort}
           onSortChange={(next) => changeQuery({ ...query, sort: next, page: 1 })}
@@ -538,7 +560,6 @@ export function LibraryPage() {
           onCleanup={setCleanupTarget}
           onContextMenu={onContextMenuRow}
           onDragStartRow={onDragStartRow}
-          onExternalDragStart={fileDrag.available && rowDragTarget === 'external' ? onExternalDragStart : undefined}
         />
       </div>
       {total > (query.size ?? 500) && <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-1 text-xs">
@@ -555,6 +576,21 @@ export function LibraryPage() {
           onApplied={(audit) => setRecentAudit(audit)}
         />
       )}
+      {playlistRemoval && <RemoveFromPlaylistDialog target={playlistRemoval} onClose={() => setPlaylistRemoval(null)}
+        onRemoved={count => {
+          clearSelection()
+          setQuery(q => ({ ...q, page: 1 }))
+          setPlaylistNotice({ scope: scopeKey, message: `${count} playlist ${count === 1 ? 'entry' : 'entries'} removed. Your library and audio files are unchanged.` })
+        }} />}
+
+      {duplicateScan && <PlaylistDuplicatesDialog key={duplicateScan.id} playlistId={duplicateScan.id} playlistName={duplicateScan.name}
+        onClose={() => setDuplicateScan(null)} onRemoved={count => {
+          clearSelection()
+          changeQuery({ ...query, page: 1 })
+          setPlaylistNotice({ scope: scopeKey, message: `${count} duplicate playlist ${count === 1 ? 'entry' : 'entries'} removed. One entry per track kept; your library and audio files are unchanged.` })
+        }} />}
+
+      {loudnessIds && <LoudnessDialog ids={loudnessIds} onClose={() => setLoudnessIds(null)} />}
 
       {recentAudit && (
         <UndoToast audit={recentAudit} onDismiss={() => setRecentAudit(null)} />

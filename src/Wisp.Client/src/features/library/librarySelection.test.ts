@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Track, TrackPage } from '../../api/types'
-import { collectSelection, prepHeight, selectionScope } from './librarySelection'
+import { collectSelection, prepHeight, selectionScope, trackRowId, uniqueTrackIds } from './librarySelection'
 
 function rows(start: number, count: number): Track[] {
   return Array.from({ length: count }, (_, i) => ({ id: String(start + i) } as Track))
 }
 
 describe('whole-result library selection', () => {
+  it('keeps repeated playlist entries independently selectable but deduplicates file/library actions', async () => {
+    const entries = [{ id: 'track', playlistEntryId: 'entry-a' }, { id: 'track', playlistEntryId: 'entry-b' }] as Track[]
+    expect((await collectSelection({ playlistId: 'set' }, vi.fn().mockResolvedValue({ items: entries, total: 2 }))).map(trackRowId)).toEqual(['entry-a', 'entry-b'])
+    expect(uniqueTrackIds(entries)).toEqual(['track'])
+    expect(trackRowId({ id: 'library-track' } as Track)).toBe('library-track')
+  })
   it('collects every page and retains playlist and filter scope', async () => {
     const list = vi.fn().mockResolvedValueOnce({ items: rows(0, 1000), total: 1205 })
       .mockResolvedValueOnce({ items: rows(1000, 205), total: 1205 })

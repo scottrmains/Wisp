@@ -8,6 +8,13 @@ public class Track
     public string FileName { get; set; } = "";
     public string FileHash { get; set; } = "";
 
+    /// FilePath is the active version, used consistently by playback and exports.
+    /// Originals and generated copies are never overwritten by normalisation.
+    public string? OriginalFilePath { get; set; }
+    public string? NormalizedFilePath { get; set; }
+    public string? LoudnessAnalysisJson { get; set; }
+    public string? NormalizationJson { get; set; }
+
     public string? Artist { get; set; }
     public string? Title { get; set; }
     public string? Version { get; set; }
