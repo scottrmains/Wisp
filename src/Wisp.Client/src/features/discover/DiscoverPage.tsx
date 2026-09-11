@@ -25,6 +25,7 @@ import { useUiPrefs } from '../../state/uiPrefs'
 import { SoulseekDialog } from '../soulseek/SoulseekDialog'
 import { useWantedTracks } from '../wanted/useWantedTracks'
 import { ArtistMatchModal } from './ArtistMatchModal'
+import { youtubeLinks } from './youtubeLinks'
 
 /// Discover (Phase 22) — search-first UI. Replaces the long scroll list with
 /// a search bar + two scopes:
@@ -141,7 +142,8 @@ function SearchBar({
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={mode === 'my' ? 'Filter your library artists…' : 'Search Spotify + YouTube…'}
+          aria-label="Discover search"
+          placeholder={mode === 'my' ? 'Filter your library artists…' : 'Artist, track title, or YouTube video link…'}
           className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] py-2 pl-9 pr-3 text-sm focus:border-[var(--color-accent)] focus:outline-none"
         />
       </div>
@@ -305,6 +307,7 @@ function AnywhereView({ query }: { query: string }) {
     queryFn: () => discover.search(debounced.trim(), sources),
     enabled,
     staleTime: 60_000,
+    retry: false,
   })
 
   return (
@@ -322,6 +325,10 @@ function AnywhereView({ query }: { query: string }) {
           enabled={youtubeEnabled}
           onToggle={() => toggleSource('youtube')}
         />
+        {enabled && <button onClick={() => void search.refetch()} disabled={search.isFetching}
+          className="rounded border border-[var(--color-border)] px-2 py-1 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-40">
+          {search.isFetching ? 'Searching…' : 'Retry search'}
+        </button>}
         {search.data?.youTubeQuota && (
           <QuotaMeter info={search.data.youTubeQuota} />
         )}
@@ -338,15 +345,21 @@ function AnywhereView({ query }: { query: string }) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-        {search.isLoading && enabled && (
-          <p className="text-sm text-[var(--color-muted)]">Searching…</p>
+        {search.isFetching && enabled && (
+          <p role="status" className="text-sm text-[var(--color-muted)]">Searching…</p>
         )}
         {search.error && (
-          <p className="text-sm text-red-400">{(search.error as Error).message}</p>
+          <p role="alert" className="text-sm text-red-400">{(search.error as Error).message}</p>
         )}
-        {search.data && (
+        {enabled && search.data && (
           <SearchResultsBlocks data={search.data} />
         )}
+        {enabled && youtubeEnabled && !search.isFetching && <p className="mt-4 text-xs text-[var(--color-muted)]">
+          Missing a track? Paste its YouTube video link above to look it up directly, or{' '}
+          <a href={youtubeLinks.search(debounced.trim())} target="_blank" rel="noreferrer"
+            onClick={e => { if (bridgeAvailable()) { e.preventDefault(); void bridge.openExternal(e.currentTarget.href) } }}
+            className="underline hover:text-white">search on YouTube</a>.
+        </p>}
       </div>
     </div>
   )
@@ -366,6 +379,7 @@ function SourceToggle({
   return (
     <button
       onClick={onToggle}
+      aria-pressed={enabled}
       className={[
         'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors',
         enabled
@@ -391,10 +405,10 @@ function QuotaMeter({ info }: { info: DiscoverQuotaInfo }) {
   return (
     <span
       className={`ml-auto inline-flex items-center gap-1.5 ${tone}`}
-      title={`Tv search.list quota. Resets ${reset.toLocaleString()}`}
+      title={`WISP's local Discover search-call budget, not Google's total API usage. Local reset: ${reset.toLocaleString()}. Direct video links don't consume this search budget.`}
     >
       <Tv size={12} strokeWidth={1.75} />
-      {info.exhausted ? 'Tv quota exhausted' : `${remaining}/${info.dailyBudget} searches left today`}
+      {info.exhausted ? 'WISP search budget used' : `${remaining}/${info.dailyBudget} WISP search calls left`}
     </span>
   )
 }
@@ -404,7 +418,7 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
   const hasVideos = data.videos.length > 0
 
   if (!hasArtists && !hasVideos && data.errors.length === 0) {
-    return <p className="text-sm text-[var(--color-muted)]">No results.</p>
+    return <p role="status" className="text-sm text-[var(--color-muted)]">No matching results returned. Try the artist and track title, or paste the YouTube video link.</p>
   }
 
   return (
@@ -413,18 +427,21 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
         <ErrorBanner>Spotify isn't configured. Add credentials in Settings to enable artist search.</ErrorBanner>
       )}
       {data.errors.includes('youtube_unconfigured') && (
-        <ErrorBanner>Tv isn't configured. Add an API key in Settings to enable video search.</ErrorBanner>
+        <ErrorBanner>YouTube isn't configured. Add an API key in Settings to enable video search.</ErrorBanner>
       )}
       {data.errors.includes('spotify_failed') && (
         <ErrorBanner>Spotify search failed. Try again or check your credentials.</ErrorBanner>
       )}
       {data.errors.includes('youtube_failed') && (
-        <ErrorBanner>Tv search failed. Try again or check your credentials.</ErrorBanner>
+        <ErrorBanner>YouTube search failed. Retry the search or check your API key in Settings.</ErrorBanner>
       )}
       {data.errors.includes('youtube_quota_exhausted') && (
         <ErrorBanner tone="warn">
-          Tv quota exhausted for today. Spotify search continues; video results return after midnight UTC.
+          YouTube search is unavailable because the local search budget or Google's API quota was reached. Spotify can still return artists. A video link can bypass the local search budget, but not Google's API limits.
         </ErrorBanner>
+      )}
+      {data.errors.includes('youtube_video_unavailable') && (
+        <ErrorBanner tone="warn">YouTube did not return that video. It may be private, deleted or unavailable through the API.</ErrorBanner>
       )}
 
       {hasArtists && (
@@ -443,7 +460,7 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
       {hasVideos && (
         <section>
           <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-            Videos · Tv
+            Videos · YouTube
           </h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {data.videos.map((v) => (
@@ -461,7 +478,7 @@ function ErrorBanner({ children, tone = 'error' }: { children: React.ReactNode; 
     ? 'border-red-500/30 bg-red-500/10 text-red-200'
     : 'border-amber-400/30 bg-amber-400/10 text-amber-200'
   return (
-    <div className={`rounded-md border px-3 py-2 text-xs ${cls}`}>{children}</div>
+    <div role="alert" className={`rounded-md border px-3 py-2 text-xs ${cls}`}>{children}</div>
   )
 }
 
@@ -634,7 +651,7 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
           <button
             onClick={() => bridge.openExternal(hit.url)}
             className="ml-auto rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
-            title="Open on Tv"
+            title="Open on YouTube"
           >
             <ExternalLink size={12} strokeWidth={1.75} />
           </button>
@@ -644,7 +661,7 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
         <div className="border-t border-[var(--color-border)] p-3">
           <div className="aspect-video w-full overflow-hidden rounded bg-black">
             <iframe
-              src={`https://www.Tv.com/embed/${hit.videoId}`}
+              src={youtubeLinks.embed(hit.videoId)}
               title={hit.title}
               className="h-full w-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -943,8 +960,8 @@ function ReleaseRow({
       : 'bg-white/10 text-[var(--color-muted)]'
 
   const searchYouTube = () => {
-    const q = encodeURIComponent(`${artistName} ${release.title}`)
-    if (bridgeAvailable()) void bridge.openExternal(`https://www.Tv.com/results?search_query=${q}`)
+    const q = `${artistName} ${release.title}`
+    if (bridgeAvailable()) void bridge.openExternal(youtubeLinks.search(q))
   }
 
   return (
@@ -1052,7 +1069,7 @@ function ReleaseRow({
         <div className="border-t border-[var(--color-border)] p-3">
           <div className="aspect-video w-full overflow-hidden rounded bg-black">
             <iframe
-              src={`https://www.Tv.com/embed/${release.youTubeVideoId}`}
+              src={youtubeLinks.embed(release.youTubeVideoId)}
               title={`${release.title} — Tv audition`}
               className="h-full w-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
