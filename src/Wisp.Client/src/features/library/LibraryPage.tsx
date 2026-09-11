@@ -521,7 +521,9 @@ export function LibraryPage() {
           {selectingAll ? 'Selecting all pages…' : `Select all ${total.toLocaleString()} tracks`}
         </button>
         {selectingAll && <button onClick={() => selectionRequest.current?.abort()} className="underline">Cancel selection</button>}
-        <span className="text-[var(--color-muted)]">Drag rows to WISP playlists</span>
+        <span className="text-[var(--color-muted)]">{fileDrag.unified
+          ? 'Drag rows to WISP playlists, rekordbox or folders'
+          : 'Drag rows to WISP playlists; use the file handle for other apps'}</span>
         <button disabled={!selectedTrackIds.length} onClick={() => setLoudnessIds(selectedTrackIds)} className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40">Loudness & versions…</button>
         {activePlaylist && <button onClick={() => setDuplicateScan({ id: activePlaylist.id, name: activePlaylist.name })}
           title="Check the whole playlist for repeated tracks, then review before removing."
@@ -560,6 +562,7 @@ export function LibraryPage() {
           onCleanup={setCleanupTarget}
           onContextMenu={onContextMenuRow}
           onDragStartRow={onDragStartRow}
+          onNativeDrag={fileDrag.unified ? ids => { void fileDrag.begin(ids, true) } : undefined}
         />
       </div>
       {total > (query.size ?? 500) && <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-1 text-xs">

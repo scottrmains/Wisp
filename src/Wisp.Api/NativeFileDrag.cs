@@ -23,14 +23,14 @@ public static class FileDropPayload
     }
 }
 
-/// Offers original files via OLE, just like an Explorer file drag. Copy-only:
+/// Offers active audio files plus optional WISP IDs in one OLE drag. Copy-only:
 /// neither a drop target nor keyboard modifiers can request source-file removal.
 [SupportedOSPlatform("windows")]
 public static class NativeFileDrag
 {
     public sealed record Result(bool DropAccepted, int FileCount, string? Reason = null);
 
-    public static Result Start(string[] paths)
+    public static Result Start(string[] paths, IReadOnlyList<Guid>? trackIds = null)
     {
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("File dragging must run on WISP's desktop UI thread.");
@@ -44,7 +44,8 @@ public static class NativeFileDrag
         Marshal.ThrowExceptionForHR(OleInitialize(IntPtr.Zero));
         try
         {
-            var data = new FileDataObject(FileDropPayload.Create(paths));
+            var data = new FileDataObject(paths.Length > 0 ? FileDropPayload.Create(paths) : null,
+                trackIds is null ? null : TrackDragPayload.Create(trackIds));
             var source = new DropSource();
             Log.Information("File drag: entering Windows OLE loop with {FileCount} files", paths.Length);
             var hr = DoDragDrop(data, source, 1 /* DROPEFFECT_COPY */, out var effect);
@@ -72,14 +73,31 @@ public static class NativeFileDrag
     }
 
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-    public sealed class FileDataObject(byte[] payload) : IDataObject
+    public sealed class FileDataObject : IDataObject
     {
-        private static FORMATETC Format => new() { cfFormat = 15 /* CF_HDROP */, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
-        public int QueryGetData(ref FORMATETC f) => f.cfFormat == 15 && f.dwAspect == DVASPECT.DVASPECT_CONTENT
+        private readonly Dictionary<short, byte[]> _payloads = new();
+        public FileDataObject(byte[]? files, byte[]? tracks = null)
+        {
+            if (files is not null) _payloads.Add(15 /* CF_HDROP */, files);
+            if (tracks is not null)
+            {
+                // Both names support current Chromium and older WebView2 runtimes.
+                foreach (var name in new[] { "Chromium Web Custom MIME Data Format", "Web Custom MIME Data Format" })
+                {
+                    var format = RegisterClipboardFormat(name);
+                    if (format == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+                    _payloads.Add(unchecked((short)format), tracks);
+                }
+            }
+            if (_payloads.Count == 0) throw new ArgumentException("A drag must offer tracks or files.");
+        }
+        private static FORMATETC Format(short id) => new() { cfFormat = id, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, tymed = TYMED.TYMED_HGLOBAL };
+        public int QueryGetData(ref FORMATETC f) => _payloads.ContainsKey(f.cfFormat) && f.dwAspect == DVASPECT.DVASPECT_CONTENT
             && f.lindex == -1 && (f.tymed & TYMED.TYMED_HGLOBAL) != 0 ? 0 : unchecked((int)0x80040064);
         public void GetData(ref FORMATETC format, out STGMEDIUM medium)
         {
             Marshal.ThrowExceptionForHR(QueryGetData(ref format));
+            var payload = _payloads[format.cfFormat];
             var handle = GlobalAlloc(0x42 /* MOVEABLE | ZEROINIT */, (nuint)payload.Length);
             if (handle == IntPtr.Zero) throw new OutOfMemoryException();
             var pointer = GlobalLock(handle);
@@ -93,7 +111,8 @@ public static class NativeFileDrag
         public IEnumFORMATETC EnumFormatEtc(DATADIR direction)
         {
             if (direction != DATADIR.DATADIR_GET) throw new COMException("Read only", unchecked((int)0x80004001));
-            Marshal.ThrowExceptionForHR(SHCreateStdEnumFmtEtc(1, [Format], out var enumerator));
+            var formats = _payloads.Keys.Select(Format).ToArray();
+            Marshal.ThrowExceptionForHR(SHCreateStdEnumFmtEtc((uint)formats.Length, formats, out var enumerator));
             return enumerator;
         }
         public void GetDataHere(ref FORMATETC format, ref STGMEDIUM medium) => throw new COMException("Use GetData", unchecked((int)0x80040069));
@@ -113,4 +132,6 @@ public static class NativeFileDrag
     [DllImport("kernel32.dll")] private static extern bool GlobalUnlock(IntPtr handle);
     [DllImport("kernel32.dll")] private static extern IntPtr GlobalFree(IntPtr handle);
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegisterClipboardFormatW", SetLastError = true)]
+    private static extern uint RegisterClipboardFormat(string name);
 }

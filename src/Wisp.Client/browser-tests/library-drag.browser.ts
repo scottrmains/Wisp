@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { fileURLToPath } from 'node:url'
 
 // The frontend is real. Library data and the native bridge are isolated mocks;
 // these regressions do not claim that a real Explorer/rekordbox drop took place.
@@ -11,33 +12,37 @@ const tracks = Array.from({ length: 1205 }, (_, i) => ({
 
 interface DragTestState {
   calls: string[][]
+  unifiedCalls: boolean[]
   response: { error?: string; result?: { dropAccepted: boolean; fileCount: number; reason?: string } }
   delay: number
 }
 declare global { interface Window { dragTest: DragTestState } }
 
-async function setup(page: Page, supported = true, capabilityError?: string) {
+async function setup(page: Page, supported = true, capabilityError?: string, unified = false) {
   const additions: string[][] = []
   const downloads: string[] = []
   page.on('download', download => downloads.push(download.suggestedFilename()))
-  await page.addInitScript(({ supported, capabilityError }) => {
+  await page.addInitScript(({ supported, capabilityError, unified }) => {
     let receiver: (raw: string) => void
-    window.dragTest = { calls: [], response: {}, delay: 50 }
+    window.dragTest = { calls: [], unifiedCalls: [], response: {}, delay: 50 }
     Object.defineProperty(window, 'external', { configurable: true, value: {
       receiveMessage: (cb: typeof receiver) => { receiver = cb },
       sendMessage: (raw: string) => {
         const request = JSON.parse(raw)
         const drag = request.method === 'dragFiles'
-        if (drag) window.dragTest.calls.push(request.args.trackIds)
+        if (drag) {
+          window.dragTest.calls.push(request.args.trackIds)
+          window.dragTest.unifiedCalls.push(request.args.includeTrackIds === true)
+        }
         const response = drag ? window.dragTest.response
-          : { error: capabilityError, result: { externalFileDrag: supported, maxDragTracks: 20000 } }
+          : { error: capabilityError, result: { externalFileDrag: supported, unifiedTrackDrag: unified, maxDragTracks: 20000 } }
         setTimeout(() => receiver(JSON.stringify({ id: request.id,
           result: drag ? { dropAccepted: true, fileCount: request.args.trackIds.length } : null,
           ...response,
         })), drag ? window.dragTest.delay : 0)
       },
     } })
-  }, { supported, capabilityError })
+  }, { supported, capabilityError, unified })
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
     let body: unknown = []
@@ -204,4 +209,99 @@ test('Stray files and URLs dropped inside WISP are rejected without import or br
 test('Capability errors tell the user to restart the updated desktop app', async ({ page }) => {
   await setup(page, false, 'Unknown bridge method desktopCapabilities')
   await expect(page.getByRole('alert')).toContainText('Restart WISP after updating')
+})
+
+// Simulate the WebView2 destination half of the *same* Windows drag, with both
+// MIME IDs and Files. Native COM payload bytes are tested in LibraryFileDragTests.
+// This does not simulate an actual rekordbox import or a native OLE message loop.
+async function unifiedDrop(page: Page, withFiles = true) {
+  const box = await page.getByText('Drop playlist', { exact: true }).boundingBox()
+  const ids = await page.evaluate(() => window.dragTest.calls.at(-1)!)
+  const session = await page.context().newCDPSession(page)
+  // Use Chromium's real drag destination pipeline (not dispatchEvent). The
+  // fixture offers this test file's path; its contents are never imported.
+  const data = { items: [{ mimeType: 'application/x-wisp-track-ids', data: JSON.stringify(ids) }],
+    files: withFiles ? [fileURLToPath(import.meta.url)] : [], dragOperationsMask: 1 }
+  try {
+    for (const type of ['dragEnter', 'dragOver', 'drop'])
+      await session.send('Input.dispatchDragEvent', { type, x: box!.x + 10, y: box!.y + 8, data })
+  } finally { await session.detach() }
+}
+
+test('Modern Windows rows start one dual-format drag; the same payload is accepted inside WISP across all pages', async ({ page }) => {
+  const { additions, downloads } = await setup(page, true, undefined, true)
+  await selectAll(page)
+  await expect(page.getByText('Drag rows to WISP playlists, rekordbox or folders', { exact: true })).toBeVisible()
+  await page.evaluate(() => { window.dragTest.delay = 1000 })
+  await rowDrag(page)
+  await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(1)
+  expect(await page.evaluate(() => window.dragTest.unifiedCalls)).toEqual([true])
+  await unifiedDrop(page)
+  await page.mouse.up()
+  await expect.poll(() => additions).toEqual([tracks.map(t => t.id)])
+  await expect(page.getByRole('status')).toContainText('Track selection dropped')
+  await selectAll(page)
+  await page.getByRole('button', { name: 'Next page' }).click()
+  await rowDrag(page, 'Track 0500')
+  await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(2)
+  await unifiedDrop(page)
+  await page.mouse.up()
+  await expect.poll(() => additions.length).toBe(2)
+  expect(additions[1]).toEqual(tracks.map(t => t.id))
+  expect(downloads).toEqual([])
+  await expect(page).toHaveURL('http://127.0.0.1:19589/')
+})
+
+test('Modern Windows row dragging supports external handoff without using the dedicated handle', async ({ page }) => {
+  const { additions, downloads } = await setup(page, true, undefined, true)
+  await selectAll(page)
+  await rowDrag(page)
+  await expect(page.getByRole('status')).toContainText('Track selection dropped')
+  await page.mouse.up()
+  expect(await page.evaluate(() => window.dragTest.calls)).toEqual([tracks.map(t => t.id)])
+  expect(await page.evaluate(() => window.dragTest.unifiedCalls)).toEqual([true])
+  expect(additions).toEqual([]); expect(downloads).toEqual([])
+})
+
+test('Modern Windows unselected row uses only that track and failures retain a retry path', async ({ page }) => {
+  await setup(page, true, undefined, true)
+  await page.getByText('Track 0000', { exact: true }).click()
+  await page.evaluate(() => { window.dragTest.response = { error: 'Drive unavailable. No files were sent.' } })
+  await rowDrag(page, 'Track 0001')
+  await expect(page.getByRole('alert')).toContainText('No files were sent')
+  await page.mouse.up()
+  expect(await page.evaluate(() => window.dragTest.calls)).toEqual([[tracks[1].id]])
+  await page.evaluate(() => { window.dragTest.response = {} })
+  await rowDrag(page, 'Track 0001')
+  await expect(page.getByRole('status')).toContainText('Track selection dropped')
+  await page.mouse.up()
+  expect(await page.evaluate(() => window.dragTest.calls)).toEqual([[tracks[1].id], [tracks[1].id]])
+})
+
+test('Missing files still allow internal organisation without claiming a partial external export', async ({ page }) => {
+  const { additions, downloads } = await setup(page, true, undefined, true)
+  await selectAll(page)
+  await page.evaluate(() => { window.dragTest.response = { result: { dropAccepted: true, fileCount: 0, reason: 'internal-only-missing-files' } } })
+  await rowDrag(page)
+  await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(1)
+  await unifiedDrop(page, false)
+  await page.mouse.up()
+  await expect.poll(() => additions).toEqual([tracks.map(t => t.id)])
+  await expect(page.getByRole('status')).toContainText('Some audio files are missing')
+  expect(downloads).toEqual([])
+})
+
+test('Modern Windows Escape/early-release result does not add tracks or report success', async ({ page }) => {
+  const { additions } = await setup(page, true, undefined, true)
+  await selectAll(page)
+  await page.evaluate(() => { window.dragTest.response = { result: { dropAccepted: false, fileCount: 1205 } } })
+  await rowDrag(page)
+  await expect(page.getByRole('status')).toContainText('No files were accepted')
+  await page.mouse.up()
+  expect(additions).toEqual([])
+  await page.evaluate(() => { window.dragTest.response = { result: { dropAccepted: false, fileCount: 1205, reason: 'released-before-start' } } })
+  await rowDrag(page)
+  await expect(page.getByRole('status')).toContainText('Released before the files were ready')
+  await page.mouse.up()
+  expect(additions).toEqual([])
 })
