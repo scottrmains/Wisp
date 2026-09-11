@@ -170,6 +170,108 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         Assert.Equal(2, await EntryCount());
     }
 
+    private async Task<PlaylistDuplicateScan> ScanDuplicates(Guid? id = null) =>
+        (await _client.GetFromJsonAsync<PlaylistDuplicateScan>($"/api/playlists/{id ?? _a}/duplicates"))!;
+
+    private Task<HttpResponseMessage> RemoveDuplicates(string snapshot, Guid? id = null) =>
+        _client.PostAsJsonAsync($"/api/playlists/{id ?? _a}/duplicates/remove", new { snapshot });
+
+    [Fact]
+    public async Task Duplicate_scan_is_read_only_and_confirmation_keeps_oldest_entries_and_prep()
+    {
+        (await Add([_first, _second], "add")).EnsureSuccessStatusCode();
+        (await Add([_first, _second], "add")).EnsureSuccessStatusCode();
+        var before = await _client.GetFromJsonAsync<PlaylistDto>($"/api/playlists/{_a}");
+        var scan = await ScanDuplicates();
+        Assert.Equal(5, scan.TotalEntries); Assert.Equal(3, scan.DuplicateEntries);
+        Assert.Equal(2, scan.Groups.Count);
+        Assert.Equal("A track", scan.Groups.Single(g => g.TrackId == _first).Title);
+        Assert.Equal(scan.Snapshot, (await ScanDuplicates()).Snapshot);
+        Assert.Equal(5, await EntryCount()); // Scanning/cancelling makes no writes.
+        var response = await RemoveDuplicates(scan.Snapshot);
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(3, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("removed").GetInt32());
+        var after = await _client.GetFromJsonAsync<PlaylistDto>($"/api/playlists/{_a}");
+        Assert.Equal(2, after!.Tracks.Count);
+        Assert.Equal(before!.Tracks.GroupBy(t => t.TrackId).Select(g => g.OrderBy(t => t.AddedAt).ThenBy(t => t.Id).First().Id).Order(),
+            after.Tracks.Select(t => t.Id).Order());
+        Assert.Contains(after.Tracks, t => t.Id == _entryA);
+        Assert.Equal(1, await EntryCount(_b));
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
+        Assert.Equal(2, await db.Tracks.CountAsync());
+        Assert.Equal("Keep notes", (await db.Tracks.FindAsync(_first))!.Notes);
+        Assert.Equal(12, (await db.CuePoints.SingleAsync()).TimeSeconds);
+        Assert.Equal(24, (await db.DeviceCues.SingleAsync()).StartSeconds);
+        Assert.Equal("Keep tag", (await db.TrackTags.SingleAsync()).Name);
+        Assert.Equal(_first, (await db.MixPlanTracks.SingleAsync()).TrackId);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, await File.ReadAllBytesAsync(Audio));
+    }
+
+    [Fact]
+    public async Task Scan_covers_more_than_one_library_page_and_same_title_files_are_not_duplicates()
+    {
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
+            (await db.Tracks.FindAsync(_second))!.Title = "A track";
+            db.PlaylistTracks.AddRange(Enumerable.Range(0, 1001).Select(_ => new PlaylistTrack
+                { Id = Guid.NewGuid(), PlaylistId = _a, TrackId = _first, AddedAt = DateTime.UtcNow }));
+            db.PlaylistTracks.Add(new PlaylistTrack { Id = Guid.NewGuid(), PlaylistId = _a, TrackId = _second });
+            await db.SaveChangesAsync();
+        }
+        var scan = await ScanDuplicates();
+        Assert.Equal(1003, scan.TotalEntries); Assert.Equal(1001, scan.DuplicateEntries);
+        Assert.Equal(_first, Assert.Single(scan.Groups).TrackId);
+        (await RemoveDuplicates(scan.Snapshot)).EnsureSuccessStatusCode();
+        Assert.Equal(2, await EntryCount());
+        Assert.Equal(0, (await ScanDuplicates()).DuplicateEntries);
+    }
+
+    [Fact]
+    public async Task Stale_or_cross_playlist_scan_cannot_remove_unreviewed_entries_and_retry_is_safe()
+    {
+        (await Add([_first], "add")).EnsureSuccessStatusCode();
+        var scan = await ScanDuplicates();
+        (await Add([_first], "add")).EnsureSuccessStatusCode();
+        var stale = await RemoveDuplicates(scan.Snapshot);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("playlist_scan_stale", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        Assert.Equal(3, await EntryCount());
+        Assert.Equal(HttpStatusCode.Conflict, (await RemoveDuplicates((await ScanDuplicates(_b)).Snapshot)).StatusCode);
+        scan = await ScanDuplicates();
+        (await RemoveDuplicates(scan.Snapshot)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await RemoveDuplicates(scan.Snapshot)).StatusCode);
+        Assert.Equal(1, await EntryCount());
+    }
+
+    [Fact]
+    public async Task Removing_kept_entry_after_scan_requires_new_confirmation_instead_of_removing_last_copy()
+    {
+        (await Add([_first], "add")).EnsureSuccessStatusCode();
+        var scan = await ScanDuplicates();
+        (await _client.PostAsJsonAsync($"/api/playlists/{_a}/entries/remove", new { entryIds = new[] { _entryA } })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await RemoveDuplicates(scan.Snapshot)).StatusCode);
+        Assert.Equal(1, await EntryCount());
+        Assert.Equal(0, (await ScanDuplicates()).DuplicateEntries);
+    }
+
+    [Fact]
+    public async Task Empty_clean_missing_and_invalid_scans_have_safe_results()
+    {
+        var scan = await ScanDuplicates();
+        Assert.Equal(1, scan.TotalEntries); Assert.Empty(scan.Groups); Assert.Equal(0, scan.DuplicateEntries);
+        var updated = (await _client.GetFromJsonAsync<PlaylistDto>($"/api/playlists/{_a}"))!.UpdatedAt;
+        var clean = await RemoveDuplicates(scan.Snapshot);
+        Assert.Equal(0, (await clean.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("removed").GetInt32());
+        Assert.Equal(updated, (await _client.GetFromJsonAsync<PlaylistDto>($"/api/playlists/{_a}"))!.UpdatedAt);
+        (await _client.DeleteAsync($"/api/playlists/{_a}/tracks/{_first}")).EnsureSuccessStatusCode();
+        Assert.Equal(0, (await ScanDuplicates()).TotalEntries);
+        Assert.Equal(HttpStatusCode.BadRequest, (await RemoveDuplicates("")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync($"/api/playlists/{Guid.NewGuid()}/duplicates")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await RemoveDuplicates(scan.Snapshot, Guid.NewGuid())).StatusCode);
+    }
+
     public async Task DisposeAsync()
     {
         _client.Dispose(); await _app.DisposeAsync(); Directory.Delete(_root, true);

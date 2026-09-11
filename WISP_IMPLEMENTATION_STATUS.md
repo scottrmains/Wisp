@@ -2,6 +2,39 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Playlist duplicate scan and confirmed cleanup
+
+- **Entry point:** open a playlist and use **Scan for duplicates…** in its toolbar.
+  No selection is needed. A WISP-styled modal scans the whole playlist, independent
+  of library filters or pagination, and lists repeated tracks and extra-entry
+  counts. Clean/empty playlists explicitly report **No duplicates found**.
+- **Confirmation:** nothing is changed by scanning or cancelling. **Remove N
+  duplicates** keeps the oldest-added entry of each repeated library track (entry
+  ID breaks equal-timestamp ties). It removes extra playlist memberships only;
+  source audio, library tracks, cues, notes, tags, other playlists and mix plans
+  remain untouched. Different library tracks with matching titles are not merged.
+- **Safety:** read-only `GET /api/playlists/{id}/duplicates` returns a membership
+  snapshot. `POST /api/playlists/{id}/duplicates/remove` validates that snapshot
+  and deletes extras in one write transaction. Changed membership returns
+  `409 playlist_scan_stale` without deleting anything; the UI requires a new scan
+  and confirmation. Losing the originally kept entry cannot cause a stale scan
+  to delete the final copy. Cleanup is scoped to the named playlist.
+- **Resilience:** scan/loading/error/empty states, retry and fresh-scan actions,
+  pending-action guards, keyboard focus restoration and a scroll-bounded modal.
+  Counts refresh, selection clears and paging returns to the first page after
+  removal; playback is not reset. No extra database migration is needed beyond
+  the existing repeated-entry support in this PR.
+- **Verified:** 210 backend + 34 client unit + 23 browser tests pass (267 total).
+  Five new backend cases cover preservation, 1,003-entry scanning, same-title
+  distinct files, stale/cross-playlist snapshots, safe retries and empty/missing
+  playlists. Seven new browser cases cover confirmation, 1,002-entry full-playlist
+  cleanup from page two, cancel, clean/empty results, failure/retry, stale scans and
+  busy guards. The 800x600 confirmation screenshot was visually checked. Build
+  and lint pass with 13 pre-existing lint warnings and unchanged NuGet advisories.
+  Tests use isolated databases and mocked browser data; no working library/files
+  or installed app were modified. Included in the existing playlist PR to develop;
+  no local installer generated and production remains main-only.
+
 ## 2026-09-11: Playlist removal and explicit duplicate confirmation
 
 - **Remove from playlist:** available in the scoped library toolbar and the row

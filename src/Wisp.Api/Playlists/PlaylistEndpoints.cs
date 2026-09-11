@@ -29,6 +29,8 @@ public static class PlaylistEndpoints
         g.MapPost("{id:guid}/tracks", AddTrack);
         g.MapPost("{id:guid}/tracks/bulk", AddTracksBulk);
         g.MapPost("{id:guid}/entries/remove", PlaylistMembership.RemoveEntries);
+        g.MapGet("{id:guid}/duplicates", PlaylistDuplicates.Scan);
+        g.MapPost("{id:guid}/duplicates/remove", PlaylistDuplicates.Remove);
         g.MapDelete("{playlistId:guid}/tracks/{trackId:guid}", RemoveTrack);
         return app;
     }

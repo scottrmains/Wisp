@@ -41,6 +41,7 @@ import { ResizablePrepPane } from './ResizablePrepPane'
 import { ExternalFileDrag } from './ExternalFileDrag'
 import { useExternalFileDrag } from './useExternalFileDrag'
 import { RemoveFromPlaylistDialog, type PlaylistRemoval } from './RemoveFromPlaylistDialog'
+import { PlaylistDuplicatesDialog } from './PlaylistDuplicatesDialog'
 import { collectSelection, selectionScope, trackRowId, uniqueTrackIds } from './librarySelection'
 
 const EMPTY_SELECTION = new Set<string>()
@@ -72,6 +73,7 @@ export function LibraryPage() {
   const [addToPlaylistIds, setAddToPlaylistIds] = useState<string[] | null>(null)
   const [contextMenu, setContextMenu] = useState<{ track: Track; x: number; y: number } | null>(null)
   const [playlistRemoval, setPlaylistRemoval] = useState<PlaylistRemoval | null>(null)
+  const [duplicateScan, setDuplicateScan] = useState<{ id: string; name: string } | null>(null)
   const [playlistNotice, setPlaylistNotice] = useState<{ scope: string; message: string } | null>(null)
 
   const qc = useQueryClient()
@@ -517,6 +519,9 @@ export function LibraryPage() {
         </button>
         {selectingAll && <button onClick={() => selectionRequest.current?.abort()} className="underline">Cancel selection</button>}
         <span className="text-[var(--color-muted)]">Drag rows to WISP playlists</span>
+        {activePlaylist && <button onClick={() => setDuplicateScan({ id: activePlaylist.id, name: activePlaylist.name })}
+          title="Check the whole playlist for repeated tracks, then review before removing."
+          className="rounded border border-[var(--color-border)] px-2 py-1">Scan for duplicates…</button>}
         <ExternalFileDrag key={scopeKey} ids={selectedTrackIds} controller={fileDrag} />
         {activePlaylistId && <button disabled={selectedRows.length === 0} onClick={() => removeFromPlaylist(selectedRows)}
           title="Remove selected playlist entries only. Keep the tracks in your library and on disk."
@@ -572,6 +577,13 @@ export function LibraryPage() {
           clearSelection()
           setQuery(q => ({ ...q, page: 1 }))
           setPlaylistNotice({ scope: scopeKey, message: `${count} playlist ${count === 1 ? 'entry' : 'entries'} removed. Your library and audio files are unchanged.` })
+        }} />}
+
+      {duplicateScan && <PlaylistDuplicatesDialog key={duplicateScan.id} playlistId={duplicateScan.id} playlistName={duplicateScan.name}
+        onClose={() => setDuplicateScan(null)} onRemoved={count => {
+          clearSelection()
+          changeQuery({ ...query, page: 1 })
+          setPlaylistNotice({ scope: scopeKey, message: `${count} duplicate playlist ${count === 1 ? 'entry' : 'entries'} removed. One entry per track kept; your library and audio files are unchanged.` })
         }} />}
 
       {recentAudit && (

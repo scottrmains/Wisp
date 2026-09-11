@@ -3,6 +3,12 @@ import type { Playlist, PlaylistSummary } from './types'
 
 export type DuplicateHandling = 'ask' | 'skip' | 'add'
 export interface PlaylistAddResult { added: number; skipped: number }
+export interface PlaylistDuplicateScan {
+  snapshot: string
+  totalEntries: number
+  duplicateEntries: number
+  groups: { trackId: string; title: string | null; artist: string | null; fileName: string; occurrences: number }[]
+}
 
 async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -36,6 +42,10 @@ export const playlists = {
     apiPost<PlaylistAddResult>(`/api/playlists/${playlistId}/tracks/bulk`, { trackIds, duplicateHandling }),
   removeEntries: (playlistId: string, entryIds: string[]) =>
     apiPost<{ removed: number }>(`/api/playlists/${playlistId}/entries/remove`, { entryIds }),
+  scanDuplicates: (playlistId: string, signal?: AbortSignal) =>
+    apiGet<PlaylistDuplicateScan>(`/api/playlists/${playlistId}/duplicates`, undefined, signal),
+  removeDuplicates: (playlistId: string, snapshot: string) =>
+    apiPost<{ removed: number }>(`/api/playlists/${playlistId}/duplicates/remove`, { snapshot }),
   removeTrack: (playlistId: string, trackId: string) =>
     apiDelete<void>(`/api/playlists/${playlistId}/tracks/${trackId}`),
 }

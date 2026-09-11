@@ -11,7 +11,8 @@ async function setup(page: Page, entryCount = 3) {
     other: [{ playlistEntryId: 'other-entry', id: 'track-0' }],
   }
   const requests: { path: string; body: Record<string, unknown> }[] = []
-  let removeFails = false, sequence = 0
+  let removeFails = false, sequence = 0, scanFails = false, duplicateRemoveFails = false
+  let duplicateRemoveDelay = 0
   await page.addInitScript(() => {
     let receive: (raw: string) => void
     Object.defineProperty(window, 'external', { configurable: true, value: {
@@ -27,6 +28,23 @@ async function setup(page: Page, entryCount = 3) {
     const body = req.postDataJSON() as Record<string, unknown> | null
     if (req.method() !== 'GET') requests.push({ path: url.pathname, body: body ?? {} })
     const playlist = url.pathname.split('/')[3]
+    if (url.pathname.endsWith('/duplicates')) {
+      if (scanFails) return route.fulfill({ status: 500, json: { message: 'Scan unavailable. Try again.' } })
+      const groups = library.map(track => ({ trackId: track.id, title: track.title, artist: track.artist,
+        fileName: track.fileName, occurrences: entries[playlist].filter(e => e.id === track.id).length }))
+        .filter(g => g.occurrences > 1)
+      return route.fulfill({ json: { snapshot: JSON.stringify(entries[playlist]), totalEntries: entries[playlist].length,
+        duplicateEntries: groups.reduce((sum, group) => sum + group.occurrences - 1, 0), groups } })
+    }
+    if (url.pathname.endsWith('/duplicates/remove')) {
+      if (duplicateRemoveDelay) await new Promise(resolve => setTimeout(resolve, duplicateRemoveDelay))
+      if (duplicateRemoveFails) return route.fulfill({ status: 500, json: { message: 'Could not save playlist. Try again.' } })
+      if (body!.snapshot !== JSON.stringify(entries[playlist]))
+        return route.fulfill({ status: 409, json: { code: 'playlist_scan_stale', message: 'This playlist changed since the scan. Nothing was removed. Scan again.' } })
+      const seen = new Set<string>(), before = entries[playlist].length
+      entries[playlist] = entries[playlist].filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true })
+      return route.fulfill({ json: { removed: before - entries[playlist].length } })
+    }
     if (url.pathname.endsWith('/entries/remove')) {
       if (removeFails) return route.fulfill({ status: 500, json: { message: 'Could not save playlist. Try again.' } })
       const before = entries[playlist].length
@@ -67,7 +85,10 @@ async function setup(page: Page, entryCount = 3) {
   await page.goto('/')
   await page.getByText('First playlist', { exact: true }).first().click()
   await page.locator('[data-playlist-entry-id="entry-0"]').waitFor()
-  return { entries, requests, failRemove: (value: boolean) => { removeFails = value } }
+  return { entries, requests, failRemove: (value: boolean) => { removeFails = value },
+    failScan: (value: boolean) => { scanFails = value },
+    failDuplicateRemove: (value: boolean) => { duplicateRemoveFails = value },
+    delayDuplicateRemove: (value: number) => { duplicateRemoveDelay = value } }
 }
 
 test('remove one repeated entry via the toolbar without stopping playback or removing the library track', async ({ page }) => {
@@ -169,4 +190,103 @@ test('dropping on a sidebar playlist uses the same duplicate confirmation', asyn
   expect(state.entries.other).toHaveLength(1)
   await duplicate.getByRole('button', { name: 'Add again', exact: true }).click()
   await expect.poll(() => state.entries.other.length).toBe(3)
+})
+
+test('duplicate scan checks every page, confirms before removal, and refreshes counts', async ({ page }, testInfo) => {
+  const state = await setup(page, 1002)
+  await page.getByRole('button', { name: 'Next page', exact: true }).click()
+  await page.locator('[data-playlist-entry-id="entry-500"]').waitFor()
+  await page.setViewportSize({ width: 800, height: 600 })
+  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
+  await expect(dialog).toContainText('Found 1,000 extra entries across 1 track')
+  await expect(dialog.getByRole('list')).toContainText('Alpha')
+  expect(state.requests).toHaveLength(0)
+  const box = await dialog.boundingBox()
+  expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.y).toBeGreaterThanOrEqual(0)
+  expect(box!.x + box!.width).toBeLessThanOrEqual(800); expect(box!.y + box!.height).toBeLessThanOrEqual(600)
+  await page.screenshot({ path: testInfo.outputPath('playlist-duplicate-scan.png') })
+  await dialog.getByRole('button', { name: 'Remove 1,000 duplicates', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(state.entries.first.map(e => e.playlistEntryId)).toEqual(['entry-0', 'entry-2'])
+  expect(state.entries.other).toHaveLength(1)
+  await expect(page.getByRole('status')).toContainText('1000 duplicate playlist entries removed')
+  await expect(page.locator('[data-playlist-entry-id="entry-0"]')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Next page', exact: true })).toHaveCount(0)
+})
+
+test('cancelling a duplicate scan leaves every entry untouched', async ({ page }) => {
+  const state = await setup(page)
+  const scanButton = page.getByRole('button', { name: 'Scan for duplicates…', exact: true })
+  await scanButton.click()
+  const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
+  await expect(dialog).toContainText('Found 1 extra entry')
+  await page.keyboard.press('Escape')
+  await expect(dialog).not.toBeVisible()
+  await expect(scanButton).toBeFocused()
+  expect(state.requests).toHaveLength(0); expect(state.entries.first).toHaveLength(3)
+})
+
+for (const count of [0, 1]) {
+  test(`clean playlist with ${count} entries gives explicit no-duplicates feedback`, async ({ page }) => {
+    const state = await setup(page, 1)
+    if (count === 0) state.entries.first = []
+    await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
+    await expect(dialog).toContainText(`No duplicates found. Checked ${count}`)
+    await expect(dialog.getByRole('button', { name: /^Remove/ })).toHaveCount(0)
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+    expect(state.requests).toHaveLength(0)
+  })
+}
+
+test('scan and removal failures are visible and retryable without losing the preview', async ({ page }) => {
+  const state = await setup(page)
+  state.failScan(true)
+  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
+  await expect(dialog.getByRole('alert')).toContainText('Scan unavailable')
+  state.failScan(false)
+  await dialog.getByRole('button', { name: 'Scan again', exact: true }).click()
+  await expect(dialog).toContainText('Found 1 extra entry')
+  state.failDuplicateRemove(true)
+  await dialog.getByRole('button', { name: 'Remove 1 duplicate', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Could not save playlist')
+  expect(state.entries.first).toHaveLength(3)
+  state.failDuplicateRemove(false)
+  await dialog.getByRole('button', { name: 'Remove 1 duplicate', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(state.entries.first).toHaveLength(2)
+})
+
+test('changed playlist requires a fresh scan and another explicit confirmation', async ({ page }) => {
+  const state = await setup(page)
+  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
+  await expect(dialog).toContainText('Found 1 extra entry')
+  state.entries.first.push({ playlistEntryId: 'concurrent-entry', id: 'track-0' })
+  await dialog.getByRole('button', { name: 'Remove 1 duplicate', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Nothing was removed')
+  expect(state.entries.first).toHaveLength(4)
+  await expect(dialog.getByRole('button', { name: 'Remove 1 duplicate', exact: true })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Scan again', exact: true }).click()
+  await expect(dialog).toContainText('Found 2 extra entries')
+  expect(state.entries.first).toHaveLength(4)
+  await dialog.getByRole('button', { name: 'Remove 2 duplicates', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(state.entries.first).toHaveLength(2)
+})
+
+test('pending duplicate removal blocks repeated confirmation and modal dismissal', async ({ page }) => {
+  const state = await setup(page)
+  state.delayDuplicateRemove(1000)
+  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
+  await dialog.getByRole('button', { name: 'Remove 1 duplicate', exact: true }).click()
+  await expect(dialog.getByRole('button', { name: 'Removing…', exact: true })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).not.toBeVisible()
+  expect(state.requests.filter(r => r.path.endsWith('/duplicates/remove'))).toHaveLength(1)
 })
