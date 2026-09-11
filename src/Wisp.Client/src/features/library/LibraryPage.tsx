@@ -39,6 +39,7 @@ import { useScan } from './useScan'
 import { useTrackFileDialog } from './TrackFileDialog'
 import { ResizablePrepPane } from './ResizablePrepPane'
 import { ExternalFileDrag } from './ExternalFileDrag'
+import { useExternalFileDrag } from './useExternalFileDrag'
 import { collectSelection, selectionScope } from './librarySelection'
 
 const EMPTY_SELECTION = new Set<string>()
@@ -48,6 +49,7 @@ const EMPTY_SELECTION = new Set<string>()
 /// library body: filters, bulk bar, table, inspector, plus modals scoped
 /// to library actions (cleanup, archive, bulk archive, bulk tag, context menu).
 export function LibraryPage() {
+  const [rowDragTarget, setRowDragTarget] = useState<'external' | 'wisp'>('external')
   const [query, setQuery] = useState<TrackQuery>(() => ({ page: 1, size: 500, sort: useUiPrefs.getState().librarySort }))
   const changeQuery = (next: TrackQuery) => {
     setQuery(next)
@@ -109,6 +111,7 @@ export function LibraryPage() {
     : query
 
   const scopeKey = selectionScope(effectiveQuery)
+  const fileDrag = useExternalFileDrag(scopeKey)
   const [previousScope, setPreviousScope] = useState(scopeKey)
   // Discard, rather than just hide, selection when switching scope. Otherwise
   // returning to an earlier playlist could revive a stale all-track selection.
@@ -229,6 +232,14 @@ export function LibraryPage() {
     setSelectedIds(new Set([t.id]))
     anchorIdRef.current = t.id
     return [t]
+  }
+
+  const onExternalDragStart = (t: Track) => {
+    // Resolve by IDs, not rendered rows: Ctrl+A may include thousands of tracks
+    // on other pages. Starting a drag must not collapse the existing selection.
+    const ids = selectedIds.has(t.id) ? [...selectedIds] : [t.id]
+    if (!selectedIds.has(t.id)) onSelectRow(t, { meta: false, shift: false })
+    void fileDrag.begin(ids)
   }
 
   // Workspace now drives off the player's loaded track, not the row selection.
@@ -489,7 +500,15 @@ export function LibraryPage() {
           {selectingAll ? 'Selecting all pages…' : `Select all ${total.toLocaleString()} tracks`}
         </button>
         {selectingAll && <button onClick={() => selectionRequest.current?.abort()} className="underline">Cancel selection</button>}
-        <ExternalFileDrag key={scopeKey} ids={[...selectedIds]} />
+        {fileDrag.available && <label className="flex items-center gap-1 text-[var(--color-muted)]">
+          Drag rows to
+          <select aria-label="Track row drag destination" value={rowDragTarget} disabled={fileDrag.busy}
+            onChange={(e) => setRowDragTarget(e.target.value as 'external' | 'wisp')}
+            className="rounded border border-[var(--color-border)] bg-[var(--color-panel)] px-2 py-1 text-[var(--color-text)]">
+            <option value="external">Apps / folders</option><option value="wisp">Within WISP</option>
+          </select>
+        </label>}
+        <ExternalFileDrag key={scopeKey} ids={[...selectedIds]} controller={fileDrag} />
         <span className="ml-auto text-[var(--color-muted)]">{selectedIds.size.toLocaleString()} selected · {total.toLocaleString()} matching</span>
         {selectionError && <span role="alert" className="basis-full text-red-300">{selectionError}</span>}
       </div>
@@ -519,6 +538,7 @@ export function LibraryPage() {
           onCleanup={setCleanupTarget}
           onContextMenu={onContextMenuRow}
           onDragStartRow={onDragStartRow}
+          onExternalDragStart={fileDrag.available && rowDragTarget === 'external' ? onExternalDragStart : undefined}
         />
       </div>
       {total > (query.size ?? 500) && <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-1 text-xs">

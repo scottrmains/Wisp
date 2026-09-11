@@ -43,6 +43,11 @@ jobs:
         run: npm --prefix src/Wisp.Client run lint
       - name: Build client
         run: npm --prefix src/Wisp.Client run build
+      - name: Install browser for drag regression tests
+        working-directory: src/Wisp.Client
+        run: npx playwright install chromium
+      - name: Test desktop drag UI (isolated mock bridge)
+        run: npm --prefix src/Wisp.Client run test:browser
 
   installer:
     name: Production installer
