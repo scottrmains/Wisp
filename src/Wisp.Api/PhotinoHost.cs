@@ -112,6 +112,7 @@ public static class PhotinoHost
     private static object? Dispatch(PhotinoWindow window, BridgeRequest request) => request.Method switch
     {
         "pickFolder" => PickFolder(window, request.Args),
+        "pickAudioFile" => PickAudioFile(window, request.Args),
         "openInExplorer" => OpenInExplorer(request.Args),
         "openExternal" => OpenExternal(request.Args),
         "ping" => new { pong = DateTimeOffset.UtcNow },
@@ -159,6 +160,14 @@ public static class PhotinoHost
         var picked = window.ShowOpenFolder(title ?? "Select folder", defaultPath: initial, multiSelect: false);
         var path = picked?.FirstOrDefault();
         return new { path };
+    }
+
+    private static object PickAudioFile(PhotinoWindow window, JsonElement? args)
+    {
+        var initial = args?.TryGetProperty("initialPath", out var p) == true ? p.GetString() : null;
+        var picked = window.ShowOpenFile("Select replacement audio", defaultPath: initial, multiSelect: false,
+            filters: [("Audio files", ["mp3", "flac", "wav", "aiff", "aif", "m4a", "ogg", "opus"])]);
+        return new { path = picked?.FirstOrDefault() };
     }
 
     private static void Reply(PhotinoWindow window, string? id, object? result, string? error)

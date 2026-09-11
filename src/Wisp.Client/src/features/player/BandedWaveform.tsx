@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useAudioFiles } from '../../audio/audioFiles'
 import { Play, Search as SearchIcon } from 'lucide-react'
 import { getCachedBandedPeaks, loadBandedPeaks, type BandedPeaks } from '../../audio/peaks'
 import { beatTicksInRange, snapToBeat } from '../../audio/snap'
@@ -48,6 +49,7 @@ interface Props {
 ///
 /// While peaks are computing, falls back to a thin baseline so the click-to-seek still works.
 export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange, bpm, firstBeatSec }: Props) {
+  const revision = useAudioFiles((s) => s.revisions[trackId] ?? 0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [peaks, setPeaks] = useState<BandedPeaks | null>(() => getCachedBandedPeaks(trackId) ?? null)
@@ -92,6 +94,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
     const cached = getCachedBandedPeaks(trackId)
     if (cached) {
       setPeaks(cached)
+      setLoading(false)
       return
     }
     let cancelled = false
@@ -110,7 +113,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
     return () => {
       cancelled = true
     }
-  }, [trackId])
+  }, [trackId, revision])
 
   // Draw the waveform whenever peaks, height, or container size changes.
   useEffect(() => {

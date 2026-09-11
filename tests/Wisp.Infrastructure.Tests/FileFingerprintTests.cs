@@ -72,4 +72,17 @@ public class FileFingerprintTests : IDisposable
         var second = await _fp.ComputeAsync(a);
         Assert.Equal(first, second);
     }
+
+    [Theory]
+    [InlineData(1048577)]
+    [InlineData(2097152)]
+    public async Task One_to_two_megabyte_files_hash_in_full(int length)
+    {
+        var bytes = new byte[length];
+        Random.Shared.NextBytes(bytes);
+        var path = Path.Combine(_dir, "short-track.wav");
+        await File.WriteAllBytesAsync(path, bytes);
+        var expected = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes.Concat(BitConverter.GetBytes((long)length)).ToArray()));
+        Assert.Equal(expected, await _fp.ComputeAsync(path));
+    }
 }

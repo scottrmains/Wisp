@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SoundTouchNode } from '@soundtouchjs/audio-worklet'
 import { ensureAudio } from './context'
+import { audioUrl, audioResponseError, useAudioFiles } from './audioFiles'
 
 /* eslint-disable react-hooks/immutability -- HTMLAudioElement is an imperative browser resource; its source, volume and position must be mutated through the Web Audio API. */
 
@@ -36,6 +37,7 @@ export interface AudioDeck {
 /// Using HTMLAudioElement (not AudioBufferSource) means we stream over Range
 /// requests instead of buffering the whole file before playback.
 export function useAudioDeck(trackId: string | null): AudioDeck {
+  const revision = useAudioFiles((s) => s.revisions[trackId ?? ''] ?? 0)
   // An Audio element is a stable external resource for the lifetime of this
   // hook. Lazy state construction avoids reading/writing a ref during render.
   const [audio] = useState(() => {
@@ -111,18 +113,20 @@ export function useAudioDeck(trackId: string | null): AudioDeck {
     setIsPlaying(false)
 
     if (!trackId) {
+      setLoading(false)
       audio.removeAttribute('src')
       audio.load()
       return
     }
 
     setLoading(true)
-    audio.src = `/api/tracks/${trackId}/audio`
+    audio.src = audioUrl(trackId)
     audio.load()
-  }, [audio, trackId])
+  }, [audio, trackId, revision])
 
   // Audio element events.
   useEffect(() => {
+    const controller = new AbortController()
     const onPlay = () => setIsPlaying(true)
     const onPause = () => setIsPlaying(false)
     const onTime = () => setCurrentTime(audio.currentTime)
@@ -133,8 +137,23 @@ export function useAudioDeck(trackId: string | null): AudioDeck {
     const onCanPlay = () => setLoading(false)
     const onWaiting = () => setLoading(true)
     const onError = () => {
-      setError(audio.error?.message ?? 'Audio failed to load')
+      const source = audio.src
+      setError('Audio could not be played. Checking the file…')
       setLoading(false)
+      setIsPlaying(false)
+      // HTMLAudioElement hides HTTP error bodies. Fetch one byte to retrieve
+      // the actionable API error without downloading the whole source again.
+      void fetch(source, { headers: { Range: 'bytes=0-0' }, signal: controller.signal })
+        .then(async (res) => {
+          const message = res.ok
+            ? 'The player could not decode this audio. It may be damaged or unsupported. Try another copy using Relink audio file.'
+            : await audioResponseError(res)
+          await res.body?.cancel().catch(() => {})
+          if (!controller.signal.aborted && audio.src === source) setError(message)
+        }).catch(() => {
+          if (!controller.signal.aborted && audio.src === source)
+            setError('WISP could not reach the audio file. Check the connection and try again.')
+        })
     }
 
     audio.addEventListener('play', onPlay)
@@ -145,6 +164,7 @@ export function useAudioDeck(trackId: string | null): AudioDeck {
     audio.addEventListener('waiting', onWaiting)
     audio.addEventListener('error', onError)
     return () => {
+      controller.abort()
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('timeupdate', onTime)
@@ -153,7 +173,7 @@ export function useAudioDeck(trackId: string | null): AudioDeck {
       audio.removeEventListener('waiting', onWaiting)
       audio.removeEventListener('error', onError)
     }
-  }, [audio])
+  }, [audio, trackId, revision])
 
   // Stop & detach on unmount.
   useEffect(() => {

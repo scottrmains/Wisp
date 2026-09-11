@@ -2,6 +2,61 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Track-file recovery and safe library removal
+
+- **Diagnosis:** the Olive entry still referenced the deleted filename ending
+  `Remaster .aiff`; the replacement had a different filename and was not linked.
+  The previous file also produced an unsupported AIFC error. That error alone
+  cannot distinguish corruption from an unsupported encoding; the user reported
+  that external playback failed as well. The replacement fully decodes (280.291s).
+- **Relink audio file:** available from the library/playlist row context menu,
+  track-prep action row, and actionable playback-error banner. Desktop Browse
+  opens a native audio-file chooser; the WISP-styled modal also accepts a full
+  path for browser development. Validation decodes the entire candidate before
+  committing its path, fingerprint, duration and file dates. It preserves track
+  identity, added date, curated metadata, notes, tags, editorial/device cues,
+  playlist membership and mix-plan prep. Missing metadata is filled where possible.
+  Same-path replacements are supported; duplicate links (case-insensitive), stale
+  dialogs, missing/non-audio files, decode failures and busy-library changes are
+  rejected with a reason and no relink. No source file is copied, moved or edited.
+- **Remove from WISP:** explicit modal confirmation explains deletion of the
+  library entry and its prep/playlist/mix-plan references. Audio files stay on
+  disk. Wanted matches reset; cleanup history is retained, with old file-changing
+  undo actions marked Superseded after removal/relink so they cannot restore the
+  previous path. Archive remains the non-destructive way to hide an entry and
+  retain all prep. Scans, cleanup and recovery serialize their file-link changes.
+- **Recovery feedback:** Include missing files exposes retained unavailable
+  tracks, with a missing-file indicator. Playback distinguishes missing files,
+  unreadable/unsupported audio and connection failures, with Retry and Relink.
+  Per-track audio revisions refresh all loaded decks and waveform views after a
+  relink, without reusing pre-relink in-flight waveform results or failed loads.
+  Relinking pauses the main player; cue timestamps are retained, not retimed.
+- **AIFF handling:** existing standard PCM conversion remains. Unsupported AIFF
+  variants fall back to the configured/bundled/PATH FFmpeg and a disposable 24-bit
+  PCM WAV for browser playback. Float conversion is not claimed bit-perfect;
+  source files and USB-export audio are unchanged. Versioned source-sensitive
+  cache paths and unique temporary files prevent old/partial or competing
+  player/waveform requests from corrupting the cache. Cancellation cleans up.
+  Also corrected fingerprinting of files between 1 and 2 MiB, found during review.
+- **Verification:** 193 backend + 23 client tests pass (19 new cases). Tests cover
+  prep/identity preservation, same-path replacement, duplicate/stale/busy paths,
+  invalid candidates, removal cascades without file deletion, waveform revision
+  races, AIFF concurrent conversion/cancellation, and the fingerprint boundary.
+  An isolated HTTP host and Edge browser exercised missing-file errors, modal
+  cancellation, real invalid/valid file validation, relink, rebuilt waveform,
+  actual playback, and confirmed library removal with the file still present.
+  A real floating-point AIFC fixture passed the FFmpeg fallback. The user's Olive
+  replacement was read/decoded only and its SHA-256 remained unchanged; the
+  working WISP library/configuration were not modified. Native file-picker API
+  compiled; OS chooser interaction still needs a desktop smoke check.
+- **Limits:** cue/loop timing must be checked if a replacement has different
+  content or duration; no automatic retiming or duplicate-entry merging. Relink
+  validation requires FFmpeg and times out after three minutes. A future scan can
+  import a removed file again as a new entry (the removal modal explains this).
+  Original discovery/import rules and CDJ compatibility are unchanged. Existing
+  13 client lint warnings and NuGet advisories remain. No standalone executable
+  or installer is built for this feature branch; release remains main-push only.
+
 ## 2026-09-11: Discover Anywhere track-search reliability
 
 - **Root cause verified live:** `Brent Laurence - Big Buds`, video

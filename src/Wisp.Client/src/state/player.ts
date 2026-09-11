@@ -19,6 +19,7 @@ interface PlayerState {
   isPlaying: boolean
   position: number
   duration: number
+  error: string | null
 
   /// Public API — anyone in the app can call these.
   playTrack: (trackId: string) => void
@@ -30,7 +31,7 @@ interface PlayerState {
   /// Internal — wired up by MiniPlayer on mount, do not call from elsewhere.
   _commands: PlayerCommands | null
   _registerCommands: (c: PlayerCommands | null) => void
-  _setStatus: (s: { isPlaying: boolean; position: number; duration: number }) => void
+  _setStatus: (s: { isPlaying: boolean; position: number; duration: number; error: string | null }) => void
   _consumePendingPlay: () => boolean
 }
 
@@ -40,6 +41,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   isPlaying: false,
   position: 0,
   duration: 0,
+  error: null,
   _commands: null,
 
   playTrack: (id) => {
@@ -49,11 +51,11 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       if (c) void c.play()
       return
     }
-    set({ trackId: id, pendingPlay: true, isPlaying: false, position: 0, duration: 0 })
+    set({ trackId: id, pendingPlay: true, isPlaying: false, position: 0, duration: 0, error: null })
   },
   loadTrack: (id) => {
     if (get().trackId === id) return
-    set({ trackId: id, pendingPlay: false, isPlaying: false, position: 0, duration: 0 })
+    set({ trackId: id, pendingPlay: false, isPlaying: false, position: 0, duration: 0, error: null })
   },
   togglePlay: () => {
     const c = get()._commands
@@ -66,7 +68,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   clear: () => {
     const c = get()._commands
     if (c) c.pause()
-    set({ trackId: null, pendingPlay: false, isPlaying: false, position: 0, duration: 0 })
+    set({ trackId: null, pendingPlay: false, isPlaying: false, position: 0, duration: 0, error: null })
   },
 
   _registerCommands: (c) => set({ _commands: c }),

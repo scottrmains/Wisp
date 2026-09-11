@@ -259,7 +259,8 @@ export function LibraryTable({
 
               {/* Cleanup flag — always visible when applicable, doesn't compete with hover actions. */}
               <div className="flex items-center justify-center">
-                {(t.isDirtyName || t.isMissingMetadata) && onCleanup && (
+                {t.isUnavailable && <span className="text-amber-300" title="File missing — right-click to relink" aria-label="File missing"><AlertTriangle size={13} /></span>}
+                {!t.isUnavailable && (t.isDirtyName || t.isMissingMetadata) && onCleanup && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

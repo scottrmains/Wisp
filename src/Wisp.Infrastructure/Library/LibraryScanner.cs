@@ -22,6 +22,13 @@ public class LibraryScanner(
 
     public async Task RunAsync(ScanRequest request, CancellationToken cancellationToken)
     {
+        await LibraryFileGate.Instance.WaitAsync(cancellationToken);
+        try { await RunCoreAsync(request, cancellationToken); }
+        finally { LibraryFileGate.Instance.Release(); }
+    }
+
+    private async Task RunCoreAsync(ScanRequest request, CancellationToken cancellationToken)
+    {
         var job = await db.ScanJobs.FirstOrDefaultAsync(s => s.Id == request.ScanJobId, cancellationToken)
                   ?? throw new InvalidOperationException($"ScanJob {request.ScanJobId} not found");
 

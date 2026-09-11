@@ -6,6 +6,9 @@ import { usePlayer } from '../../state/player'
 import { useUiPrefs, type InspectorTab as Tab } from '../../state/uiPrefs'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useCues } from '../cues/useCues'
+import { useTrackFileDialog } from './TrackFileDialog'
+import { PlaybackError } from '../player/PlaybackError'
+import { useAudioFiles } from '../../audio/audioFiles'
 import {
   AlertTriangle,
   Archive,
@@ -73,6 +76,8 @@ export function TrackPrepWorkspace({
   focusTab,
 }: Props) {
   const trackId = usePlayer((s) => s.trackId)
+  const playbackError = usePlayer((s) => s.error)
+  const audioRevision = useAudioFiles((s) => s.revisions[trackId ?? ''] ?? 0)
   // Fetch the loaded track's metadata so we can show title/artist/chips/etc.
   // Same query the MiniPlayer uses — TanStack caches it cross-component.
   const trackQuery = useQuery({
@@ -185,6 +190,8 @@ export function TrackPrepWorkspace({
   const autoCueAttemptedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (!trackId || !track) return
+    // Relinking preserves prep; do not generate new suggestions over it.
+    if (audioRevision > 0) return
     if (cuesHook.loading) return
     if (autoCueAttemptedRef.current.has(trackId)) return
 
@@ -242,7 +249,7 @@ export function TrackPrepWorkspace({
       cancelled = true
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId, cuesHook.loading])
+  }, [trackId, cuesHook.loading, audioRevision])
 
   // Hotkeys: Q adds a cue (at the magnifier hover position if the cursor is
   // over the waveform, otherwise at the playhead); 1-8 jump to the Nth cue.
@@ -326,6 +333,7 @@ export function TrackPrepWorkspace({
 
   return (
     <div className="flex shrink-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+      <PlaybackError track={track} error={playbackError} />
       {/* Top: waveform + close/collapse buttons floating top-right */}
       <div className="relative flex gap-3 px-3 pt-3">
         <div className="min-w-0 flex-1">
@@ -467,6 +475,8 @@ export function TrackPrepWorkspace({
           </ActionButton>
         )}
         <ConvertToMp3Button track={track} />
+        <button onClick={() => useTrackFileDialog.getState().open(track, 'relink')} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs">Relink audio file…</button>
+        <button onClick={() => useTrackFileDialog.getState().open(track, 'remove')} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs text-red-300">Remove from WISP…</button>
       </div>
 
       {/* Tab bar */}

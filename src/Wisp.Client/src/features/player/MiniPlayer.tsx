@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { PlaybackError } from './PlaybackError'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Pause, Play, X } from 'lucide-react'
 import { tracks as tracksApi } from '../../api/library'
@@ -43,8 +44,8 @@ export function MiniPlayer() {
 
   // Mirror status back to the store.
   useEffect(() => {
-    setStatus({ isPlaying: deck.isPlaying, position: deck.currentTime, duration: deck.duration })
-  }, [deck.isPlaying, deck.currentTime, deck.duration, setStatus])
+    setStatus({ isPlaying: deck.isPlaying, position: deck.currentTime, duration: deck.duration, error: deck.error })
+  }, [deck.isPlaying, deck.currentTime, deck.duration, deck.error, setStatus])
 
   // Auto-start once metadata lands, if `playTrack` was the entrypoint.
   useEffect(() => {
@@ -61,6 +62,7 @@ export function MiniPlayer() {
 
   return (
     <div className="flex shrink-0 flex-col border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+      {track && <PlaybackError track={track} error={deck.error} />}
       {/* Waveform: full width, click to seek, MiK-style band-coloured bars. */}
       <div className="px-3 pt-2">
         <BandedWaveform
