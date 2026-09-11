@@ -1,158 +1,56 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Download, X } from 'lucide-react'
-import { useSoulseekStatus } from '../../state/soulseekStatus'
+import { AlertTriangle, Check, Download, X } from 'lucide-react'
 import { useSoulseekTransfers } from './useSoulseekTransfers'
+import { SoulseekTransferList } from './SoulseekTransferList'
+import { transferPercent, transferState } from './transferState'
 
-/// Compact pill in AppHeader showing aggregate Soulseek transfer status. Hidden
-/// when nothing's in flight AND the user has dismissed the last completed batch.
-/// Click to open a popover with per-transfer detail.
+/** Keep history reachable even when no transfers are active or a batch is cleared. */
 export function SoulseekStatusIndicator() {
-  const { transfers, slskdConfigured } = useSoulseekTransfers()
-  const dismissedAt = useSoulseekStatus((s) => s.dismissedAt)
-  const dismiss = useSoulseekStatus((s) => s.dismiss)
+  const { transfers, slskdConfigured, error, refresh } = useSoulseekTransfers()
   const [open, setOpen] = useState(false)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const inFlight = transfers.filter(t => !transferState(t.state).finished)
+  const succeeded = transfers.filter(t => transferState(t.state).succeeded)
+  const failed = transfers.filter(t => transferState(t.state).failed)
 
-  // Track whether we have any completed transfers we should still surface (briefly,
-  // so the user gets confirmation that their downloads finished even if they weren't
-  // looking at the panel).
-  const inFlight = transfers.filter((t) => !t.state.includes('Completed'))
-  const completed = transfers.filter((t) => t.state.includes('Completed'))
-  const hasAny = transfers.length > 0
-  const hasInFlight = inFlight.length > 0
-
-  // Only show when there's something to show AND the user hasn't dismissed the
-  // current batch. Dismissal is reset when fresh polling starts (in the store).
-  const isDismissed = dismissedAt !== null && !hasInFlight
-  const visible = slskdConfigured && hasAny && !isDismissed
-  // Auto-fade the "all done" state after a short window so it doesn't linger forever.
-  useEffect(() => {
-    if (hasInFlight || !hasAny) return
-    const t = setTimeout(() => dismiss(), 30_000)
-    return () => clearTimeout(t)
-  }, [hasInFlight, hasAny, dismiss])
-
-  // Click-outside dismiss for the popover.
   useEffect(() => {
     if (!open) return
     const onPointer = (e: MouseEvent) => {
-      if (!popoverRef.current) return
-      if (!popoverRef.current.contains(e.target as Node)) setOpen(false)
+      if (!popoverRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setOpen(false); triggerRef.current?.focus() }
     }
     window.addEventListener('mousedown', onPointer, true)
-    return () => window.removeEventListener('mousedown', onPointer, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onPointer, true)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [open])
 
-  if (!visible) return null
+  if (!slskdConfigured) return null
+  const percent = inFlight.length ? Math.round(inFlight.reduce((sum, t) => sum + transferPercent(t.percentage), 0) / inFlight.length) : 0
+  const label = inFlight.length ? `${inFlight.length} active · ${percent}%`
+    : failed.length ? `${failed.length} failed` : succeeded.length ? `${succeeded.length} downloaded` : 'Transfers'
+  const Icon = inFlight.length ? Download : failed.length ? AlertTriangle : succeeded.length ? Check : Download
+  const tone = inFlight.length ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/15'
+    : failed.length ? 'border-amber-500/40 text-amber-200' : 'border-[var(--color-border)] text-[var(--color-text)]'
 
-  // Aggregate percent across in-flight transfers. Done as a simple mean — a single
-  // big track skews this slightly but it's good enough as a glanceable indicator.
-  const aggregatePct = hasInFlight
-    ? Math.round(inFlight.reduce((sum, t) => sum + (t.percentage || 0), 0) / inFlight.length)
-    : 100
-
-  const label = hasInFlight ? (
-    <><Download size={12} strokeWidth={1.75} /> {inFlight.length} downloading · {aggregatePct}%</>
-  ) : (
-    <><Check size={12} strokeWidth={2} /> {completed.length} downloaded</>
-  )
-
-  const tone = hasInFlight
-    ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/15 text-white'
-    : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
-
-  return (
-    <div className="relative" ref={popoverRef}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={[
-          'flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs tabular-nums transition-colors',
-          tone,
-        ].join(' ')}
-        title="Soulseek transfers"
-      >
-        <span className="inline-flex items-center gap-1.5">{label}</span>
-        {hasInFlight && (
-          <span className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-white/10 sm:inline-block">
-            <span
-              className="block h-full bg-[var(--color-accent)] transition-all"
-              style={{ width: `${aggregatePct}%` }}
-            />
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-[26rem] overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
-          <header className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2">
-            <span className="text-xs font-semibold text-white">Soulseek transfers</span>
-            <div className="flex items-center gap-1">
-              {!hasInFlight && (
-                <button
-                  onClick={() => { dismiss(); setOpen(false) }}
-                  className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] hover:text-white"
-                  title="Hide until next download"
-                >
-                  hide
-                </button>
-              )}
-              <button
-                onClick={() => setOpen(false)}
-                className="text-[var(--color-muted)] hover:text-white"
-                aria-label="Close"
-              >
-                <X size={14} strokeWidth={1.75} />
-              </button>
-            </div>
-          </header>
-
-          <ul className="max-h-80 overflow-auto">
-            {transfers.length === 0 && (
-              <li className="px-3 py-3 text-xs text-[var(--color-muted)]">No active transfers.</li>
-            )}
-            {transfers.map((t) => {
-              const fileName = t.filename.split(/[\\/]/).pop() ?? t.filename
-              const done = t.state.includes('Completed')
-              const succeeded = t.state.includes('Succeeded')
-              const cancelled = t.state.includes('Cancelled')
-              const errored = t.state.includes('Errored') || t.state.includes('TimedOut')
-              const tone = done && succeeded
-                ? 'text-emerald-300'
-                : done && (cancelled || errored)
-                  ? 'text-red-300'
-                  : 'text-[var(--color-muted)]'
-              return (
-                <li key={t.id} className="border-b border-[var(--color-border)]/40 px-3 py-2 text-xs">
-                  <p className="truncate font-medium text-white" title={fileName}>{fileName}</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="text-[10px] text-[var(--color-muted)]">{t.username}</span>
-                    <span className={`text-[10px] ${tone}`}>
-                      {done
-                        ? (succeeded
-                            ? <span className="inline-flex items-center gap-0.5"><Check size={10} strokeWidth={2} /> done</span>
-                            : cancelled ? 'cancelled' : errored ? 'failed' : t.state)
-                        : t.state}
-                    </span>
-                    {!done && (
-                      <span className="ml-auto tabular-nums text-[10px] text-[var(--color-muted)]">
-                        {t.percentage > 0 ? `${t.percentage.toFixed(0)}%` : '…'}
-                      </span>
-                    )}
-                  </div>
-                  {!done && (
-                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--color-bg)]">
-                      <div
-                        className="h-full bg-[var(--color-accent)] transition-all"
-                        style={{ width: `${Math.max(2, t.percentage || 0)}%` }}
-                      />
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
+  return <div className="relative" ref={popoverRef}>
+    <button ref={triggerRef} onClick={() => { if (!open) void refresh(); setOpen(o => !o) }}
+      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs tabular-nums focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] ${tone}`}
+      title="Soulseek transfers" aria-label="Soulseek transfers" aria-expanded={open} aria-controls="soulseek-transfers-panel">
+      <Icon size={12} strokeWidth={1.75} />{label}
+    </button>
+    {open && <div id="soulseek-transfers-panel" className="fixed right-4 top-12 z-50 mt-1 w-[30rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl lg:absolute lg:right-0 lg:top-full">
+      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2">
+        <span className="text-xs font-semibold">Soulseek transfers</span>
+        <button onClick={() => { setOpen(false); triggerRef.current?.focus() }} aria-label="Close transfers"
+          className="rounded p-2 text-[var(--color-muted)] hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"><X size={14} /></button>
+      </header>
+      <SoulseekTransferList transfers={transfers} error={error} />
+    </div>}
+  </div>
 }

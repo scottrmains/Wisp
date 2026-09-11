@@ -2,6 +2,35 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Soulseek transfer cancellation and history cleanup
+
+- **Implemented:** queued/downloading rows have a visible Cancel action;
+  completed, failed and cancelled rows have Clear, plus a bulk Clear finished
+  action. Shared controls appear in the header transfers window and search
+  dialog. Buttons show pending states, prevent concurrent duplicate actions and
+  retain actionable errors. The transfers window remains reachable after a
+  batch finishes, and reload fetches the daemon's current transfer history.
+- **Semantics:** cancellation targets the exact username/transfer ID and retains
+  its cancelled history. Clearing removes finished transfer history in slskd,
+  never downloaded audio or WISP library/cue records. Active rows cannot be
+  cleared; bulk clearing selects only finished rows. Successful downloads remain
+  listed until their WISP import scan completes successfully, with an explanation
+  if a clear attempt is deferred. Partial clear failures report retained entries.
+- **State correctness:** shared terminal-state parsing recognizes success,
+  cancellation, timeout, rejection, abort and error flags. Failed transfers no
+  longer appear as Done or keep polling forever. Search-result transfer matches
+  include username as well as filename.
+- **Verification:** 164 backend tests and 17 client tests pass; client lint/build
+  pass with the existing warnings. Browser tests with mocked APIs cover queued
+  and active cancellation, individual/bulk clear, import deferral, daemon error
+  recovery, empty history access and an 800px window. No real transfers were
+  cancelled/cleared during verification, and no standalone package was built.
+- **Protocol reference:** checked against bundled slskd 0.25.1's
+  [transfer controller](https://github.com/slskd/slskd/blob/0.25.1/src/slskd/Transfers/API/Controllers/TransfersController.cs)
+  and [download service](https://github.com/slskd/slskd/blob/0.25.1/src/slskd/Transfers/Downloads/DownloadService.cs).
+  The transfer DELETE operation uses `remove=false` for cancel and `remove=true`
+  only for selected finished entries; the file-management API is not called.
+
 ## 2026-09-11: development and production pipeline separation
 
 - **Implemented:** feature PRs target `develop`; the owner promotes reviewed
