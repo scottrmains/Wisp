@@ -31,6 +31,21 @@ There are three launch profiles plus matching root npm scripts.
 
 ## Build & ship
 
+Normal development uses feature branches into `develop`. When ready to release,
+open a `develop` -> `main` PR; the owner reviews and merges it. `main` is the
+production branch. See [contributor workflow](AGENTS.md).
+
+Routine checks do not package a distributable executable:
+
+```powershell
+dotnet test Wisp.slnx -c Release
+npm --prefix src/Wisp.Client test
+npm --prefix src/Wisp.Client run lint
+npm --prefix src/Wisp.Client run build
+```
+
+Only if you explicitly need a local standalone package:
+
 ```powershell
 npm run build
 ```
@@ -39,9 +54,24 @@ This runs the SPA build (output → `src/Wisp.Api/wwwroot/`) and `dotnet publish
 
 ### Windows installer
 
-The **Windows installer** GitHub Actions workflow tests and packages every push to
-`main`, pull request into `main`, and manual run. Open the successful run under
-**Actions → Windows installer**, download its `Wisp-Setup-…-win-x64` artifact,
+The **CI and Windows release** GitHub Actions workflow separates validation from
+production packaging:
+
+| Event | Validation | Installer and upload |
+|---|---|---|
+| PR into `develop` or `main` | Yes | No |
+| Push/merge into `develop` | Yes | No |
+| Push/merge into `main` | Yes | Only after validation passes |
+| Manual workflow run (any branch) | Yes | No |
+
+Feature-branch pushes without a PR do not run this workflow. Tests compile the
+app, and the client build checks the UI, but neither produces a downloadable
+release package. Installer smoke tests run only in the production packaging job.
+To retry a failed production build, re-run its existing **push to main** run;
+the manual Run workflow action deliberately validates only.
+
+Open the successful production run under
+**Actions → CI and Windows release**, download its `Wisp-Setup-…-win-x64` artifact,
 extract the downloaded ZIP and run the setup EXE. Artifacts are retained for 90
 days. This produces a new installer, not an automatic update of installed apps.
 
@@ -65,7 +95,7 @@ pwsh tools/build-installer.ps1 -Version 0.1.0
 
 The EXE and SHA-256 checksum appear in `artifacts/installers/`. Packaging fetches
 pristine, checksum-verified dependency archives, avoiding any local Soulseek
-configuration. CI verifies a fresh installation, serves the bundled UI from the
+configuration. Production CI verifies a fresh installation, serves the bundled UI from the
 installed executable, reinstalls it, then checks that uninstall preserves data.
 That startup test is headless; it does not verify the Photino window or CDJ USB
 compatibility. `WISP_DATA_DIR` selects a separate profile for isolated testing.
