@@ -29,6 +29,8 @@ public sealed record SearchResultDto(
     IReadOnlyList<SearchHitDto> Hits);
 
 public sealed record QueueDownloadRequest(string Username, string Filename, long Size);
+public sealed record TransferActionRequest(string? Username, string? Id);
+public sealed record ClearTransfersResult(IReadOnlyList<string> ClearedIds, int Skipped, IReadOnlyList<string> Errors);
 
 public sealed record TransferDto(
     string Id,

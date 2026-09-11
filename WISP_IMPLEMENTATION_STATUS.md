@@ -2,6 +2,57 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Soulseek transfer cancellation and history cleanup
+
+- **Implemented:** queued/downloading rows have a visible Cancel action;
+  completed, failed and cancelled rows have Clear, plus a bulk Clear finished
+  action. Shared controls appear in the header transfers window and search
+  dialog. Buttons show pending states, prevent concurrent duplicate actions and
+  retain actionable errors. The transfers window remains reachable after a
+  batch finishes, and reload fetches the daemon's current transfer history.
+- **Semantics:** cancellation targets the exact username/transfer ID and retains
+  its cancelled history. Clearing removes finished transfer history in slskd,
+  never downloaded audio or WISP library/cue records. Active rows cannot be
+  cleared; bulk clearing selects only finished rows. Successful downloads remain
+  listed until their WISP import scan completes successfully, with an explanation
+  if a clear attempt is deferred. Partial clear failures report retained entries.
+- **State correctness:** shared terminal-state parsing recognizes success,
+  cancellation, timeout, rejection, abort and error flags. Failed transfers no
+  longer appear as Done or keep polling forever. Search-result transfer matches
+  include username as well as filename.
+- **Verification:** 164 backend tests and 17 client tests pass; client lint/build
+  pass with the existing warnings. Browser tests with mocked APIs cover queued
+  and active cancellation, individual/bulk clear, import deferral, daemon error
+  recovery, empty history access and an 800px window. No real transfers were
+  cancelled/cleared during verification, and no standalone package was built.
+- **Protocol reference:** checked against bundled slskd 0.25.1's
+  [transfer controller](https://github.com/slskd/slskd/blob/0.25.1/src/slskd/Transfers/API/Controllers/TransfersController.cs)
+  and [download service](https://github.com/slskd/slskd/blob/0.25.1/src/slskd/Transfers/Downloads/DownloadService.cs).
+  The transfer DELETE operation uses `remove=false` for cancel and `remove=true`
+  only for selected finished entries; the file-management API is not called.
+
+## 2026-09-11: development and production pipeline separation
+
+- **Implemented:** feature PRs target `develop`; the owner promotes reviewed
+  changes from `develop` to `main` (production). Contributor instructions record
+  this flow and avoid unsolicited local executable builds for routine work.
+- **Validation only:** PRs into either branch, pushes to `develop`, and manual
+  workflow runs execute backend tests and client tests/lint/build without
+  installer packaging or artifact uploads.
+- **Production only:** the installer job requires successful validation plus
+  both a `push` event and `refs/heads/main`. This includes merges into `main`,
+  but excludes promotion PR checks, development pushes and manual runs.
+  Production installation/upgrade/uninstall checks and artifact retention remain.
+- **Retries:** re-run an existing main-push run to retry its production package.
+  The workflow file is retained so its run-number-based version sequence continues.
+- **Scope:** this changes CI policy, not repository protection settings. The
+  branch flow is documented; it does not technically block direct main pushes.
+  No installer is built locally for this pipeline change.
+- **Verified locally:** all 151 backend tests and 4 client tests pass, including
+  three YAML policy checks for branch triggers, the main-push/validation gate,
+  and the absence of packaging/upload steps in validation. Client build/lint
+  pass with existing warnings. Actual main packaging awaits owner promotion.
+
 ## 2026-09-11: Crate Digger rescan verification and feedback
 
 - **Fixed:** the rescan endpoint returned an empty HTTP 202 response while the
@@ -111,8 +162,9 @@ This summary supersedes the contradictory historical USB entries below.
   playlist and test stored Memory Cue recall on CDJ-850 and CDJ-900 separately.
   Report playlist visibility, playback and cue timestamps for each player.
   Extra template tracks and absent waveforms are expected with this diagnostic build.
-- **Windows installer implemented:** pushes to `main`, PRs into `main` and manual
-  workflow runs build a self-contained per-user installer. It bundles the client,
+- **Windows installer implemented:** successful pushes to `main` build a
+  self-contained per-user installer; PR/development/manual runs validate only
+  (see the pipeline separation update above). It bundles the client,
   .NET, pristine slskd and FFmpeg; WebView2 is installed if missing. The existing
   `%LOCALAPPDATA%\Wisp` library survives upgrades and uninstall. CI includes an
   install/startup/reinstall/uninstall check. No automatic app updater or code
