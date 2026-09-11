@@ -159,11 +159,11 @@ for (const choice of ['Add again', 'Skip existing', 'Cancel']) {
 
 test('dropping on a sidebar playlist uses the same duplicate confirmation', async ({ page }) => {
   const state = await setup(page)
-  await page.getByText('Other playlist', { exact: true }).first().evaluate(el => {
-    const dataTransfer = new DataTransfer()
-    dataTransfer.setData('application/x-wisp-track-ids', JSON.stringify(['track-0', 'track-1']))
-    el.closest('button')!.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }))
-  })
+  await page.locator('[data-playlist-entry-id="entry-0"]').click()
+  await page.keyboard.press('Control+a')
+  await expect(page.getByText('3 tracks selected', { exact: true })).toBeVisible()
+  await page.locator('[data-playlist-entry-id="entry-0"]').dragTo(
+    page.getByText('Other playlist', { exact: true }).first())
   const duplicate = page.getByRole('dialog', { name: 'Already in this playlist' })
   await expect(duplicate).toBeVisible()
   expect(state.entries.other).toHaveLength(1)

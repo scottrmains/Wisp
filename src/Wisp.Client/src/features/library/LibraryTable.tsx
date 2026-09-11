@@ -30,9 +30,6 @@ interface Props {
   /// (the row itself if not in selection, otherwise the whole selection) and return
   /// the ordered list of track ids to attach to the dataTransfer payload.
   onDragStartRow?: (track: Track) => Track[]
-  /// Native Windows file drag. When supplied, rows hand off to the host instead
-  /// of starting an HTML drag which external desktop apps cannot consume.
-  onExternalDragStart?: (track: Track) => void
 }
 
 interface Column {
@@ -80,10 +77,8 @@ export function LibraryTable({
   onCleanup,
   onContextMenu,
   onDragStartRow,
-  onExternalDragStart,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
-  const nativeRowDrag = useRef(false)
   const playTrack = usePlayer((s) => s.playTrack)
   const isMultiSelected = (id: string) => selectedIds?.has(id) ?? false
 
@@ -171,12 +166,8 @@ export function LibraryTable({
               data-playlist-entry-id={t.playlistEntryId ?? undefined}
               data-track-id={t.id}
               role={onSelect ? 'button' : undefined}
-              draggable={!!onDragStartRow || !!onExternalDragStart}
-              onPointerDown={() => { nativeRowDrag.current = false }}
+              draggable={!!onDragStartRow}
               onClick={(e) => {
-                // Cancelling HTML drag can produce a trailing click on mouse-up.
-                // Don't let it replace Ctrl+A's selection after the native handoff.
-                if (nativeRowDrag.current) { nativeRowDrag.current = false; e.preventDefault(); return }
                 onSelect?.(t, { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey })
               }}
               onDoubleClick={() => onActivate?.(t)}
@@ -186,14 +177,6 @@ export function LibraryTable({
                 onContextMenu(t, e.clientX, e.clientY)
               }}
               onDragStart={(e) => {
-                if (onExternalDragStart) {
-                  // Cancel Chromium's drag before posting the native request.
-                  // Running two simultaneous OLE drag loops loses the file drop.
-                  e.preventDefault()
-                  nativeRowDrag.current = true
-                  onExternalDragStart(t)
-                  return
-                }
                 if (!onDragStartRow) return
                 const ids = onDragStartRow(t)
                 if (ids.length === 0) {
@@ -201,7 +184,8 @@ export function LibraryTable({
                   return
                 }
                 e.dataTransfer.effectAllowed = 'copyMove'
-                // Internal payload — used by ChainDock / MixPlansPage drop handlers.
+                // Rows are always internal: playlists, ChainDock and MixPlansPage.
+                // Native audio-file transfer belongs only to ExternalFileDrag.
                 e.dataTransfer.setData('application/x-wisp-track-ids', JSON.stringify(ids.map((x) => x.id)))
               }}
               className={[

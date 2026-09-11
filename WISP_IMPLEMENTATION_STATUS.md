@@ -36,19 +36,49 @@ Last reviewed: 2026-09-11
   accidental resubmission/dismissal, queued global prompts no longer overwrite
   one another, and retrying a failed create-and-add reuses the already-created
   playlist instead of creating another empty one.
-- **Verified:** 205 backend + 34 client unit + 14 browser tests pass (253 total).
+- **Verified with the internal-drag fix below:** 205 backend + 34 client unit +
+  16 browser tests pass (255 total).
   New backend tests upgrade a seeded previous-schema database, exercise all 18
   library sorts with repeated entries, verify atomic duplicate checks, concurrent
   adds, skip/add/cancel semantics, scoped removal and preservation of prep/audio.
   Browser regressions cover toolbar/context removal, cancel/error/retry, continuing
   playback, 1,002-entry all-page removal, all duplicate choices, sidebar drops and
-  an 800x600 modal layout. Existing native-drag browser regressions still pass.
+  an 800x600 modal layout. Real row-to-sidebar dragging also opens duplicate
+  confirmation for repeated playlist selections; external-handle tests pass.
   Client build/type checks pass; lint has no errors and 13 pre-existing warnings.
   Existing NuGet advisories are unchanged. All tests use isolated data/mocks; no
   working library migration, music-file removal or live installation replacement
   was performed. No USB/CDJ compatibility claims or export-format changes added.
 - **Delivery:** feature PR into develop. No local installer built; production
   packaging remains restricted to main pushes.
+
+## 2026-09-11: Restore internal playlist dragging; separate external file transfer
+
+- **Regression:** the earlier Windows drag change made ordinary track rows start
+  native CF_HDROP transfers by default. WISP playlist targets require internal
+  track IDs, so those drops could not add playlist membership. The previous tests
+  checked the optional internal mode's payload, not the default end-to-end drop.
+- **Implemented:** row dragging always carries only WISP track IDs again, for
+  sidebar playlists and mix-plan targets. Removed the drag-destination selector
+  and native row callback. Ctrl+A keeps the complete selection across pages;
+  dragging an unselected row uses only that track. The separate **Drag N files to
+  rekordbox** handle remains the explicit native file-transfer gesture for other
+  apps/folders. No DownloadURL or file-path payload is attached to track rows.
+- **Drop safety:** the app shell rejects unhandled files/URLs and prevents the
+  embedded browser's default drop navigation/download. Existing child handlers
+  still receive internal playlist/mix payloads; this guard does not import music.
+- **Verification:** all nine committed browser regressions pass, including real
+  mouse drops into sidebar playlists with 1,205 selected tracks from page one and
+  page two, an unselected-row drop, and internal dragging on an unsupported native
+  host. They assert membership requests and no native bridge calls/downloads.
+  Separate handle coverage checks all-page payload, busy guard, missing-file retry
+  and early release. Stray file/URL rejection uses synthetic browser events.
+  Combined with playlist removal/duplicates: 205 backend, 34 client unit and
+  16 browser tests pass. Client build and lint pass (13 pre-existing warnings).
+- **Boundary:** native responses/API data are mocked in browser tests; a real
+  installed WebView2/rekordbox handoff still needs user verification. No music,
+  working database or installation was changed and no installer was generated.
+  This section supersedes the native-row default described immediately below.
 
 ## 2026-09-11: Fix direct track-row dragging to Windows apps and folders
 
