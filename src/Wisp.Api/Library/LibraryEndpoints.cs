@@ -47,10 +47,7 @@ public static class LibraryEndpoints
         var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (track is null) return Results.NotFound();
         if (!File.Exists(track.FilePath))
-            return Results.Problem(
-                title: "File not found on disk",
-                detail: track.FilePath,
-                statusCode: StatusCodes.Status410Gone);
+            return Results.Json(new { code = "file_missing", message = "Audio file not found. Connect its drive or use Relink audio file to choose a replacement." }, statusCode: 410);
 
         // Build a friendly download name from tag metadata; fall back to the on-disk filename.
         var ext = Path.GetExtension(track.FilePath);
@@ -119,12 +116,9 @@ public static class LibraryEndpoints
         CancellationToken ct)
     {
         var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
-        if (track is null) return Results.NotFound();
+        if (track is null) return Results.Json(new { code = "track_removed", message = "This track has been removed from WISP." }, statusCode: 404);
         if (!File.Exists(track.FilePath))
-            return Results.Problem(
-                title: "File not found on disk",
-                detail: track.FilePath,
-                statusCode: StatusCodes.Status410Gone);
+            return Results.Json(new { code = "file_missing", message = "Audio file not found. Connect its drive or use Relink audio file to choose a replacement." }, statusCode: 410);
 
         // Determine which file we'll actually stream. AIFF gets routed through the transcoder
         // because Chromium's <audio> element has no native AIFF decoder; everything else streams
@@ -139,13 +133,12 @@ public static class LibraryEndpoints
                 streamPath = await transcoder.GetOrCreateAsync(track.FilePath, track.FileHash, ct);
                 contentType = "audio/wav";
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 log.LogWarning(ex, "AIFF transcode failed for {Path}", track.FilePath);
-                return Results.Problem(
-                    title: "Transcode failed",
-                    detail: $"Could not convert AIFF to WAV: {ex.Message}",
-                    statusCode: StatusCodes.Status500InternalServerError);
+                return Results.Json(new { code = "audio_unreadable", message = ex is TranscodeException
+                    ? ex.Message : "WISP could not decode this AIFF file. It may be damaged or use an unsupported format. Try another copy using Relink audio file." }, statusCode: 422);
             }
         }
         else
@@ -485,6 +478,8 @@ public static class LibraryEndpoints
             _ => q.OrderBy(t => t.Artist == null).ThenBy(t => t.Artist).ThenBy(t => t.Title),
         };
 
+        // Stable tie-break for paging/select-all, including repeated artist/title/BPM values.
+        q = ((IOrderedQueryable<Track>)q).ThenBy(t => t.Id);
         var total = await q.CountAsync(ct);
         var items = await q.Skip((page - 1) * size).Take(size).ToListAsync(ct);
 

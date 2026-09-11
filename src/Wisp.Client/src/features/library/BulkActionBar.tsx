@@ -11,11 +11,11 @@ interface Props {
 }
 
 /// Renders above the library table whenever multi-selection is active.
-/// Hidden when only a single row is selected — single-row actions live in the
-/// inspector + the right-click menu.
+/// Hidden when only a single row is selected — avoids moving the row during a
+/// double-click. External file dragging lives in the stable library toolbar.
 export function BulkActionBar({ count, hasActivePlan, onAddToMix, onArchive, onTag, onAddToPlaylist, onClear }: Props) {
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/10 px-4 py-1.5 text-sm">
+    <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/10 px-4 py-1.5 text-sm">
       <span className="font-medium tabular-nums text-white">
         {count} tracks selected
       </span>

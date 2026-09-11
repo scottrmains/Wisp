@@ -47,6 +47,10 @@ export function LibraryFilters({ query, onChange, total }: Props) {
   return (
     <div className="flex flex-col gap-2 border-b border-[var(--color-border)] px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
+        <label className="inline-flex items-center gap-2 text-xs text-[var(--color-muted)]">
+          <input type="checkbox" checked={query.includeUnavailable ?? false} onChange={(e) => set('includeUnavailable', e.target.checked || undefined)} />
+          Include missing files
+        </label>
         <input
           value={query.search ?? ''}
           onChange={(e) => set('search', e.target.value || undefined)}

@@ -167,6 +167,7 @@ public class Program
             }));
 
             app.MapLibrary();
+            app.MapTrackFiles();
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();
@@ -404,6 +405,7 @@ public class Program
                     PhotinoHost.Run(
                         url,
                         app.Services.GetRequiredService<WispSettingsStore>(),
+                        app.Services,
                         devToolsEnabled: app.Environment.IsDevelopment());
                 }
                 finally

@@ -2,6 +2,110 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Adjustable library workspace and multi-file rekordbox handoff
+
+- **Layout:** library/playlist prep is now a bounded pane with a visible drag
+  divider. Its preferred height is remembered across sessions; resize also works
+  with arrow keys, Home/End, and double-click reset. Bounds account for the actual
+  surrounding toolbars so smaller windows retain track-list space. A fixed
+  transport header remains accessible while prep contents scroll independently.
+  Focus list collapses prep without stopping playback; Expand prep restores it.
+  Waveform/cue bank, detail tabs, and library filters can be shown/hidden separately
+  with persisted settings. Sidebar collapse remains available. Hidden active
+  filters are flagged in the toolbar. Empty playlists no longer hide the player.
+- **Selection:** Select all / Ctrl+A collects the full filtered library or active
+  playlist across API pages, not just the initial 500 rows or rendered viewport.
+  Counts, cancellation and failures are visible. Stable ID sort tie-breaking and
+  consistency checks prevent silently incomplete selections. Selection survives
+  page navigation but is discarded on playlist/filter/sort changes; revisiting a
+  previous scope does not restore stale selection. Previous/Next controls expose
+  the formerly unreachable pages. Existing Ctrl/Shift and internal WISP dragging
+  continue to work, with complete cross-page row payloads retained.
+- **External file drag:** the separate "Drag N files to rekordbox" handle starts
+  a Windows OLE copy-only drag with a standard Unicode CF_HDROP file list. The
+  desktop bridge accepts existing WISP track IDs and resolves the original files
+  from the library, rather than trusting arbitrary client-supplied paths. Missing
+  or removed files reject the whole request with an explanation; no silent
+  partial drag. Up to 20,000 selected tracks per native drag; Escape/releasing the
+  mouse cancels normally. No clipboard replacement, audio conversion, source
+  movement or WISP-library write is performed. Normal row drags retain their
+  internal WISP semantics; use the labelled handle for an external multi-file drag.
+- **Important distinction:** this hands off existing audio files, not a rekordbox
+  database, USB sync, WISP cues, or WISP-only playlist/metadata. Drop into the
+  desired rekordbox playlist and let rekordbox import/analyse the tracks. The UI
+  labels this as files-only and does not claim the target completed its import.
+- **Verified:** 197 backend + 28 client tests pass (9 new test cases), client build
+  and lint pass with 13 pre-existing warnings. A Windows native-data-object test
+  verifies COM IDataObject exposure, format enumeration, Unicode multi-file reads
+  via DragQueryFileW, and drag cancellation/drop feedback. Isolated Edge tests
+  verify pointer/keyboard resizing, uninterrupted playback in list-focus mode,
+  filters/toggle persistence, all 1,205 playlist IDs sent across multiple pages,
+  page navigation, scope-reset safety, and usable list bounds at 800x600.
+  Browser tests simulate the Photino bridge; no real rekordbox import was made.
+  **A live WISP-to-rekordbox desktop drop remains a user smoke check**, including
+  target file-format support and matching privilege level if Windows refuses a
+  cross-application drop. No USB/CDJ compatibility claims are added.
+- **Workflow:** feature PR into develop; no standalone executable or installer
+  generated. Existing NuGet advisories are unchanged. Working library, music and
+  settings were not changed during verification.
+- Native protocol references: [Windows file-drop formats](https://learn.microsoft.com/en-us/windows/win32/shell/clipboard),
+  [OLE drop-source behaviour](https://learn.microsoft.com/en-us/windows/win32/api/oleidl/nn-oleidl-idropsource).
+
+## 2026-09-11: Track-file recovery and safe library removal
+
+- **Diagnosis:** the Olive entry still referenced the deleted filename ending
+  `Remaster .aiff`; the replacement had a different filename and was not linked.
+  The previous file also produced an unsupported AIFC error. That error alone
+  cannot distinguish corruption from an unsupported encoding; the user reported
+  that external playback failed as well. The replacement fully decodes (280.291s).
+- **Relink audio file:** available from the library/playlist row context menu,
+  track-prep action row, and actionable playback-error banner. Desktop Browse
+  opens a native audio-file chooser; the WISP-styled modal also accepts a full
+  path for browser development. Validation decodes the entire candidate before
+  committing its path, fingerprint, duration and file dates. It preserves track
+  identity, added date, curated metadata, notes, tags, editorial/device cues,
+  playlist membership and mix-plan prep. Missing metadata is filled where possible.
+  Same-path replacements are supported; duplicate links (case-insensitive), stale
+  dialogs, missing/non-audio files, decode failures and busy-library changes are
+  rejected with a reason and no relink. No source file is copied, moved or edited.
+- **Remove from WISP:** explicit modal confirmation explains deletion of the
+  library entry and its prep/playlist/mix-plan references. Audio files stay on
+  disk. Wanted matches reset; cleanup history is retained, with old file-changing
+  undo actions marked Superseded after removal/relink so they cannot restore the
+  previous path. Archive remains the non-destructive way to hide an entry and
+  retain all prep. Scans, cleanup and recovery serialize their file-link changes.
+- **Recovery feedback:** Include missing files exposes retained unavailable
+  tracks, with a missing-file indicator. Playback distinguishes missing files,
+  unreadable/unsupported audio and connection failures, with Retry and Relink.
+  Per-track audio revisions refresh all loaded decks and waveform views after a
+  relink, without reusing pre-relink in-flight waveform results or failed loads.
+  Relinking pauses the main player; cue timestamps are retained, not retimed.
+- **AIFF handling:** existing standard PCM conversion remains. Unsupported AIFF
+  variants fall back to the configured/bundled/PATH FFmpeg and a disposable 24-bit
+  PCM WAV for browser playback. Float conversion is not claimed bit-perfect;
+  source files and USB-export audio are unchanged. Versioned source-sensitive
+  cache paths and unique temporary files prevent old/partial or competing
+  player/waveform requests from corrupting the cache. Cancellation cleans up.
+  Also corrected fingerprinting of files between 1 and 2 MiB, found during review.
+- **Verification:** 193 backend + 23 client tests pass (19 new cases). Tests cover
+  prep/identity preservation, same-path replacement, duplicate/stale/busy paths,
+  invalid candidates, removal cascades without file deletion, waveform revision
+  races, AIFF concurrent conversion/cancellation, and the fingerprint boundary.
+  An isolated HTTP host and Edge browser exercised missing-file errors, modal
+  cancellation, real invalid/valid file validation, relink, rebuilt waveform,
+  actual playback, and confirmed library removal with the file still present.
+  A real floating-point AIFC fixture passed the FFmpeg fallback. The user's Olive
+  replacement was read/decoded only and its SHA-256 remained unchanged; the
+  working WISP library/configuration were not modified. Native file-picker API
+  compiled; OS chooser interaction still needs a desktop smoke check.
+- **Limits:** cue/loop timing must be checked if a replacement has different
+  content or duration; no automatic retiming or duplicate-entry merging. Relink
+  validation requires FFmpeg and times out after three minutes. A future scan can
+  import a removed file again as a new entry (the removal modal explains this).
+  Original discovery/import rules and CDJ compatibility are unchanged. Existing
+  13 client lint warnings and NuGet advisories remain. No standalone executable
+  or installer is built for this feature branch; release remains main-push only.
+
 ## 2026-09-11: Discover Anywhere track-search reliability
 
 - **Root cause verified live:** `Brent Laurence - Big Buds`, video

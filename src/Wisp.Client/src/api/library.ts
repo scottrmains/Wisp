@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from './client'
+import { apiDelete, apiGet, apiPost, apiPut } from './client'
 import type {
   Recommendation,
   RecommendationMode,
@@ -15,7 +15,7 @@ export const library = {
 }
 
 export const tracks = {
-  list: (q: TrackQuery = {}) => {
+  list: (q: TrackQuery = {}, signal?: AbortSignal) => {
     // `tag` is an array — apiGet's query-string helper only handles scalars, so flatten manually.
     const { tag, ...rest } = q
     const url = new URL('/api/tracks', window.location.origin)
@@ -24,9 +24,12 @@ export const tracks = {
       url.searchParams.set(k, String(v))
     }
     if (tag) for (const t of tag) url.searchParams.append('tag', t)
-    return apiGet<TrackPage>(url.pathname + url.search)
+    return apiGet<TrackPage>(url.pathname + url.search, undefined, signal)
   },
   get: (id: string) => apiGet<Track>(`/api/tracks/${id}`),
+  relink: (id: string, filePath: string, expectedFilePath: string) =>
+    apiPut<Track>(`/api/tracks/${id}/file`, { filePath, expectedFilePath }),
+  remove: (id: string) => apiDelete(`/api/tracks/${id}`),
   recommendations: (id: string, opts: {
     mode?: RecommendationMode
     limit?: number

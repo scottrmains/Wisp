@@ -6,6 +6,9 @@ import { usePlayer } from '../../state/player'
 import { useUiPrefs, type InspectorTab as Tab } from '../../state/uiPrefs'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useCues } from '../cues/useCues'
+import { useTrackFileDialog } from './TrackFileDialog'
+import { PlaybackError } from '../player/PlaybackError'
+import { useAudioFiles } from '../../audio/audioFiles'
 import {
   AlertTriangle,
   Archive,
@@ -73,6 +76,8 @@ export function TrackPrepWorkspace({
   focusTab,
 }: Props) {
   const trackId = usePlayer((s) => s.trackId)
+  const playbackError = usePlayer((s) => s.error)
+  const audioRevision = useAudioFiles((s) => s.revisions[trackId ?? ''] ?? 0)
   // Fetch the loaded track's metadata so we can show title/artist/chips/etc.
   // Same query the MiniPlayer uses — TanStack caches it cross-component.
   const trackQuery = useQuery({
@@ -86,6 +91,10 @@ export function TrackPrepWorkspace({
   const setLastTab = useUiPrefs((s) => s.setLastInspectorTab)
   const collapsed = useUiPrefs((s) => s.inspectorCollapsed)
   const toggleCollapsed = useUiPrefs((s) => s.toggleInspectorCollapsed)
+  const waveformVisible = useUiPrefs((s) => s.prepWaveformVisible)
+  const detailsVisible = useUiPrefs((s) => s.prepDetailsVisible)
+  const toggleWaveform = useUiPrefs((s) => s.togglePrepWaveform)
+  const toggleDetails = useUiPrefs((s) => s.togglePrepDetails)
 
   // The "Overview" tab made sense in the side panel — it summarised key metadata
   // because the side panel was narrow. In the wide workspace, Overview's content
@@ -94,6 +103,8 @@ export function TrackPrepWorkspace({
   const [tab, setTab] = useState<Tab>(lastTab === 'overview' ? 'recommendations' : lastTab)
 
   const switchTab = (next: Tab) => {
+    useUiPrefs.getState().setInspectorCollapsed(false)
+    if (!useUiPrefs.getState().prepDetailsVisible) useUiPrefs.getState().togglePrepDetails()
     setTab(next)
     setLastTab(next)
   }
@@ -101,6 +112,8 @@ export function TrackPrepWorkspace({
   // Honour parent-driven tab focus (R shortcut, ✨ Find matches button).
   useEffect(() => {
     if (focusTab) {
+      useUiPrefs.getState().setInspectorCollapsed(false)
+      if (!useUiPrefs.getState().prepDetailsVisible) useUiPrefs.getState().togglePrepDetails()
       setTab(focusTab)
       setLastTab(focusTab)
     }
@@ -185,6 +198,8 @@ export function TrackPrepWorkspace({
   const autoCueAttemptedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (!trackId || !track) return
+    // Relinking preserves prep; do not generate new suggestions over it.
+    if (audioRevision > 0) return
     if (cuesHook.loading) return
     if (autoCueAttemptedRef.current.has(trackId)) return
 
@@ -242,7 +257,7 @@ export function TrackPrepWorkspace({
       cancelled = true
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId, cuesHook.loading])
+  }, [trackId, cuesHook.loading, audioRevision])
 
   // Hotkeys: Q adds a cue (at the magnifier hover position if the cursor is
   // over the waveform, otherwise at the playhead); 1-8 jump to the Nth cue.
@@ -282,9 +297,8 @@ export function TrackPrepWorkspace({
 
   // Collapsed mode — slim strip with title + play + close. Keeps the workspace
   // mounted (waveform component cached) but reclaims most vertical space.
-  if (collapsed) {
-    return (
-      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
+  const transport = (
+      <div className="flex min-h-12 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
         <button
           onClick={togglePlay}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-white"
@@ -304,13 +318,19 @@ export function TrackPrepWorkspace({
             {track.version ? ` · ${track.version}` : ''}
           </p>
         </div>
+        {!collapsed && <>
+          <button aria-pressed={waveformVisible} title={waveformVisible ? 'Hide waveform and cue bank' : 'Show waveform and cue bank'} onClick={toggleWaveform} className="rounded border border-[var(--color-border)] px-2 py-1 text-xs aria-pressed:bg-[var(--color-accent)]/15 aria-pressed:text-[var(--color-accent)]">Waveform</button>
+          <button aria-pressed={detailsVisible} title={detailsVisible ? 'Hide detail tabs' : 'Show detail tabs'} onClick={toggleDetails} className="rounded border border-[var(--color-border)] px-2 py-1 text-xs aria-pressed:bg-[var(--color-accent)]/15 aria-pressed:text-[var(--color-accent)]">Details</button>
+        </>}
+        <span className="text-xs tabular-nums text-[var(--color-muted)]">{formatDuration(liveTime)} / {formatDuration(duration)}</span>
         <button
           onClick={toggleCollapsed}
-          className="text-[var(--color-muted)] hover:text-white"
-          title="Expand workspace"
-          aria-label="Expand workspace"
+          className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] px-2 py-1 text-xs hover:text-white"
+          title={collapsed ? 'Expand track preparation' : 'Focus on the list without stopping playback'}
+          aria-expanded={!collapsed}
         >
-          <ChevronDown size={16} strokeWidth={1.75} />
+          {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          {collapsed ? 'Expand prep' : 'Focus list'}
         </button>
         <button
           onClick={handleClose}
@@ -322,12 +342,15 @@ export function TrackPrepWorkspace({
         </button>
       </div>
     )
-  }
+  if (collapsed) return transport
 
   return (
-    <div className="flex shrink-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+    <div className="flex h-full min-h-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+      {transport}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <PlaybackError track={track} error={playbackError} />
       {/* Top: waveform + close/collapse buttons floating top-right */}
-      <div className="relative flex gap-3 px-3 pt-3">
+      {waveformVisible && <div className="relative flex gap-3 px-3 pt-3">
         <div className="min-w-0 flex-1">
           <BandedWaveform
             trackId={track.id}
@@ -360,38 +383,7 @@ export function TrackPrepWorkspace({
             setTimeout(() => seek(seconds), 50)
           }}
         />
-        <div className="absolute right-4 top-4 flex items-center gap-1">
-          <button
-            onClick={toggleCollapsed}
-            className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-[var(--color-muted)] hover:text-white"
-            title="Collapse workspace (keeps playback)"
-            aria-label="Collapse workspace"
-          >
-            <ChevronUp size={14} strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={handleClose}
-            className="flex h-6 w-6 items-center justify-center rounded bg-[var(--color-bg)]/80 text-[var(--color-muted)] hover:text-white"
-            title="Close workspace (stops playback)"
-            aria-label="Close workspace"
-          >
-            <X size={14} strokeWidth={1.75} />
-          </button>
-        </div>
-      </div>
-
-      {/* Title + version */}
-      <div className="px-4 pt-2">
-        <h2 className="truncate text-base font-semibold" title={track.title ?? ''}>
-          {track.title ?? track.fileName}
-          {track.version && (
-            <span className="ml-2 text-sm font-normal text-[var(--color-muted)]">({track.version})</span>
-          )}
-        </h2>
-        <p className="truncate text-sm text-[var(--color-muted)]" title={track.artist ?? ''}>
-          {track.artist ?? 'Unknown artist'}
-        </p>
-      </div>
+      </div>}
 
       {/* Pill row */}
       <div className="flex flex-wrap items-center gap-2 px-4 pt-2 text-xs">
@@ -467,10 +459,12 @@ export function TrackPrepWorkspace({
           </ActionButton>
         )}
         <ConvertToMp3Button track={track} />
+        <button onClick={() => useTrackFileDialog.getState().open(track, 'relink')} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs">Relink audio file…</button>
+        <button onClick={() => useTrackFileDialog.getState().open(track, 'remove')} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs text-red-300">Remove from WISP…</button>
       </div>
 
       {/* Tab bar */}
-      <nav className="flex overflow-x-auto border-t border-[var(--color-border)] text-xs">
+      {detailsVisible && <><nav className="flex overflow-x-auto border-t border-[var(--color-border)] text-xs">
         {TABS.map((t) => (
           <TabButton
             key={t.id}
@@ -484,7 +478,7 @@ export function TrackPrepWorkspace({
 
       {/* Tab content — capped height so the library table below stays usable.
           Each tab is internally scrollable. */}
-      <div className="max-h-[14rem] min-h-0 overflow-hidden border-t border-[var(--color-border)]">
+      <div className="min-h-0 border-t border-[var(--color-border)]">
         {tab === 'recommendations' && (
           <RecommendationsList seed={track} onAddToChain={onAddToChain} />
         )}
@@ -493,6 +487,7 @@ export function TrackPrepWorkspace({
         {tab === 'tags' && <TagsTab track={track} />}
         {tab === 'metadata' && <MetadataTab track={track} />}
         {tab === 'overview' && <OverviewTab track={track} />}
+      </div></>}
       </div>
     </div>
   )
