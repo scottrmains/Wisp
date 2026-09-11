@@ -6,6 +6,8 @@ export interface Track {
   playlistEntryId?: string | null
   filePath: string
   fileName: string
+  audioVersion?: 'original' | 'normalized'
+  hasNormalizedVersion?: boolean
   artist: string | null
   title: string | null
   version: string | null

@@ -42,6 +42,7 @@ import { ExternalFileDrag } from './ExternalFileDrag'
 import { useExternalFileDrag } from './useExternalFileDrag'
 import { RemoveFromPlaylistDialog, type PlaylistRemoval } from './RemoveFromPlaylistDialog'
 import { PlaylistDuplicatesDialog } from './PlaylistDuplicatesDialog'
+import { LoudnessDialog } from './LoudnessDialog'
 import { collectSelection, selectionScope, trackRowId, uniqueTrackIds } from './librarySelection'
 
 const EMPTY_SELECTION = new Set<string>()
@@ -73,6 +74,7 @@ export function LibraryPage() {
   const [addToPlaylistIds, setAddToPlaylistIds] = useState<string[] | null>(null)
   const [contextMenu, setContextMenu] = useState<{ track: Track; x: number; y: number } | null>(null)
   const [playlistRemoval, setPlaylistRemoval] = useState<PlaylistRemoval | null>(null)
+  const [loudnessIds, setLoudnessIds] = useState<string[] | null>(null)
   const [duplicateScan, setDuplicateScan] = useState<{ id: string; name: string } | null>(null)
   const [playlistNotice, setPlaylistNotice] = useState<{ scope: string; message: string } | null>(null)
 
@@ -313,6 +315,7 @@ export function LibraryPage() {
         label: isMulti ? `Add ${opIds.length} to playlist…` : 'Add to playlist…',
         onSelect: () => setAddToPlaylistIds(opIds),
       },
+      { id: 'loudness', icon: Sparkles, label: 'Loudness & audio versions…', onSelect: () => setLoudnessIds(opIds) },
       ...(activePlaylistId ? [{
         id: 'remove-from-playlist', icon: X, label: 'Remove from playlist…',
         onSelect: () => removeFromPlaylist(selectedIds.has(trackRowId(rowTrack)) ? selectedRows : [rowTrack]),
@@ -339,8 +342,8 @@ export function LibraryPage() {
       },
       {
         id: 'cleanup', icon: AlertTriangle, label: 'Cleanup…',
-        disabled: isMulti || (!rowTrack.isDirtyName && !rowTrack.isMissingMetadata),
-        disabledReason: isMulti ? 'Single track only' : 'No cleanup suggested',
+        disabled: isMulti || rowTrack.audioVersion === 'normalized' || (!rowTrack.isDirtyName && !rowTrack.isMissingMetadata),
+        disabledReason: isMulti ? 'Single track only' : rowTrack.audioVersion === 'normalized' ? 'Switch to original before cleanup' : 'No cleanup suggested',
         onSelect: () => setCleanupTarget(rowTrack),
       },
       {
@@ -519,6 +522,7 @@ export function LibraryPage() {
         </button>
         {selectingAll && <button onClick={() => selectionRequest.current?.abort()} className="underline">Cancel selection</button>}
         <span className="text-[var(--color-muted)]">Drag rows to WISP playlists</span>
+        <button disabled={!selectedTrackIds.length} onClick={() => setLoudnessIds(selectedTrackIds)} className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40">Loudness & versions…</button>
         {activePlaylist && <button onClick={() => setDuplicateScan({ id: activePlaylist.id, name: activePlaylist.name })}
           title="Check the whole playlist for repeated tracks, then review before removing."
           className="rounded border border-[var(--color-border)] px-2 py-1">Scan for duplicates…</button>}
@@ -585,6 +589,8 @@ export function LibraryPage() {
           changeQuery({ ...query, page: 1 })
           setPlaylistNotice({ scope: scopeKey, message: `${count} duplicate playlist ${count === 1 ? 'entry' : 'entries'} removed. One entry per track kept; your library and audio files are unchanged.` })
         }} />}
+
+      {loudnessIds && <LoudnessDialog ids={loudnessIds} onClose={() => setLoudnessIds(null)} />}
 
       {recentAudit && (
         <UndoToast audit={recentAudit} onDismiss={() => setRecentAudit(null)} />

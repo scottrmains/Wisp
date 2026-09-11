@@ -26,6 +26,8 @@ public class CleanupApplier(
     {
         var track = await db.Tracks.FirstOrDefaultAsync(t => t.Id == trackId, ct)
             ?? throw new InvalidOperationException($"Track {trackId} not found");
+        if (track.NormalizedFilePath is not null && string.Equals(track.FilePath, track.NormalizedFilePath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Switch to the original for cleanup, then rescan and create a fresh normalised copy. Generated audio versions are kept unchanged.");
 
         var suggestion = suggestions.Suggest(track);
         if (!suggestion.HasChanges)
@@ -79,6 +81,7 @@ public class CleanupApplier(
             }
 
             // 3. Update DB row.
+            UpdateVersionPath(track, after.FilePath);
             track.FilePath = after.FilePath;
             track.FileName = after.FileName;
             track.Artist = after.Artist;
@@ -145,6 +148,7 @@ public class CleanupApplier(
             var track = await db.Tracks.FirstOrDefaultAsync(t => t.Id == audit.TrackId, ct);
             if (track is not null)
             {
+                UpdateVersionPath(track, before.FilePath);
                 track.FilePath = before.FilePath;
                 track.FileName = before.FileName;
                 track.Artist = before.Artist;
@@ -165,6 +169,15 @@ public class CleanupApplier(
             log.LogError(ex, "Undo failed for audit {Id}", auditId);
             throw;
         }
+    }
+
+    private static void UpdateVersionPath(Track track, string next)
+    {
+        if (string.Equals(track.FilePath, track.OriginalFilePath, StringComparison.OrdinalIgnoreCase))
+            track.OriginalFilePath = next;
+        if (string.Equals(track.FilePath, track.NormalizedFilePath, StringComparison.OrdinalIgnoreCase))
+            track.NormalizedFilePath = next;
+        track.LoudnessAnalysisJson = null;
     }
 
     private static void WriteTags(string path, TrackSnapshot snapshot)

@@ -46,6 +46,8 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
         // Upgrade an existing pre-feature playlist, not only a fresh empty database.
         await db.GetService<IMigrator>().MigrateAsync("20260911092412_AddDiscoveryPublishedAt");
+        await using var seed = new PreAudioVersionsContext(scope.ServiceProvider.GetRequiredService<DbContextOptions<WispDbContext>>());
+        db = seed;
         db.Tracks.AddRange(
             new Track { Id = _first, FilePath = Audio, FileName = "original.aiff", Title = "A track", Artist = "Artist", Notes = "Keep notes", Bpm = 125, MusicalKey = "8A", Energy = 5 },
             new Track { Id = _second, FilePath = Path.Combine(_root, "second.mp3"), FileName = "second.mp3", Title = "B track", Artist = "Artist", Bpm = 130, MusicalKey = "9A", Energy = 6 });
@@ -57,6 +59,7 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         db.TrackTags.Add(new TrackTag { Id = Guid.NewGuid(), TrackId = _first, Name = "Keep tag" });
         db.MixPlans.Add(new MixPlan { Id = Guid.NewGuid(), Name = "Keep mix", Tracks = [new MixPlanTrack { Id = Guid.NewGuid(), TrackId = _first }] });
         await db.SaveChangesAsync();
+        db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
         await db.Database.MigrateAsync();
         Assert.Equal(2, await db.PlaylistTracks.CountAsync());
         await _app.StartAsync(); _client = _app.GetTestClient();
@@ -270,6 +273,16 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, (await RemoveDuplicates("")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync($"/api/playlists/{Guid.NewGuid()}/duplicates")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await RemoveDuplicates(scan.Snapshot, Guid.NewGuid())).StatusCode);
+    }
+
+    private sealed class PreAudioVersionsContext(DbContextOptions<WispDbContext> options) : WispDbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+            builder.Entity<Track>().Ignore(t => t.OriginalFilePath).Ignore(t => t.NormalizedFilePath)
+                .Ignore(t => t.LoudnessAnalysisJson).Ignore(t => t.NormalizationJson);
+        }
     }
 
     public async Task DisposeAsync()

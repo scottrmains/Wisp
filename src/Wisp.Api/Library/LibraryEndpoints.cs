@@ -117,6 +117,11 @@ public static class LibraryEndpoints
     {
         var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (track is null) return Results.Json(new { code = "track_removed", message = "This track has been removed from WISP." }, statusCode: 404);
+        return await StreamTrackAudio(track, transcoder, log, ct);
+    }
+
+    internal static async Task<IResult> StreamTrackAudio(Track track, AiffTranscoder transcoder, ILogger<AiffTranscoder> log, CancellationToken ct)
+    {
         if (!File.Exists(track.FilePath))
             return Results.Json(new { code = "file_missing", message = "Audio file not found. Connect its drive or use Relink audio file to choose a replacement." }, statusCode: 410);
 

@@ -51,6 +51,16 @@ public class LibraryScanner(
                 .Where(t => EF.Functions.Like(t.FilePath, rootPrefix + "%"))
                 .ToDictionaryAsync(t => t.FilePath, StringComparer.OrdinalIgnoreCase, cancellationToken);
             var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var versions = await db.Tracks.Where(t => t.OriginalFilePath != null || t.NormalizedFilePath != null)
+                .Select(t => new { t.FilePath, t.OriginalFilePath, t.NormalizedFilePath }).ToListAsync(cancellationToken);
+            var inactivePaths = versions.SelectMany(t => new[] { t.OriginalFilePath, t.NormalizedFilePath }
+                    .Where(p => p != null && !string.Equals(p, t.FilePath, StringComparison.OrdinalIgnoreCase)))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // Generated files are deliberately excluded from discovery. Still
+            // check the active copy's availability without re-importing metadata.
+            foreach (var (path, track) in existingByPath)
+                if (Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path) && File.Exists(path))
+                { seenPaths.Add(path); track.IsUnavailable = false; track.UnavailableSince = null; }
 
             // 3. Process each file.
             var stopwatch = Stopwatch.StartNew();
@@ -58,6 +68,8 @@ public class LibraryScanner(
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 seenPaths.Add(path);
+                if (inactivePaths.Contains(path) || Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path))
+                { job.SkippedFiles++; continue; }
 
                 try
                 {

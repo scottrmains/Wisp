@@ -15,6 +15,7 @@ public sealed record WispSettings
     /// (Phase 23). When null, discovery falls back to a bundled
     /// `ffmpeg.exe` next to `Wisp.exe`, then PATH.
     public string? FfmpegPath { get; init; }
+    public string? NormalizationMusicFolder { get; init; }
 }
 
 public sealed record WindowState(int Width, int Height, int? X, int? Y);

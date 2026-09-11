@@ -2,6 +2,73 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Non-destructive loudness normalisation and linked audio versions
+
+- **Workflow:** select one or many library/playlist tracks (Ctrl+A spans pages),
+  then use **Loudness & versions…** in the toolbar or **Loudness & audio versions…**
+  in the row menu. Scan selected originals, review LUFS/true peaks/safe gain and
+  flags, choose the main music folder, and explicitly create normalised copies.
+  Creation leaves the original active. Preview either version without activating
+  it, then use **Use normalised / Use original** per track or the batch controls.
+  Switching pauses the loaded track and invalidates cached audio/waveforms.
+- **Audio processing:** FFmpeg `loudnorm` performs full-track EBU R128 measurement
+  on the stereo/44.1 kHz render format. Target is configurable from -30 to -9 LUFS
+  (default -14, not claimed as a DJ standard). Default safe mode uses constant gain
+  `min(target - measured LUFS, -1.2 - measured true peak)`; it preserves dynamics
+  and flags tracks that cannot reach target without limiting. **Allow limiting**
+  is off by default and explicitly enables measured two-pass dynamic loudnorm
+  where needed. Output is re-measured, checked against a -1 dBTP ceiling (0.05 dB
+  measurement tolerance) and a 0.05-second duration tolerance before linking.
+  This does not denoise/declick/remaster vinyl rips; gain raises their noise too.
+- **Files:** new stereo 24-bit PCM WAV, 44.1 kHz, under
+  `<chosen music folder>/WISP Normalized/<track ID>/<name>-normalized-<unique ID>.wav`.
+  No original overwrite, replacement or MP3 re-encoding. Curated title/artist/
+  album/genre and a normalisation comment accompany copied source metadata where
+  WAV supports it; WISP prep stays on the same library identity. Source audio,
+  cue timestamps, tags, notes, playlist entries and mix membership are preserved.
+  The chosen folder is remembered; WAV copies can be substantially larger.
+- **Persistent version metadata:** nullable track fields store the original path,
+  latest normalised path, analysis/source SHA-256 fingerprint and measurements,
+  target, actual gain, limiting choice, output fingerprint and creation time.
+  FilePath always denotes the explicitly active version, so existing playback,
+  drag and export paths consume that version consistently. The library File
+  column shows **Normalised** or **Original · copy saved**. Version details expose
+  both paths and processing information. Regeneration never deletes older output
+  files; the UI links the original and latest generated version, not a full history.
+- **Safety/integration:** full source fingerprint revalidation rejects stale
+  analysis; read sharing blocks source edits while processing on Windows. Native
+  operations use a shared library/file gate, argument-list process invocation,
+  cancellation/timeout process termination and unique no-overwrite output paths.
+  Failed uncommitted outputs are removed; crashes may leave unlinked files in the
+  reserved folder, which is excluded from imports. Create retries reuse a verified
+  existing output for the same analysis/options. Missing/changed files block
+  activation with actionable feedback. Junction/symlink output trees are rejected.
+  Rescans ignore inactive originals and generated copies as new tracks, while
+  checking availability of the active generated version. Cleanup requires the
+  original active; source renames update the original link and invalidate analysis.
+  Relink explicitly detaches version metadata (with a warning) without deleting
+  either file. Version switching supersedes unsafe old cleanup undo records.
+- **Migration:** `20260911161546_AddTrackAudioVersions` adds four nullable columns;
+  existing library/prep rows survive. Downgrade refuses to discard original links
+  while normalised copies are active; switch back first. Downgrade removes stored
+  analysis/version links but never deletes music files.
+- **Verified:** 222 backend + 38 client unit + 27 browser tests pass (287 total).
+  Real FFmpeg fixtures verify target matching, peak-capped constant gain, explicit
+  limiting, silence rejection, cancellation, output format/duration and original
+  byte preservation. Isolated API tests cover switching/drag-path resolution,
+  retained cues/playlists, stale/missing files, failed-render cleanup, idempotent
+  retries, regeneration, persistence, scanner exclusion and downgrade protection.
+  Browser tests cover the batch scan/create/switch flow, target changes, opt-in
+  limiting, error/retry, cancellation across result pages and missing FFmpeg;
+  the 800x600 modal screenshot was visually checked. Client build/lint pass (13
+  existing warnings); EF reports no pending model changes. Existing NuGet
+  advisories are unchanged. CI now prepares FFmpeg for real audio validation;
+  installers remain exclusive to main pushes.
+- **Boundary:** tests used generated audio, isolated databases/config and mocked
+  browser responses—not the user's music, live library or installed application.
+  No local installer was generated. Normalised files have not been hardware-tested
+  on CDJs, and this feature makes no new USB-format/cue compatibility claim.
+
 ## 2026-09-11: Playlist duplicate scan and confirmed cleanup
 
 - **Entry point:** open a playlist and use **Scan for duplicates…** in its toolbar.

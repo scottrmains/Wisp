@@ -276,7 +276,10 @@ export function LibraryTable({
               <Cell value={formatDuration(t.durationSeconds)} align="right" muted />
               <Cell value={formatTrackDate(t.addedAt)} muted />
               <Cell value={formatTrackDate(t.fileModifiedAt)} muted />
-              <Cell value={t.fileName} truncate muted tertiary />
+              <div className="flex min-w-0 items-center gap-2 px-3 text-sm text-[var(--color-muted)]/70" title={t.filePath}>
+                {t.hasNormalizedVersion && <span className="shrink-0 rounded border border-[var(--color-accent)]/40 px-1 text-[10px] text-[var(--color-accent)]">{t.audioVersion === 'normalized' ? 'Normalised' : 'Original · copy saved'}</span>}
+                <span className="truncate">{t.fileName}</span>
+              </div>
             </div>
           )
         })}

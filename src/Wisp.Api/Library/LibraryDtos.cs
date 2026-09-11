@@ -49,7 +49,9 @@ public sealed record TrackDto(
     bool IsArchived,
     DateTime? ArchivedAt,
     string? ArchiveReason,
-    Guid? PlaylistEntryId = null)
+    Guid? PlaylistEntryId = null,
+    string AudioVersion = "original",
+    bool HasNormalizedVersion = false)
 {
     public static TrackDto From(Track t) => new(
         t.Id, t.FilePath, t.FileName,
@@ -59,7 +61,9 @@ public sealed record TrackDto(
         DateTime.SpecifyKind(t.AddedAt, DateTimeKind.Utc),
         t.FileModifiedAt is { } modified ? DateTime.SpecifyKind(modified, DateTimeKind.Utc) : null,
         t.LastScannedAt, t.Notes,
-        t.IsArchived, t.ArchivedAt, t.ArchiveReason?.ToString());
+        t.IsArchived, t.ArchivedAt, t.ArchiveReason?.ToString(),
+        AudioVersion: t.NormalizedFilePath is not null && string.Equals(t.FilePath, t.NormalizedFilePath, StringComparison.OrdinalIgnoreCase) ? "normalized" : "original",
+        HasNormalizedVersion: t.NormalizedFilePath is not null);
 }
 
 public sealed record TrackPageDto(IReadOnlyList<TrackDto> Items, int Total, int Page, int Size);

@@ -79,6 +79,7 @@ function FileDialog({ track, mode }: Target) {
             : 'Choose the replacement for this track. WISP will check that it decodes before saving the link. Existing metadata, cues, notes, tags and playlist entries are kept. Cue times are not adjusted: check them if the version, intro or length differs.'}
       </p>
       {!finished && <>
+        {!removing && track.hasNormalizedVersion && <p className="mt-3 text-sm text-amber-300">Relinking detaches the existing original/normalised version links. Both files stay on disk. To switch between them, use Loudness & audio versions instead.</p>}
         <p className="mt-4 text-xs text-[var(--color-muted)]">Currently linked file</p>
         <p className="mt-1 break-all rounded border border-[var(--color-border)] p-2 text-xs">{track.filePath}</p>
         {!removing && <div className="mt-4">
