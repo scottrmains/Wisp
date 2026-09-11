@@ -11,6 +11,7 @@ public enum CleanupStatus
     Applied,
     RolledBack,
     Failed,
+    Superseded,
 }
 
 public class MetadataAuditLog

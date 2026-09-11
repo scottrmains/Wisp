@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAudioFiles } from '../../audio/audioFiles'
 import { getCachedPeaks, loadPeaks } from '../../audio/peaks'
 import type { CuePoint } from '../../api/types'
 
@@ -13,6 +14,7 @@ interface Props {
 
 /// Canvas waveform of the track. Click to seek. Live playhead overlay.
 export function WaveformView({ trackId, duration, currentTime, onSeek, cues, height = 72 }: Props) {
+  const revision = useAudioFiles((s) => s.revisions[trackId] ?? 0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(() => getCachedPeaks(trackId) ?? null)
@@ -25,6 +27,7 @@ export function WaveformView({ trackId, duration, currentTime, onSeek, cues, hei
     const cached = getCachedPeaks(trackId)
     if (cached) {
       setPeaks(cached)
+      setLoading(false)
       return
     }
     let cancelled = false
@@ -43,7 +46,7 @@ export function WaveformView({ trackId, duration, currentTime, onSeek, cues, hei
     return () => {
       cancelled = true
     }
-  }, [trackId])
+  }, [trackId, revision])
 
   // Draw the waveform whenever peaks or size changes.
   useEffect(() => {

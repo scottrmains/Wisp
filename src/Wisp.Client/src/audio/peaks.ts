@@ -1,3 +1,5 @@
+import { audioKey, audioUrl, audioResponseError } from './audioFiles'
+
 /// Compute downsampled waveform peaks for a track.
 /// Caches per trackId; the full PCM is GC'd after extraction.
 const singleCache = new Map<string, Float32Array>()
@@ -27,28 +29,29 @@ export interface BandedPeaks {
 }
 
 export function getCachedPeaks(trackId: string): Float32Array | undefined {
-  return singleCache.get(trackId)
+  return singleCache.get(audioKey(trackId))
 }
 
 export function getCachedBandedPeaks(trackId: string): BandedPeaks | undefined {
-  return bandedCache.get(trackId)
+  return bandedCache.get(audioKey(trackId))
 }
 
 export async function loadPeaks(trackId: string): Promise<Float32Array> {
-  const cached = singleCache.get(trackId)
+  const key = audioKey(trackId)
+  const cached = singleCache.get(key)
   if (cached) return cached
 
-  const existing = singleInflight.get(trackId)
+  const existing = singleInflight.get(key)
   if (existing) return existing
 
   const promise = computePeaks(trackId)
-  singleInflight.set(trackId, promise)
+  singleInflight.set(key, promise)
   try {
     const peaks = await promise
-    singleCache.set(trackId, peaks)
+    singleCache.set(key, peaks)
     return peaks
   } finally {
-    singleInflight.delete(trackId)
+    singleInflight.delete(key)
   }
 }
 
@@ -56,26 +59,27 @@ export async function loadPeaks(trackId: string): Promise<Float32Array> {
 /// (lowpass → bandpass → highpass) so we get per-band amplitude envelopes.
 /// Drives the Mixed-in-Key style mini-player waveform.
 export async function loadBandedPeaks(trackId: string): Promise<BandedPeaks> {
-  const cached = bandedCache.get(trackId)
+  const key = audioKey(trackId)
+  const cached = bandedCache.get(key)
   if (cached) return cached
 
-  const existing = bandedInflight.get(trackId)
+  const existing = bandedInflight.get(key)
   if (existing) return existing
 
   const promise = computeBandedPeaks(trackId)
-  bandedInflight.set(trackId, promise)
+  bandedInflight.set(key, promise)
   try {
     const peaks = await promise
-    bandedCache.set(trackId, peaks)
+    bandedCache.set(key, peaks)
     return peaks
   } finally {
-    bandedInflight.delete(trackId)
+    bandedInflight.delete(key)
   }
 }
 
 async function computePeaks(trackId: string): Promise<Float32Array> {
-  const res = await fetch(`/api/tracks/${trackId}/audio`)
-  if (!res.ok) throw new Error(`Failed to fetch audio for peaks: ${res.status}`)
+  const res = await fetch(audioUrl(trackId))
+  if (!res.ok) throw new Error(await audioResponseError(res))
   const buffer = await res.arrayBuffer()
 
   const probe = new OfflineAudioContext({ numberOfChannels: 1, length: 1, sampleRate: 44100 })
@@ -84,8 +88,8 @@ async function computePeaks(trackId: string): Promise<Float32Array> {
 }
 
 async function computeBandedPeaks(trackId: string): Promise<BandedPeaks> {
-  const res = await fetch(`/api/tracks/${trackId}/audio`)
-  if (!res.ok) throw new Error(`Failed to fetch audio for peaks: ${res.status}`)
+  const res = await fetch(audioUrl(trackId))
+  if (!res.ok) throw new Error(await audioResponseError(res))
   const arrayBuffer = await res.arrayBuffer()
 
   // Decode once. We pass a slice() to insulate against decodeAudioData detaching the buffer

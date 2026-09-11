@@ -36,6 +36,7 @@ import {
 import { RowContextMenu, type ContextMenuItem } from './RowContextMenu'
 import { TrackPrepWorkspace } from './TrackPrepWorkspace'
 import { useScan } from './useScan'
+import { useTrackFileDialog } from './TrackFileDialog'
 
 /// Library content for the routed App layout — no top-nav, no chain dock,
 /// no mini-player. Those are App-level fixtures. This component owns the
@@ -107,7 +108,7 @@ export function LibraryPage() {
   const hasActiveFilters = !!(
     query.search || query.key || query.bpmMin || query.bpmMax ||
     query.energyMin || query.energyMax || query.missing || query.addedWithinDays ||
-    query.tag?.length || query.archivedOnly || query.includeArchived
+    query.tag?.length || query.archivedOnly || query.includeArchived || query.includeUnavailable
   )
   const showLibraryEmptyState = total === 0 && !tracksQuery.isLoading && !hasActiveFilters
 
@@ -251,6 +252,16 @@ export function LibraryPage() {
         disabledReason: isMulti ? 'Single track only' : 'Only available in the desktop shell',
         separator: true,
         onSelect: () => { void bridge.openInExplorer(rowTrack.filePath) },
+      },
+      {
+        id: 'relink', icon: ExternalLink, label: 'Relink audio file…',
+        disabled: isMulti, disabledReason: 'Select one track to relink',
+        onSelect: () => useTrackFileDialog.getState().open(rowTrack, 'relink'),
+      },
+      {
+        id: 'remove', icon: X, label: 'Remove from WISP…',
+        disabled: isMulti, disabledReason: 'Select one track to remove',
+        onSelect: () => useTrackFileDialog.getState().open(rowTrack, 'remove'),
       },
     ]
   }

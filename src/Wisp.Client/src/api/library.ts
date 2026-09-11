@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from './client'
+import { apiDelete, apiGet, apiPost, apiPut } from './client'
 import type {
   Recommendation,
   RecommendationMode,
@@ -27,6 +27,9 @@ export const tracks = {
     return apiGet<TrackPage>(url.pathname + url.search)
   },
   get: (id: string) => apiGet<Track>(`/api/tracks/${id}`),
+  relink: (id: string, filePath: string, expectedFilePath: string) =>
+    apiPut<Track>(`/api/tracks/${id}/file`, { filePath, expectedFilePath }),
+  remove: (id: string) => apiDelete(`/api/tracks/${id}`),
   recommendations: (id: string, opts: {
     mode?: RecommendationMode
     limit?: number

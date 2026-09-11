@@ -33,6 +33,7 @@ public static class WispServiceCollectionExtensions
 
         services.AddSingleton<RecommendationService>();
         services.AddSingleton<AiffTranscoder>();
+        services.AddSingleton<IAudioFileValidator, AudioFileValidator>();
         services.AddSingleton<UsbFileSync>();
         services.AddSingleton<PioneerDeviceLibraryWriter>();
         services.AddSingleton<PioneerUsbExportService>();

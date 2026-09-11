@@ -6,11 +6,11 @@ namespace Wisp.Infrastructure.Audio;
 /// Transcodes AIFF files to WAV in a per-track cache so the embedded WebView2's
 /// `<audio>` element can decode them. Chromium ships no native AIFF decoder.
 ///
-/// AIFF is uncompressed PCM in an IFF wrapper, so this is essentially a container
-/// rewrite — bit-perfect, no DSP, no quality loss. The on-disk source files in the
+/// Standard PCM AIFF uses a container rewrite with no DSP. Other variants fall
+/// back to a 24-bit PCM WAV (not a bit-perfect float export). The source files in the
 /// user's library are NEVER modified or moved; the transcoded WAV lives in
 /// `%LOCALAPPDATA%\Wisp\transcode\<hash>.wav` and is treated as a throwaway cache.
-public sealed class AiffTranscoder(ILogger<AiffTranscoder> log)
+public sealed class AiffTranscoder(ILogger<AiffTranscoder> log, Mp3Transcoder? ffmpeg = null, string? cacheDirectory = null)
 {
     /// Set of extensions the embedded WebView2 doesn't decode natively and that this transcoder handles.
     public static bool IsTranscodeNeeded(string filePath)
@@ -30,53 +30,64 @@ public sealed class AiffTranscoder(ILogger<AiffTranscoder> log)
         if (!IsTranscodeNeeded(sourcePath))
             throw new InvalidOperationException($"{sourcePath} doesn't need transcoding.");
 
-        var cachePath = Path.Combine(WispPaths.TranscodeDir, $"{fileHash}.wav");
+        // Versioned cache avoids accepting output produced by the old converter.
+        // Hash the key as well: never allow a caller-supplied key to become a path.
+        var sourceInfo = new FileInfo(sourcePath);
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{fileHash}:{sourceInfo.Length}:{sourceInfo.LastWriteTimeUtc.Ticks}")));
+        var directory = cacheDirectory ?? WispPaths.TranscodeDir;
+        Directory.CreateDirectory(directory);
+        var cachePath = Path.Combine(directory, $"v2-{key}.wav");
 
-        // Already cached and the source hasn't been touched since? Use it.
-        if (File.Exists(cachePath))
-        {
-            try
-            {
-                var srcWritten = File.GetLastWriteTimeUtc(sourcePath);
-                var cacheWritten = File.GetLastWriteTimeUtc(cachePath);
-                // If the source is newer than the cache, the cache is stale (the hash should have
-                // changed too, but defend against the rare case where it hasn't yet).
-                if (cacheWritten >= srcWritten) return cachePath;
-                log.LogDebug("AIFF cache stale for {Path}; regenerating", sourcePath);
-                File.Delete(cachePath);
-            }
-            catch (Exception ex)
-            {
-                log.LogDebug(ex, "Cache freshness check failed for {Path}; regenerating", cachePath);
-            }
-        }
+        // The key already contains source size and modification time. Never delete
+        // a cached WAV another player might be streaming (including future-dated files).
+        if (File.Exists(cachePath)) return cachePath;
 
-        // Convert. NAudio's AiffFileReader handles AIFF + AIFF-C, big- and little-endian.
+        // Convert. NAudio handles standard PCM AIFF; FFmpeg handles other variants.
         // WaveFileWriter accepts the same WaveFormat and writes the canonical WAV header.
         // Write to a `.tmp` first then rename atomically so a crashed transcode never leaves
         // a half-written file behind that StreamAudio would happily serve as truncated audio.
-        var tempPath = cachePath + ".tmp";
+        var tempPath = cachePath + $".{Guid.NewGuid():N}.tmp";
         try
         {
-            await Task.Run(() =>
+            try
             {
-                using var reader = new AiffFileReader(sourcePath);
-                WaveFileWriter.CreateWaveFile(tempPath, reader);
-            }, ct);
+                await Task.Run(() =>
+                {
+                    using var reader = new AiffFileReader(sourcePath);
+                    using var writer = new WaveFileWriter(tempPath, reader.WaveFormat);
+                    var buffer = new byte[reader.WaveFormat.BlockAlign * 4096];
+                    int count;
+                    while ((count = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        writer.Write(buffer, 0, count);
+                    }
+                }, ct);
+            }
+            catch (Exception ex) when (ex is FormatException or InvalidDataException or NotSupportedException)
+            {
+                log.LogInformation("Using FFmpeg for AIFF variant: {Path}", sourcePath);
+                await FfmpegAudio.RunAsync(ffmpeg?.FfmpegPath, sourcePath, tempPath, ct);
+            }
+
+            using (var wav = new WaveFileReader(tempPath))
+                if (wav.Length == 0) throw new TranscodeException("The file contains no playable audio.");
+            ct.ThrowIfCancellationRequested();
 
             // If a parallel request beat us to it, prefer the existing cache file and discard ours.
-            if (File.Exists(cachePath))
+            try { File.Move(tempPath, cachePath); }
+            catch (IOException) when (File.Exists(cachePath))
             {
                 File.Delete(tempPath);
                 return cachePath;
             }
-            File.Move(tempPath, cachePath);
             log.LogInformation("Transcoded AIFF → WAV: {Source} → {Cache}", sourcePath, cachePath);
             return cachePath;
         }
         catch
         {
-            // Best-effort cleanup; rethrow so the endpoint can return 500 with context.
+            // Best-effort cleanup; the endpoint returns an actionable decode error.
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* ignored */ }
             throw;
         }

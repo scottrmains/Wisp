@@ -167,6 +167,7 @@ public class Program
             }));
 
             app.MapLibrary();
+            app.MapTrackFiles();
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();

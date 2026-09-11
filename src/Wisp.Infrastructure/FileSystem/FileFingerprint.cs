@@ -22,7 +22,7 @@ public class FileFingerprint : IFileFingerprint
 
         var length = fs.Length;
         using var sha = SHA256.Create();
-        var buffer = ArrayPool<byte>.Shared.Rent(ChunkSize);
+        var buffer = ArrayPool<byte>.Shared.Rent(length <= ChunkSize * 2 ? (int)Math.Max(1, length) : ChunkSize);
 
         try
         {

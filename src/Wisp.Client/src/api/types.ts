@@ -294,7 +294,7 @@ export interface CleanupSuggestion {
 }
 
 export type CleanupAction = 'Cleanup' | 'Undo'
-export type CleanupStatus = 'Applied' | 'RolledBack' | 'Failed'
+export type CleanupStatus = 'Applied' | 'RolledBack' | 'Failed' | 'Superseded'
 
 export interface AuditEntry {
   id: string

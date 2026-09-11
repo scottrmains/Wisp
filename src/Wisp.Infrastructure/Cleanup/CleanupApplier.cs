@@ -17,6 +17,13 @@ public class CleanupApplier(
 
     public async Task<(MetadataAuditLog Audit, CleanupSuggestion Applied)> ApplyAsync(Guid trackId, CancellationToken ct)
     {
+        await Wisp.Infrastructure.Library.LibraryFileGate.Instance.WaitAsync(ct);
+        try { return await ApplyCoreAsync(trackId, ct); }
+        finally { Wisp.Infrastructure.Library.LibraryFileGate.Instance.Release(); }
+    }
+
+    private async Task<(MetadataAuditLog Audit, CleanupSuggestion Applied)> ApplyCoreAsync(Guid trackId, CancellationToken ct)
+    {
         var track = await db.Tracks.FirstOrDefaultAsync(t => t.Id == trackId, ct)
             ?? throw new InvalidOperationException($"Track {trackId} not found");
 
@@ -100,6 +107,13 @@ public class CleanupApplier(
     }
 
     public async Task<MetadataAuditLog> UndoAsync(Guid auditId, CancellationToken ct)
+    {
+        await Wisp.Infrastructure.Library.LibraryFileGate.Instance.WaitAsync(ct);
+        try { return await UndoCoreAsync(auditId, ct); }
+        finally { Wisp.Infrastructure.Library.LibraryFileGate.Instance.Release(); }
+    }
+
+    private async Task<MetadataAuditLog> UndoCoreAsync(Guid auditId, CancellationToken ct)
     {
         var audit = await db.MetadataAuditLogs.FirstOrDefaultAsync(a => a.Id == auditId, ct)
             ?? throw new InvalidOperationException($"Audit {auditId} not found");
