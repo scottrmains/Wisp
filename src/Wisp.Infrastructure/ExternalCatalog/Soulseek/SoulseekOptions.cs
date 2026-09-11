@@ -8,10 +8,12 @@ public sealed class SoulseekOptions
     /// API key configured in slskd.yml under `web.authentication.api_keys`.
     public string? ApiKey { get; set; }
 
-    /// Optional. Path slskd is configured to download into. When set, Wisp triggers
-    /// a library re-scan of this folder when a transfer completes — so newly
-    /// downloaded files appear in the library automatically.
+    /// Saved destination for the next managed sidecar launch. Imports use the
+    /// daemon's actual folder, which can differ until Wisp is restarted.
     public string? DownloadFolder { get; set; }
+    /// Folder passed to the currently running Wisp-owned sidecar. Changes to the
+    /// next-start preference must not redirect imports from in-flight downloads.
+    public string? ActiveDownloadFolder { get; set; }
 
     /// Soulseek network credentials. Required by slskd to log in to the P2P network.
     /// When the bundled-slskd sidecar is in charge of the daemon, these are written

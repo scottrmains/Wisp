@@ -1,9 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { DiscoverySort } from '../api/types'
 
 export type InspectorTab = 'overview' | 'recommendations' | 'cues' | 'metadata' | 'notes' | 'tags'
 
 interface UiPrefsState {
+  discoverySort: DiscoverySort
+  setDiscoverySort: (sort: DiscoverySort) => void
+  librarySort: string
+  setLibrarySort: (sort: string) => void
   /// Inspector width in pixels. Persisted across launches.
   inspectorWidth: number
   setInspectorWidth: (px: number) => void
@@ -52,6 +57,10 @@ const DEFAULT_WIDTH = 448
 export const useUiPrefs = create<UiPrefsState>()(
   persist(
     (set) => ({
+      discoverySort: '-published',
+      setDiscoverySort: (discoverySort) => set({ discoverySort }),
+      librarySort: '-added',
+      setLibrarySort: (librarySort) => set({ librarySort }),
       inspectorWidth: DEFAULT_WIDTH,
       setInspectorWidth: (px) =>
         set({ inspectorWidth: Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(px))) }),

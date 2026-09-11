@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react'
 import type { DiscoveredTrack, DiscoveryStatus } from '../../api/types'
+import { formatTrackDate } from '../library/format'
 
 interface Props {
   tracks: DiscoveredTrack[]
@@ -61,6 +62,9 @@ export function DiscoveredTrackList({ tracks, loading, onSelect }: Props) {
                 <span className="text-amber-400/80">needs review</span>
               )}
               {t.releaseYear && <span> · {t.releaseYear}</span>}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--color-muted)]" title={`Imported into WISP: ${formatTrackDate(t.importedAt)}`}>
+              {t.publishedAt ? <>Uploaded <time dateTime={t.publishedAt}>{formatTrackDate(t.publishedAt)}</time></> : 'Upload date unknown'}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">

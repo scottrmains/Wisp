@@ -9,6 +9,7 @@ import { useActivePlaylist } from '../../state/activePlaylist'
 import { useCurrentPage } from '../../state/currentPage'
 import { usePlayer } from '../../state/player'
 import type { InspectorTab } from '../../state/uiPrefs'
+import { useUiPrefs } from '../../state/uiPrefs'
 import { ArchiveModal } from '../archive/ArchiveModal'
 import { CleanupModal } from '../cleanup/CleanupModal'
 import { UndoToast } from '../cleanup/UndoToast'
@@ -41,7 +42,11 @@ import { useScan } from './useScan'
 /// library body: filters, bulk bar, table, inspector, plus modals scoped
 /// to library actions (cleanup, archive, bulk archive, bulk tag, context menu).
 export function LibraryPage() {
-  const [query, setQuery] = useState<TrackQuery>({ page: 1, size: 500 })
+  const [query, setQuery] = useState<TrackQuery>(() => ({ page: 1, size: 500, sort: useUiPrefs.getState().librarySort }))
+  const changeQuery = (next: TrackQuery) => {
+    setQuery(next)
+    useUiPrefs.getState().setLibrarySort(next.sort ?? 'artist')
+  }
   const [selected, setSelected] = useState<Track | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const anchorIdRef = useRef<string | null>(null)
@@ -101,7 +106,8 @@ export function LibraryPage() {
 
   const hasActiveFilters = !!(
     query.search || query.key || query.bpmMin || query.bpmMax ||
-    query.energyMin || query.energyMax || query.missing
+    query.energyMin || query.energyMax || query.missing || query.addedWithinDays ||
+    query.tag?.length || query.archivedOnly || query.includeArchived
   )
   const showLibraryEmptyState = total === 0 && !tracksQuery.isLoading && !hasActiveFilters
 
@@ -391,7 +397,7 @@ export function LibraryPage() {
           </button>
         </div>
       )}
-      <LibraryFilters query={query} onChange={setQuery} total={total} />
+      <LibraryFilters query={query} onChange={changeQuery} total={total} />
       {selectedIds.size > 1 && (
         <BulkActionBar
           count={selectedIds.size}
@@ -410,7 +416,7 @@ export function LibraryPage() {
           selectedId={selected?.id ?? null}
           selectedIds={selectedIds}
           sort={query.sort}
-          onSortChange={(next) => setQuery((q) => ({ ...q, sort: next, page: 1 }))}
+          onSortChange={(next) => changeQuery({ ...query, sort: next, page: 1 })}
           onSelect={onSelectRow}
           onActivate={onActivateRow}
           onAddToChain={activePlanId ? addToActivePlan : undefined}

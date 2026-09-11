@@ -11,7 +11,7 @@ public sealed class YouTubeQuotaExceededException(string message) : Exception(me
 public sealed record YouTubeUpload(
     string VideoId,
     string Title,
-    DateTimeOffset PublishedAt,
+    DateTimeOffset? PublishedAt,
     string Url,
     string? ThumbnailUrl,
     string? Description);
@@ -240,7 +240,7 @@ public sealed class YouTubeCatalogClient(
                 results.Add(new YouTubeUpload(
                     VideoId: videoId,
                     Title: title,
-                    PublishedAt: item.ContentDetails?.VideoPublishedAt ?? item.Snippet?.PublishedAt ?? default,
+                    PublishedAt: item.ContentDetails?.VideoPublishedAt,
                     Url: $"https://www.youtube.com/watch?v={videoId}",
                     ThumbnailUrl: item.Snippet?.Thumbnails?.Medium?.Url ?? item.Snippet?.Thumbnails?.Default?.Url,
                     Description: item.Snippet?.Description));
@@ -361,7 +361,8 @@ public sealed class YouTubeCatalogClient(
                 results.Add(new YouTubeUpload(
                     VideoId: videoId,
                     Title: title,
-                    PublishedAt: item.ContentDetails?.VideoPublishedAt ?? item.Snippet?.PublishedAt ?? default,
+                    // snippet.publishedAt is playlist membership time, not upload time.
+                    PublishedAt: item.ContentDetails?.VideoPublishedAt,
                     Url: $"https://www.youtube.com/watch?v={videoId}",
                     ThumbnailUrl: item.Snippet?.Thumbnails?.Medium?.Url ?? item.Snippet?.Thumbnails?.Default?.Url,
                     Description: item.Snippet?.Description));

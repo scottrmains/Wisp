@@ -21,6 +21,9 @@ public static class DiscoveryEndpoints
         sources.MapPost("", CreateSource);
         sources.MapDelete("{id:guid}", DeleteSource);
         sources.MapPost("{id:guid}/scan", StartScan);
+        sources.MapGet("{id:guid}/scan", async (Guid id, WispDbContext db, DiscoveryScanProgressBus bus, CancellationToken ct) =>
+            await db.DiscoverySources.AnyAsync(s => s.Id == id, ct)
+                ? Results.Ok(bus.Latest(id)) : Results.NotFound());
         sources.MapGet("{id:guid}/scan/events", StreamScan);
         sources.MapGet("{id:guid}/tracks", ListTracks);
 
@@ -134,7 +137,9 @@ public static class DiscoveryEndpoints
         var src = await db.DiscoverySources.FindAsync([id], ct);
         if (src is null) return Results.NotFound();
         await queue.EnqueueAsync(new DiscoveryScanRequest(id), ct);
-        return Results.Accepted($"/api/discovery/sources/{id}");
+        // apiPost expects JSON for non-204 responses. An empty 202 made the UI
+        // report a parse error and skip progress tracking although the scan ran.
+        return Results.Accepted($"/api/discovery/sources/{id}/scan", new { sourceId = id });
     }
 
     private static async Task StreamScan(
@@ -160,6 +165,7 @@ public static class DiscoveryEndpoints
         WispDbContext db,
         string? status = null,
         string? search = null,
+        string? sort = null,
         int page = 1,
         int size = 200,
         CancellationToken ct = default)
@@ -183,8 +189,17 @@ public static class DiscoveryEndpoints
         }
 
         var total = await q.CountAsync(ct);
-        var items = await q
-            .OrderByDescending(t => t.ImportedAt)
+        var undatedCount = await q.CountAsync(t => t.PublishedAt == null, ct);
+        var ordered = sort?.Trim().ToLowerInvariant() switch
+        {
+            "published" => q.OrderBy(t => t.PublishedAt == null).ThenBy(t => t.PublishedAt).ThenBy(t => t.Id),
+            "-imported" => q.OrderByDescending(t => t.ImportedAt).ThenBy(t => t.Id),
+            "imported" => q.OrderBy(t => t.ImportedAt).ThenBy(t => t.Id),
+            null or "" or "-published" => q.OrderBy(t => t.PublishedAt == null).ThenByDescending(t => t.PublishedAt).ThenBy(t => t.Id),
+            _ => null,
+        };
+        if (ordered is null) return Results.BadRequest(new { message = "Unknown discovery sort order." });
+        var items = await ordered
             .Skip((page - 1) * size)
             .Take(size)
             .ToListAsync(ct);
@@ -192,6 +207,7 @@ public static class DiscoveryEndpoints
         return Results.Ok(new
         {
             total,
+            undatedCount,
             page,
             size,
             items = items.Select(DiscoveredTrackDto.From),

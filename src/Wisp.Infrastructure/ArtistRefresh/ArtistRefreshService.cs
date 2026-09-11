@@ -242,7 +242,7 @@ public class ArtistRefreshService(
                 : (false, (Guid?)null);
 
             // Convert the published timestamp to a DateOnly for the release-date field.
-            var releaseDate = DateOnly.FromDateTime(u.PublishedAt.UtcDateTime);
+            DateOnly? releaseDate = u.PublishedAt is { } published ? DateOnly.FromDateTime(published.UtcDateTime) : null;
 
             if (byId.TryGetValue(u.VideoId, out var row))
             {

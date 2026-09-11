@@ -46,6 +46,8 @@ public class DiscoveredTrack
     public Guid? MatchedLocalTrackId { get; set; }
 
     public DateTime ImportedAt { get; set; }
+    /// YouTube video publication time in UTC, not the date it was added to a playlist.
+    public DateTime? PublishedAt { get; set; }
     public DateTime? LastMatchedAt { get; set; }
 
     public DiscoverySource? Source { get; set; }

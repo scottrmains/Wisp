@@ -10,8 +10,9 @@ namespace Wisp.Api.Soulseek;
 
 public static class SoulseekEndpoints
 {
+    private static readonly SemaphoreSlim ImportGate = new(1, 1);
     /// Tracks transfers we've already auto-imported so a single completion only re-scans once.
-    private static readonly ConcurrentDictionary<string, byte> _autoImported = new();
+    private static readonly ConcurrentDictionary<string, Guid> _autoImported = new();
 
     public static IEndpointRouteBuilder MapSoulseek(this IEndpointRouteBuilder app)
     {
@@ -92,8 +93,8 @@ public static class SoulseekEndpoints
         }
     }
 
-    /// Lists transfers AND opportunistically auto-imports any newly-completed ones if the
-    /// user configured a download folder. Polled by the frontend every couple of seconds —
+    /// Lists transfers AND opportunistically auto-imports newly-completed ones from the
+    /// daemon's active download folder. Polled by the frontend every couple of seconds —
     /// no separate background worker needed.
     private static async Task<IResult> ListDownloads(
         SoulseekClient client,
@@ -106,8 +107,15 @@ public static class SoulseekEndpoints
         try
         {
             var transfers = await client.ListDownloadsAsync(ct);
-            await TryAutoImportCompletedAsync(transfers, options, client, db, scanQueue, log, ct);
-            return Results.Ok(transfers.Select(TransferDto.From));
+            if (await ImportGate.WaitAsync(0, ct))
+            {
+                try { await TryAutoImportCompletedAsync(transfers, options, client, db, scanQueue, log, ct); }
+                finally { ImportGate.Release(); }
+            }
+            return Results.Ok(transfers.Select(t => TransferDto.From(t) with
+            {
+                ImportScanId = _autoImported.TryGetValue(t.Id, out var scanId) ? scanId : null,
+            }));
         }
         catch (SoulseekNotConfiguredException)
         {
@@ -130,27 +138,21 @@ public static class SoulseekEndpoints
     {
         // Detect terminal-state transfers up front. slskd reports terminal states as a comma-joined
         // flag like "Completed, Succeeded" / "Completed, Cancelled" — only "Succeeded" should land in
-        // the library, the rest are nothing to import (and we still mark them seen so we don't loop).
+        // the library; failed or cancelled transfers must not trigger an import.
         var terminal = transfers
             .Where(t => !string.IsNullOrEmpty(t.Id) && t.State.Contains("Completed", StringComparison.OrdinalIgnoreCase))
-            .Where(t => _autoImported.TryAdd(t.Id, 0))
+            .Where(t => !_autoImported.ContainsKey(t.Id))
             .ToList();
         var importable = terminal.Where(t => t.State.Contains("Succeeded", StringComparison.OrdinalIgnoreCase)).ToList();
         if (importable.Count == 0) return;
 
-        // Resolve the folder to scan: explicit Wisp setting wins, else fall back to whatever
-        // slskd is actually using (read once via /api/v0/options and cached). This means a user who
-        // configured slskd.yml but skipped Wisp's Soulseek settings still gets auto-import.
-        var folder = options.DownloadFolder;
+        // Import from the daemon's active destination, not a saved preference
+        // that will only take effect after Wisp restarts.
+        var folder = await client.GetEffectiveDownloadFolderAsync(ct) ?? options.ActiveDownloadFolder;
         if (string.IsNullOrWhiteSpace(folder))
         {
-            folder = await client.GetEffectiveDownloadFolderAsync(ct);
-            if (string.IsNullOrWhiteSpace(folder))
-            {
-                log.LogWarning("Soulseek: {Count} transfer(s) finished but no download folder is set in Wisp settings and slskd's options endpoint returned nothing — skipping auto-import.",
-                    importable.Count);
-                return;
-            }
+            log.LogWarning("Soulseek: active download folder is unknown; import will retry on the next transfer poll");
+            return;
         }
 
         if (!Directory.Exists(folder))
@@ -161,11 +163,8 @@ public static class SoulseekEndpoints
 
         var rootPath = Path.GetFullPath(folder);
 
-        // slskd preserves the uploader's directory layout (e.g. D:\Music\Mastermix - House Top Up (2024)\track.mp3).
-        // Wisp users want a flat library, so move each just-finished file up to the root and prune empty leftovers.
-        // Targeted by transfer basename so we never touch unrelated subfolders the user may have organised themselves.
-        FlattenCompletedDownloads(importable, rootPath, log);
-
+        // Preserve the daemon's downloaded subfolders. Scanning indexes them in
+        // place; matching only a basename could move an unrelated library file.
         log.LogInformation("Soulseek: {Count} new transfer(s) completed, kicking off library re-scan of {Folder}",
             importable.Count, rootPath);
 
@@ -179,77 +178,7 @@ public static class SoulseekEndpoints
         db.ScanJobs.Add(job);
         await db.SaveChangesAsync(ct);
         await scanQueue.EnqueueAsync(new ScanRequest(job.Id, job.FolderPath), ct);
+        foreach (var transfer in importable) _autoImported.TryAdd(transfer.Id, job.Id);
     }
 
-    private static void FlattenCompletedDownloads(IReadOnlyList<SoulseekTransfer> importable, string rootPath, ILogger log)
-    {
-        foreach (var t in importable)
-        {
-            if (string.IsNullOrEmpty(t.Filename)) continue;
-            // slskd uses the remote separator — backslash from Windows seeders, slash from Unix.
-            var leaf = t.Filename.Replace('/', '\\').Split('\\').Last();
-            if (string.IsNullOrEmpty(leaf)) continue;
-
-            var targetAtRoot = Path.Combine(rootPath, leaf);
-            // If slskd happened to land it at the root already, nothing to do.
-            if (File.Exists(targetAtRoot)) continue;
-
-            string? sourcePath;
-            try
-            {
-                sourcePath = Directory.EnumerateFiles(rootPath, leaf, SearchOption.AllDirectories)
-                    .FirstOrDefault(p => !string.Equals(
-                        Path.GetDirectoryName(p),
-                        rootPath,
-                        StringComparison.OrdinalIgnoreCase));
-            }
-            catch (Exception ex)
-            {
-                log.LogWarning(ex, "Soulseek flatten: search failed for {Leaf}", leaf);
-                continue;
-            }
-            if (sourcePath is null) continue;
-
-            var finalPath = targetAtRoot;
-            if (File.Exists(finalPath))
-            {
-                var ext = Path.GetExtension(leaf);
-                var stem = Path.GetFileNameWithoutExtension(leaf);
-                finalPath = "";
-                for (var n = 1; n < 100; n++)
-                {
-                    var candidate = Path.Combine(rootPath, $"{stem} ({n}){ext}");
-                    if (!File.Exists(candidate)) { finalPath = candidate; break; }
-                }
-                if (string.IsNullOrEmpty(finalPath))
-                {
-                    log.LogWarning("Soulseek flatten: 100 collisions on {Leaf}, giving up", leaf);
-                    continue;
-                }
-            }
-
-            try
-            {
-                File.Move(sourcePath, finalPath);
-                log.LogInformation("Soulseek flatten: {Source} → {Target}", sourcePath, finalPath);
-
-                // Walk up removing newly-empty parents, stopping at the root.
-                var dir = Path.GetDirectoryName(sourcePath);
-                while (!string.IsNullOrEmpty(dir) &&
-                       !string.Equals(Path.GetFullPath(dir), rootPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
-                    {
-                        Directory.Delete(dir);
-                        dir = Path.GetDirectoryName(dir);
-                    }
-                    else break;
-                }
-            }
-            catch (Exception ex)
-            {
-                log.LogWarning(ex, "Soulseek flatten: move failed {Source} → {Target}", sourcePath, finalPath);
-            }
-        }
-    }
 }

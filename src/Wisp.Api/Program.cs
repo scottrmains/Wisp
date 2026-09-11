@@ -173,6 +173,7 @@ public class Program
             app.MapArtistRefresh();
             app.MapDiscovery();
             app.MapSoulseek();
+            app.MapSoulseekDownloadSettings();
             app.MapBlendRatings();
             app.MapTags();
             app.MapPlaylists();

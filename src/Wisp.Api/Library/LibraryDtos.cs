@@ -43,6 +43,7 @@ public sealed record TrackDto(
     bool IsUnavailable,
     DateTime? UnavailableSince,
     DateTime AddedAt,
+    DateTime? FileModifiedAt,
     DateTime? LastScannedAt,
     string? Notes,
     bool IsArchived,
@@ -54,7 +55,9 @@ public sealed record TrackDto(
         t.Artist, t.Title, t.Version, t.Album, t.Genre,
         t.Bpm, t.MusicalKey, t.Energy, t.ReleaseYear,
         t.Duration.TotalSeconds, t.IsMissingMetadata, t.IsDirtyName, t.IsUnavailable, t.UnavailableSince,
-        t.AddedAt, t.LastScannedAt, t.Notes,
+        DateTime.SpecifyKind(t.AddedAt, DateTimeKind.Utc),
+        t.FileModifiedAt is { } modified ? DateTime.SpecifyKind(modified, DateTimeKind.Utc) : null,
+        t.LastScannedAt, t.Notes,
         t.IsArchived, t.ArchivedAt, t.ArchiveReason?.ToString());
 }
 

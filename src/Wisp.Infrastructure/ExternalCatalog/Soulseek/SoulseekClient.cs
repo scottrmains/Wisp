@@ -127,12 +127,13 @@ public sealed class SoulseekClient(
     }
 
     /// Asks slskd for its currently-configured download folder via `/api/v0/options`.
-    /// Cached for the life of the process — slskd would need a restart to change it anyway.
-    /// Returns null on any failure so callers can fall back to user-supplied settings.
+    /// Briefly cached; external daemons can be restarted independently of Wisp.
+    /// Returns null on failure so callers can fall back to the managed sidecar's launch folder.
     public async Task<string?> GetEffectiveDownloadFolderAsync(CancellationToken ct)
     {
         if (!options.IsConfigured) return null;
-        if (_downloadFolderCache is not null) return _downloadFolderCache;
+        if (_downloadFolderCache is not null && _downloadFolderCacheUrl == options.Url && DateTime.UtcNow < _downloadFolderCacheUntil)
+            return _downloadFolderCache;
 
         try
         {
@@ -148,11 +149,14 @@ public sealed class SoulseekClient(
                 if (!string.IsNullOrWhiteSpace(path))
                 {
                     _downloadFolderCache = path;
+                    _downloadFolderCacheUrl = options.Url;
+                    _downloadFolderCacheUntil = DateTime.UtcNow.AddSeconds(15);
                     _log.LogInformation("Soulseek: discovered slskd download folder via options API: {Path}", path);
                     return path;
                 }
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             _log.LogDebug(ex, "Could not read slskd options for download folder");
@@ -160,6 +164,8 @@ public sealed class SoulseekClient(
         return null;
     }
     private string? _downloadFolderCache;
+    private string? _downloadFolderCacheUrl;
+    private DateTime _downloadFolderCacheUntil;
 
     public async Task<IReadOnlyList<SoulseekTransfer>> ListDownloadsAsync(CancellationToken ct)
     {

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -6,18 +5,43 @@ namespace Wisp.Infrastructure.Discovery;
 
 public class DiscoveryScanProgressBus
 {
-    private readonly ConcurrentDictionary<Guid, ConcurrentBag<Channel<DiscoveryScanProgress>>> _subs = new();
+    private readonly Lock _gate = new();
+    private readonly Dictionary<Guid, DiscoveryScanProgress> _latest = new();
+    private readonly Dictionary<Guid, HashSet<Channel<DiscoveryScanProgress>>> _subs = new();
+
+    public DiscoveryScanProgress? Latest(Guid sourceId)
+    {
+        lock (_gate) return _latest.GetValueOrDefault(sourceId);
+    }
+
+    public bool TryQueue(Guid sourceId)
+    {
+        lock (_gate)
+        {
+            if (_latest.TryGetValue(sourceId, out var current) && current.Status is DiscoveryScanStatus.Pending or DiscoveryScanStatus.Running)
+                return false;
+            Publish(new DiscoveryScanProgress(sourceId, DiscoveryScanStatus.Pending, 0, 0, 0, null));
+            return true;
+        }
+    }
 
     public void Publish(DiscoveryScanProgress progress)
     {
-        if (!_subs.TryGetValue(progress.SourceId, out var bag)) return;
-        foreach (var ch in bag) ch.Writer.TryWrite(progress);
+        lock (_gate)
+        {
+            _latest[progress.SourceId] = progress;
+            if (_subs.TryGetValue(progress.SourceId, out var subs))
+                foreach (var channel in subs) channel.Writer.TryWrite(progress);
+        }
     }
 
     public void Complete(Guid sourceId)
     {
-        if (!_subs.TryRemove(sourceId, out var bag)) return;
-        foreach (var ch in bag) ch.Writer.TryComplete();
+        lock (_gate)
+        {
+            if (_subs.Remove(sourceId, out var subs))
+                foreach (var channel in subs) channel.Writer.TryComplete();
+        }
     }
 
     public async IAsyncEnumerable<DiscoveryScanProgress> SubscribeAsync(
@@ -25,10 +49,20 @@ public class DiscoveryScanProgressBus
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<DiscoveryScanProgress>(
-            new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+            new UnboundedChannelOptions { SingleReader = true });
 
-        var bag = _subs.GetOrAdd(sourceId, _ => new ConcurrentBag<Channel<DiscoveryScanProgress>>());
-        bag.Add(channel);
+        // Subscribe and replay under the same lock as Publish: no missed fast completion.
+        lock (_gate)
+        {
+            if (_latest.TryGetValue(sourceId, out var latest)) channel.Writer.TryWrite(latest);
+            if (latest?.Status is DiscoveryScanStatus.Completed or DiscoveryScanStatus.Failed or DiscoveryScanStatus.Cancelled)
+                channel.Writer.TryComplete();
+            else
+            {
+                if (!_subs.TryGetValue(sourceId, out var subs)) _subs[sourceId] = subs = new();
+                subs.Add(channel);
+            }
+        }
 
         try
         {
@@ -37,7 +71,15 @@ public class DiscoveryScanProgressBus
         }
         finally
         {
-            channel.Writer.TryComplete();
+            lock (_gate)
+            {
+                if (_subs.TryGetValue(sourceId, out var subs))
+                {
+                    subs.Remove(channel);
+                    if (subs.Count == 0) _subs.Remove(sourceId);
+                }
+                channel.Writer.TryComplete();
+            }
         }
     }
 }

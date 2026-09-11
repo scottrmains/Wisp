@@ -82,6 +82,7 @@ public class CleanupApplier(
             track.IsDirtyName = false;
             track.IsMissingMetadata = string.IsNullOrEmpty(after.Artist) || string.IsNullOrEmpty(after.Title);
             track.LastScannedAt = DateTime.UtcNow;
+            track.FileModifiedAt = File.GetLastWriteTimeUtc(track.FilePath);
 
             db.MetadataAuditLogs.Add(audit);
             await db.SaveChangesAsync(ct);
@@ -138,6 +139,7 @@ public class CleanupApplier(
                 track.Album = before.Album;
                 track.Genre = before.Genre;
                 track.LastScannedAt = DateTime.UtcNow;
+                track.FileModifiedAt = File.GetLastWriteTimeUtc(track.FilePath);
             }
 
             audit.Status = CleanupStatus.RolledBack;

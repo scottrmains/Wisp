@@ -340,6 +340,7 @@ public static class LibraryEndpoints
         int? energyMax = null,
         bool? missing = null,
         string? sort = null,
+        int? addedWithinDays = null,
         // Archive controls — default behaviour is "active library only".
         // includeArchived=true → mix Active + Archived. archivedOnly=true → only Archived.
         bool includeArchived = false,
@@ -402,6 +403,13 @@ public static class LibraryEndpoints
         if (energyMin.HasValue) q = q.Where(t => t.Energy >= energyMin);
         if (energyMax.HasValue) q = q.Where(t => t.Energy <= energyMax);
         if (missing == true) q = q.Where(t => t.IsMissingMetadata);
+        if (addedWithinDays.HasValue)
+        {
+            if (addedWithinDays is < 1 or > 36500)
+                return Results.BadRequest(new { code = "invalid_date_range", message = "Date range must be between 1 and 36500 days." });
+            var cutoff = DateTime.UtcNow.AddDays(-addedWithinDays.Value);
+            q = q.Where(t => t.AddedAt >= cutoff);
+        }
 
         // Camelot key sort: map "1A, 1B, 2A, 2B … 12A, 12B" → 1..24 so 9A < 9B < 10A.
         // For non-Camelot strings (rare; tracks with raw key tags) the CASE returns 99
@@ -470,8 +478,10 @@ public static class LibraryEndpoints
             // by infrequently. Frontend should not expose a sortKey for the duration column.
             "year" => q.OrderBy(t => t.ReleaseYear == null).ThenBy(t => t.ReleaseYear),
             "-year" => q.OrderBy(t => t.ReleaseYear == null).ThenByDescending(t => t.ReleaseYear),
-            "added" => q.OrderBy(t => t.AddedAt),
-            "-added" => q.OrderByDescending(t => t.AddedAt),
+            "added" => q.OrderBy(t => t.AddedAt).ThenBy(t => t.Id),
+            "-added" => q.OrderByDescending(t => t.AddedAt).ThenBy(t => t.Id),
+            "modified" => q.OrderBy(t => t.FileModifiedAt == null).ThenBy(t => t.FileModifiedAt).ThenBy(t => t.Id),
+            "-modified" => q.OrderBy(t => t.FileModifiedAt == null).ThenByDescending(t => t.FileModifiedAt).ThenBy(t => t.Id),
             _ => q.OrderBy(t => t.Artist == null).ThenBy(t => t.Artist).ThenBy(t => t.Title),
         };
 

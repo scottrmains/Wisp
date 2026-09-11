@@ -19,6 +19,7 @@ export interface Track {
   isUnavailable: boolean
   unavailableSince: string | null
   addedAt: string
+  fileModifiedAt: string | null
   lastScannedAt: string | null
   notes: string | null
   isArchived: boolean
@@ -103,6 +104,7 @@ export interface TrackQuery {
   energyMax?: number
   missing?: boolean
   sort?: string
+  addedWithinDays?: number
   /// Pulls archived tracks back into the result set (default: archived hidden).
   includeArchived?: boolean
   /// Returns ONLY archived tracks. Wins over includeArchived when both set.
@@ -382,6 +384,7 @@ export type DiscoveryStatus =
   | 'PossibleMatch'
 
 export interface DiscoveredTrack {
+  publishedAt: string | null
   id: string
   discoverySourceId: string
   sourceVideoId: string
@@ -421,13 +424,19 @@ export interface DigitalMatch {
 }
 
 export interface DiscoveredTrackPage {
+  undatedCount: number
   total: number
   page: number
   size: number
   items: DiscoveredTrack[]
 }
 
+export type DiscoverySort = '-published' | 'published' | '-imported' | 'imported'
+
 export interface DiscoveryScanProgress {
+  updatedDates?: number
+  checkedItems?: number
+  finishedAt?: string | null
   sourceId: string
   status: 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled'
   totalImported: number
@@ -458,6 +467,7 @@ export interface SoulseekSearchResult {
 }
 
 export interface SoulseekTransfer {
+  importScanId?: string | null
   id: string
   username: string
   filename: string

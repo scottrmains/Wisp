@@ -114,6 +114,36 @@ export function LibraryFilters({ query, onChange, total }: Props) {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+        <label className="flex items-center gap-2 text-[var(--color-muted)]">
+          Sort by
+          <select aria-label="Sort tracks" value={query.sort ?? 'artist'} onChange={(e) => set('sort', e.target.value)}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 text-[var(--color-text)]">
+            <option value="-added">Date added · newest first</option>
+            <option value="added">Date added · oldest first</option>
+            <option value="-modified">Date modified · newest first</option>
+            <option value="modified">Date modified · oldest first</option>
+            {['artist', 'title', 'bpm', 'key', 'energy', 'genre', 'year'].flatMap((field) => [
+              <option key={field} value={field}>{field.toUpperCase()} · ascending</option>,
+              <option key={`-${field}`} value={`-${field}`}>{field.toUpperCase()} · descending</option>,
+            ])}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-[var(--color-muted)]">
+          Added to WISP
+          <select aria-label="Added to WISP" value={query.addedWithinDays ?? ''}
+            onChange={(e) => set('addedWithinDays', e.target.value ? Number(e.target.value) : undefined)}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 text-[var(--color-text)]">
+            <option value="">Any time</option>
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </label>
+        <span className="text-[var(--color-muted)]" title="Date added is when WISP first imported the track, including in playlist views. Date modified is the file's last-write time, refreshed on scans and WISP tag writes.">Dates refer to the track, not playlist membership.</span>
+      </div>
+
       {/* Tag filter row — only render if there's at least one tag in the library. */}
       {allTags.data && allTags.data.length > 0 && (
         <div className="flex flex-wrap items-center gap-1">

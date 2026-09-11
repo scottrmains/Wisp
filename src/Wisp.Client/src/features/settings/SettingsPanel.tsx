@@ -7,6 +7,7 @@ import { transcoder } from '../../api/transcoder'
 import type { SystemInfo } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { WispLogo } from '../../components/WispLogo'
+import { SoulseekDownloadFolderSettings } from './SoulseekDownloadFolderSettings'
 
 interface Props {
   onClose: () => void
@@ -53,6 +54,10 @@ export function SettingsPanel({ onClose }: Props) {
             <PathRow label="Database" path={sys.data?.databasePath} />
             <PathRow label="Config" path={sys.data?.configPath} />
             <PathRow label="Logs" path={sys.data?.logsDir} />
+          </Section>
+
+          <Section title="Soulseek download folder">
+            <SoulseekDownloadFolderSettings />
           </Section>
 
           <Section title="Spotify (Artist Refresh source)">
@@ -297,7 +302,6 @@ function SoulseekSettings() {
   })
   const [url, setUrl] = useState('http://localhost:5030')
   const [apiKey, setApiKey] = useState('')
-  const [downloadFolder, setDownloadFolder] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -319,7 +323,7 @@ function SoulseekSettings() {
     mutationFn: () => apiPost('/api/settings/soulseek', {
       url: url.trim(),
       apiKey,
-      downloadFolder: downloadFolder.trim() || null,
+      downloadFolder: status.data?.downloadFolder ?? null,
       username: username.trim() || null,
       // Sending null for password = "leave existing password unchanged"; sending a value = update it.
       password: password ? password : null,
@@ -330,6 +334,7 @@ function SoulseekSettings() {
       setPassword('')
       setTestResult(null)
       qc.invalidateQueries({ queryKey: ['soulseek-status'] })
+      qc.invalidateQueries({ queryKey: ['soulseek-download-folder'] })
     },
   })
 
@@ -338,6 +343,7 @@ function SoulseekSettings() {
     onSuccess: () => {
       setTestResult(null)
       qc.invalidateQueries({ queryKey: ['soulseek-status'] })
+      qc.invalidateQueries({ queryKey: ['soulseek-download-folder'] })
     },
   })
 
@@ -352,16 +358,6 @@ function SoulseekSettings() {
     },
     onSuccess: setTestResult,
   })
-
-  const pickFolder = async () => {
-    if (!bridgeAvailable()) return
-    try {
-      const result = await bridge.pickFolder()
-      if (result.path) setDownloadFolder(result.path)
-    } catch {
-      /* swallow */
-    }
-  }
 
   return (
     <div className="space-y-2">
@@ -392,11 +388,6 @@ function SoulseekSettings() {
               </button>
             </div>
           </div>
-          {status.data.downloadFolder && (
-            <p className="px-1 text-[10px] text-[var(--color-muted)]">
-              Auto-import folder: <code>{status.data.downloadFolder}</code> (rescanned when transfers complete)
-            </p>
-          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -485,22 +476,6 @@ function SoulseekSettings() {
             </>
           )}
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={downloadFolder}
-              onChange={(e) => setDownloadFolder(e.target.value)}
-              placeholder="Download folder (optional — enables auto-import on completion)"
-              className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs font-mono"
-            />
-            <button
-              onClick={pickFolder}
-              disabled={!bridgeAvailable()}
-              className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] disabled:opacity-30"
-            >
-              Pick…
-            </button>
-          </div>
           <button
             onClick={() => save.mutate()}
             disabled={
