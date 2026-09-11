@@ -30,6 +30,9 @@ interface Props {
   /// (the row itself if not in selection, otherwise the whole selection) and return
   /// the ordered list of track ids to attach to the dataTransfer payload.
   onDragStartRow?: (track: Track) => Track[]
+  /// Windows hosts offer both native files and WISP IDs in ONE drag session.
+  /// Omit on browser/older hosts to retain the ordinary internal HTML drag.
+  onNativeDrag?: (ids: string[]) => void
 }
 
 interface Column {
@@ -77,6 +80,7 @@ export function LibraryTable({
   onCleanup,
   onContextMenu,
   onDragStartRow,
+  onNativeDrag,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
   const playTrack = usePlayer((s) => s.playTrack)
@@ -183,9 +187,15 @@ export function LibraryTable({
                   e.preventDefault()
                   return
                 }
+                if (onNativeDrag) {
+                  // Cancel Chromium's source drag before scheduling the OLE
+                  // source. That source carries our same MIME IDs AND CF_HDROP.
+                  e.preventDefault()
+                  onNativeDrag(ids.map(x => x.id))
+                  return
+                }
                 e.dataTransfer.effectAllowed = 'copyMove'
-                // Rows are always internal: playlists, ChainDock and MixPlansPage.
-                // Native audio-file transfer belongs only to ExternalFileDrag.
+                // Browser/older-host fallback remains internal, never a download.
                 e.dataTransfer.setData('application/x-wisp-track-ids', JSON.stringify(ids.map((x) => x.id)))
               }}
               className={[

@@ -75,8 +75,8 @@ export function invoke<T = unknown>(method: string, args?: unknown): Promise<T> 
 }
 
 export const bridge = {
-  desktopCapabilities: () => invoke<{ externalFileDrag: boolean; maxDragTracks: number }>('desktopCapabilities'),
-  dragFiles: (trackIds: string[]) => invoke<{ dropAccepted: boolean; fileCount: number; reason?: string | null }>('dragFiles', { trackIds }),
+  desktopCapabilities: () => invoke<{ externalFileDrag: boolean; unifiedTrackDrag?: boolean; maxDragTracks: number }>('desktopCapabilities'),
+  dragFiles: (trackIds: string[], includeTrackIds = false) => invoke<{ dropAccepted: boolean; fileCount: number; reason?: string | null }>('dragFiles', { trackIds, includeTrackIds }),
   pickAudioFile: (initialPath?: string) =>
     invoke<{ path: string | null }>('pickAudioFile', { initialPath }),
   pickFolder: (initialPath?: string) =>

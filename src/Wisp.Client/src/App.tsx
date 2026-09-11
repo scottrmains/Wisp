@@ -73,7 +73,8 @@ function App() {
     <div className="flex h-full"
       onDragOver={(e) => {
         // Child WISP drop targets handle their own payloads first. Reject stray
-        // native files/URLs (including our external handle dropped back here).
+        // native files/URLs. Unified row drags also carry WISP IDs, so playlist
+        // and mix handlers accept them before this fallback rejects anything.
         if (!e.defaultPrevented && e.dataTransfer.types.some((type) =>
           type === 'Files' || type === 'text/uri-list' || type === 'DownloadURL')) {
           e.preventDefault()
