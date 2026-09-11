@@ -19,6 +19,7 @@ using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Api.Tests;
 
+[Collection("Soulseek endpoints")]
 public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "wisp-dates-test-" + Guid.NewGuid().ToString("N"));

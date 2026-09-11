@@ -17,6 +17,8 @@ import type { SoulseekSearchHit, SoulseekTransfer } from '../../api/types'
 import { useSoulseekStatus } from '../../state/soulseekStatus'
 import { useUiPrefs } from '../../state/uiPrefs'
 import { useSoulseekTransfers } from './useSoulseekTransfers'
+import { SoulseekTransferList } from './SoulseekTransferList'
+import { transferState } from './transferState'
 
 interface Props {
   /// Initial search query — derived from the calling context (Discovered
@@ -67,19 +69,14 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
   const setFilter = useUiPrefs((s) => s.setSlskdFilter)
   const filter = { format, mp3Bitrate, freeSlotsOnly, hideLocked }
 
-  const { transfers, slskdConfigured } = useSoulseekTransfers()
+  const { transfers, slskdConfigured, error: transferError } = useSoulseekTransfers()
   const ensurePolling = useSoulseekStatus((s) => s.ensurePolling)
 
   const activeByFilename = useMemo(() => {
     const map = new Map<string, SoulseekTransfer>()
-    for (const t of transfers) map.set(t.filename, t)
+    for (const t of transfers) map.set(JSON.stringify([t.username, t.filename]), t)
     return map
   }, [transfers])
-
-  const inFlightTransfers = useMemo(
-    () => transfers.filter((t) => !t.state.includes('Completed') && !t.state.includes('Errored')),
-    [transfers],
-  )
 
   // Esc to close (when not actively searching — close mid-search would
   // orphan the slskd request). Click-outside also closes.
@@ -362,7 +359,7 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
                   <HitRow
                     key={`${h.username}:${h.filename}:${i}`}
                     hit={h}
-                    transfer={activeByFilename.get(h.filename) ?? null}
+                    transfer={activeByFilename.get(JSON.stringify([h.username, h.filename])) ?? null}
                     onQueued={ensurePolling}
                   />
                 ))}
@@ -389,17 +386,13 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
           ) : null}
         </div>
 
-        {/* In-flight transfers — always visible at the bottom when active. */}
-        {inFlightTransfers.length > 0 && (
+        {/* Share cancellation/history controls with the header transfers window. */}
+        {(transfers.length > 0 || transferError) && (
           <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)]">
             <p className="px-5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-              Downloads in flight ({inFlightTransfers.length})
+              Downloads ({transfers.length})
             </p>
-            <ul className="max-h-40 overflow-y-auto px-5 py-2">
-              {inFlightTransfers.map((t) => (
-                <TransferRow key={t.id} transfer={t} />
-              ))}
-            </ul>
+            <SoulseekTransferList transfers={transfers} error={transferError} />
           </div>
         )}
       </div>
@@ -498,8 +491,8 @@ function HitRow({
   })
 
   const fileName = hit.filename.split(/[\\/]/).pop() ?? hit.filename
-  const completed = transfer?.state.includes('Completed')
-  const inProgress = transfer && !completed
+  const completed = transfer ? transferState(transfer.state).succeeded : false
+  const inProgress = transfer && !transferState(transfer.state).finished
 
   return (
     <tr className="relative border-t border-[var(--color-border)]/30 hover:bg-white/5">
@@ -559,27 +552,6 @@ function HitRow({
         )}
       </td>
     </tr>
-  )
-}
-
-function TransferRow({ transfer }: { transfer: SoulseekTransfer }) {
-  const fileName = transfer.filename.split(/[\\/]/).pop() ?? transfer.filename
-  return (
-    <li className="border-b border-[var(--color-border)]/30 py-1.5 last:border-0">
-      <div className="flex items-center justify-between gap-3 text-[11px]">
-        <span className="min-w-0 flex-1 truncate" title={transfer.filename}>{fileName}</span>
-        <span className="shrink-0 text-[var(--color-muted)]">{transfer.username}</span>
-        <span className="shrink-0 tabular-nums text-[var(--color-muted)]">
-          {transfer.percentage.toFixed(0)}%
-        </span>
-      </div>
-      <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-[var(--color-bg)]">
-        <div
-          className="h-full bg-[var(--color-accent)] transition-[width]"
-          style={{ width: `${transfer.percentage}%` }}
-        />
-      </div>
-    </li>
   )
 }
 

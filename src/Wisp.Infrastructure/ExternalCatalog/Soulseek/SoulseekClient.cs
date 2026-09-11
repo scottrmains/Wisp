@@ -200,6 +200,24 @@ public sealed class SoulseekClient(
 
     // ─── helpers ─────────────────────────────────────────────────────
 
+    /// slskd 0.25.1 cancels a transfer with DELETE; remove=true also removes
+    /// its history record. Neither option invokes the file-management API.
+    public async Task CancelDownloadAsync(string username, string id, bool remove, CancellationToken ct)
+    {
+        if (!options.IsConfigured) throw new SoulseekNotConfiguredException();
+        try
+        {
+            using var response = await Client().DeleteAsync(Url(
+                $"transfers/downloads/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(id)}?remove={remove.ToString().ToLowerInvariant()}"), ct);
+            // Clearing a record already removed in slskd is idempotent.
+            if (remove && response.StatusCode == System.Net.HttpStatusCode.NotFound) return;
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"slskd refused to {(remove ? "clear" : "cancel")} this transfer (HTTP {(int)response.StatusCode}). Refresh the list and try again.");
+        }
+        catch (HttpRequestException ex) { throw MapHttp(ex); }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
+    }
+
     private HttpClient Client()
     {
         var http = httpFactory.CreateClient("Wisp.Soulseek");
