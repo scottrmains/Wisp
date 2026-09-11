@@ -2,6 +2,33 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Restore internal playlist dragging; separate external file transfer
+
+- **Regression:** the earlier Windows drag change made ordinary track rows start
+  native CF_HDROP transfers by default. WISP playlist targets require internal
+  track IDs, so those drops could not add playlist membership. The previous tests
+  checked the optional internal mode's payload, not the default end-to-end drop.
+- **Implemented:** row dragging always carries only WISP track IDs again, for
+  sidebar playlists and mix-plan targets. Removed the drag-destination selector
+  and native row callback. Ctrl+A keeps the complete selection across pages;
+  dragging an unselected row uses only that track. The separate **Drag N files to
+  rekordbox** handle remains the explicit native file-transfer gesture for other
+  apps/folders. No DownloadURL or file-path payload is attached to track rows.
+- **Drop safety:** the app shell rejects unhandled files/URLs and prevents the
+  embedded browser's default drop navigation/download. Existing child handlers
+  still receive internal playlist/mix payloads; this guard does not import music.
+- **Verification:** all nine committed browser regressions pass, including real
+  mouse drops into sidebar playlists with 1,205 selected tracks from page one and
+  page two, an unselected-row drop, and internal dragging on an unsupported native
+  host. They assert membership requests and no native bridge calls/downloads.
+  Separate handle coverage checks all-page payload, busy guard, missing-file retry
+  and early release. Stray file/URL rejection uses synthetic browser events.
+  All 28 client unit tests, client build and lint pass (13 pre-existing warnings).
+- **Boundary:** native responses/API data are mocked in browser tests; a real
+  installed WebView2/rekordbox handoff still needs user verification. No music,
+  working database or installation was changed and no installer was generated.
+  This section supersedes the native-row default described immediately below.
+
 ## 2026-09-11: Fix direct track-row dragging to Windows apps and folders
 
 - **Confirmed cause of the reported workflow:** Ctrl+A selected the tracks, but

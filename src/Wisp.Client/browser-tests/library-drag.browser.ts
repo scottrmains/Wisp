@@ -17,6 +17,9 @@ interface DragTestState {
 declare global { interface Window { dragTest: DragTestState } }
 
 async function setup(page: Page, supported = true, capabilityError?: string) {
+  const additions: string[][] = []
+  const downloads: string[] = []
+  page.on('download', download => downloads.push(download.suggestedFilename()))
   await page.addInitScript(({ supported, capabilityError }) => {
     let receiver: (raw: string) => void
     window.dragTest = { calls: [], response: {}, delay: 50 }
@@ -38,7 +41,15 @@ async function setup(page: Page, supported = true, capabilityError?: string) {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
     let body: unknown = []
-    if (url.pathname === '/api/playlists') body = [{ id: 'test-playlist', name: 'Test playlist', trackCount: tracks.length }]
+    if (url.pathname === '/api/playlists') body = [
+      { id: 'test-playlist', name: 'Test playlist', trackCount: tracks.length },
+      { id: 'drop-playlist', name: 'Drop playlist', trackCount: additions.flat().length },
+    ]
+    if (url.pathname === '/api/playlists/drop-playlist/tracks/bulk') {
+      const { trackIds } = route.request().postDataJSON() as { trackIds: string[] }
+      additions.push(trackIds)
+      body = { added: trackIds.length, skipped: 0 }
+    }
     if (url.pathname === '/api/tracks') {
       const size = Number(url.searchParams.get('size') ?? 500), page = Number(url.searchParams.get('page') ?? 1)
       body = { items: tracks.slice((page - 1) * size, page * size), total: tracks.length, size, page }
@@ -49,6 +60,7 @@ async function setup(page: Page, supported = true, capabilityError?: string) {
   await page.goto('/')
   await page.getByText('Test playlist', { exact: true }).first().click()
   await page.getByText('Track 0000', { exact: true }).waitFor()
+  return { additions, downloads }
 }
 
 async function selectAll(page: Page) {
@@ -65,25 +77,42 @@ async function rowDrag(page: Page, title = 'Track 0000') {
   await page.mouse.move(box.x + 50, box.y + 12, { steps: 5 })
 }
 
-test('Ctrl+A then a real row drag hands off ALL pages with the actual Photino user agent', async ({ page }) => {
-  await setup(page); await selectAll(page)
-  await expect(page.getByLabel('Track row drag destination')).toHaveValue('external')
-  await rowDrag(page)
-  await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(1)
+async function dropOnPlaylist(page: Page) {
+  const target = page.getByText('Drop playlist', { exact: true })
+  await target.hover()
+  // Two moves ensure Chromium sends dragover before releasing the mouse.
+  await target.hover()
   await page.mouse.up()
-  expect(await page.evaluate(() => window.dragTest.calls[0])).toEqual(tracks.map(t => t.id))
-  await expect(page.getByRole('status')).toContainText('1205 files handed')
+}
+
+async function handleDrag(page: Page) {
+  const box = await page.getByRole('button', { name: 'Drag 1205 audio files to rekordbox' }).boundingBox()
+  if (!box) throw new Error('File drag handle is not visible')
+  await page.mouse.move(box.x + 10, box.y + 10)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 40, box.y + 10, { steps: 4 })
+}
+
+test('Ctrl+A then real row drops add ALL pages to WISP, never native files or downloads', async ({ page }) => {
+  const { additions, downloads } = await setup(page); await selectAll(page)
+  await expect(page.getByLabel('Track row drag destination')).toHaveCount(0)
+  await rowDrag(page)
+  await dropOnPlaylist(page)
+  await expect.poll(() => additions.length).toBe(1)
+  expect(additions[0]).toEqual(tracks.map(t => t.id))
   await expect(page.getByRole('button', { name: 'Drag 1205 audio files to rekordbox' })).toBeEnabled()
   await page.getByRole('button', { name: 'Next page' }).click()
   await rowDrag(page, 'Track 0500')
-  await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(2)
-  await page.mouse.up()
-  expect(await page.evaluate(() => window.dragTest.calls[1])).toEqual(tracks.map(t => t.id))
+  await dropOnPlaylist(page)
+  await expect.poll(() => additions.length).toBe(2)
+  expect(additions[1]).toEqual(tracks.map(t => t.id))
+  expect(await page.evaluate(() => window.dragTest.calls)).toEqual([])
+  expect(downloads).toEqual([])
+  await expect(page).toHaveURL('http://127.0.0.1:19589/')
 })
 
-test('Within WISP retains the internal multi-row payload without invoking native drag', async ({ page }) => {
+test('Rows offer only WISP IDs, never file URLs or a DownloadURL', async ({ page }) => {
   await setup(page); await selectAll(page)
-  await page.getByLabel('Track row drag destination').selectOption('wisp')
   const payload = await page.getByText('Track 0000', { exact: true }).evaluate(el => {
     const dataTransfer = new DataTransfer()
     el.closest('[draggable]')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }))
@@ -94,28 +123,41 @@ test('Within WISP retains the internal multi-row payload without invoking native
   expect(await page.evaluate(() => window.dragTest.calls)).toEqual([])
 })
 
-test('Dedicated handle and row drags share a single in-flight operation', async ({ page }) => {
-  await setup(page); await selectAll(page)
+test('Unselected row drags only that track, without a mode switch', async ({ page }) => {
+  const { additions, downloads } = await setup(page)
+  await page.getByText('Track 0000', { exact: true }).click()
+  await rowDrag(page, 'Track 0001')
+  await dropOnPlaylist(page)
+  await expect.poll(() => additions).toEqual([[tracks[1].id]])
+  expect(await page.evaluate(() => window.dragTest.calls)).toEqual([])
+  expect(downloads).toEqual([])
+})
+
+test('Dedicated external handle sends ALL pages and prevents duplicate handoffs while busy', async ({ page }) => {
+  const { additions } = await setup(page); await selectAll(page)
   await page.evaluate(() => { window.dragTest.delay = 1000 })
-  const box = await page.getByRole('button', { name: 'Drag 1205 audio files to rekordbox' }).boundingBox()
-  await page.mouse.move(box!.x + 10, box!.y + 10); await page.mouse.down()
-  await page.mouse.move(box!.x + 40, box!.y + 10, { steps: 4 })
+  await handleDrag(page)
   await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(1)
-  await page.getByText('Track 0000', { exact: true }).dispatchEvent('dragstart')
-  expect(await page.evaluate(() => window.dragTest.calls.length)).toBe(1)
+  const handle = page.getByRole('button', { name: 'Drag 1205 audio files to rekordbox' })
+  await expect(handle).toBeDisabled()
+  await handle.dispatchEvent('pointerdown', { button: 0, buttons: 1, clientX: 10, clientY: 10 })
+  await handle.dispatchEvent('pointermove', { buttons: 1, clientX: 40, clientY: 10 })
   await page.mouse.up()
   await expect(page.getByRole('status')).toContainText('1205 files handed')
+  expect(await page.evaluate(() => window.dragTest.calls)).toEqual([tracks.map(t => t.id)])
+  expect(additions).toEqual([])
+  await expect(handle).toBeEnabled()
 })
 
 test('Missing-file error is visible and the full selection can be retried', async ({ page }) => {
   await setup(page); await selectAll(page)
   await page.evaluate(() => { window.dragTest.response = { error: '1 selected file is missing. No files were sent.' } })
-  await rowDrag(page)
+  await handleDrag(page)
   await expect(page.getByRole('alert')).toContainText('No files were sent')
   await page.mouse.up()
   await expect(page.getByRole('button', { name: 'Drag 1205 audio files to rekordbox' })).toBeEnabled()
   await page.evaluate(() => { window.dragTest.response = {} })
-  await rowDrag(page)
+  await handleDrag(page)
   await expect(page.getByRole('status')).toContainText('1205 files handed')
   await page.mouse.up()
 })
@@ -123,16 +165,40 @@ test('Missing-file error is visible and the full selection can be retried', asyn
 test('Early mouse release is explained without claiming files were sent', async ({ page }) => {
   await setup(page); await selectAll(page)
   await page.evaluate(() => { window.dragTest.response = { result: { dropAccepted: false, fileCount: 1205, reason: 'released-before-start' } } })
-  await rowDrag(page)
+  await handleDrag(page)
   await expect(page.getByRole('status')).toContainText('Released before the files were ready')
   await page.mouse.up()
 })
 
 test('Host capabilities, not browser identity, determine Windows support', async ({ page }) => {
-  await setup(page, false)
+  const { additions } = await setup(page, false)
   await page.getByText('Track 0000', { exact: true }).click()
   await expect(page.getByRole('button', { name: 'Drag 1 audio files to rekordbox' })).toBeDisabled()
   await expect(page.getByLabel('Track row drag destination')).toHaveCount(0)
+  await rowDrag(page)
+  await dropOnPlaylist(page)
+  await expect.poll(() => additions).toEqual([[tracks[0].id]])
+})
+
+test('Stray files and URLs dropped inside WISP are rejected without import or browser navigation', async ({ page }) => {
+  const { additions, downloads } = await setup(page)
+  for (const kind of ['file', 'url']) {
+    const result = await page.getByText('Drop playlist', { exact: true }).evaluate((el, kind) => {
+      const dataTransfer = new DataTransfer()
+      if (kind === 'file') dataTransfer.items.add(new File(['audio fixture'], 'Track.aiff', { type: 'audio/aiff' }))
+      else dataTransfer.setData('text/uri-list', 'https://example.invalid/Track.aiff')
+      const over = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer })
+      el.dispatchEvent(over)
+      const drop = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer })
+      el.dispatchEvent(drop)
+      return { overPrevented: over.defaultPrevented, dropPrevented: drop.defaultPrevented, effect: dataTransfer.dropEffect }
+    }, kind)
+    expect(result).toEqual({ overPrevented: true, dropPrevented: true, effect: 'none' })
+  }
+  expect(additions).toEqual([])
+  expect(downloads).toEqual([])
+  expect(await page.evaluate(() => window.dragTest.calls)).toEqual([])
+  await expect(page).toHaveURL('http://127.0.0.1:19589/')
 })
 
 test('Capability errors tell the user to restart the updated desktop app', async ({ page }) => {
