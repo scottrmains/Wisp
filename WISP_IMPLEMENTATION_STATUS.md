@@ -2,6 +2,58 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Reference loudness matching and boost-only review
+
+- **Default workflow:** Loudness & versions now opens in **A reference track**
+  mode, with **Only boost quieter tracks** enabled and limiting disabled. Choose
+  from the selected tracks or search the whole library, measure the reference,
+  then scan the selection. The reference measurement/preview explicitly uses its
+  **original file**, including when a normalised version is currently active.
+  It is excluded from batch scanning/creation so its analysis snapshot stays valid.
+- **Planning:** tracks already at/above the target (including within 0.5 LUFS
+  below it) stay unchanged. Quiet tracks with positive headroom get a constant
+  gain boost. If peaks prevent any useful safe boost, WISP reports **Cannot boost
+  safely without limiting**, excludes the row from creation, and never substitutes
+  attenuation in boost-only mode. Partial safe boosts show their expected result
+  and explain why they will not reach the target. Enabling limiting explicitly
+  shows the desired loudness increase and warns about changed dynamics/noise.
+- **Custom targets:** remain available by choosing **A custom LUFS target**, now
+  supported from -30 to -5 LUFS (FFmpeg's upper limit). The custom field starts at
+  -14 but is no longer the default workflow or presented as a DJ standard. Tracks
+  are only reduced when boost-only is explicitly disabled. Out-of-range reference
+  measurements are explained and blocked, not silently clamped.
+- **Backend safeguards:** boost-only defaults to true even if omitted by a client.
+  No-op/attenuation requests are rejected without writing an output. Reference
+  track ID + analysis ID, source path/stat/full SHA-256 and target agreement are
+  checked before rendering; stale references stop the UI batch for remeasurement.
+  Copies persist boost-only mode and reference ID/title/source hash alongside
+  measured output loudness, target, gain and limiting metadata. Existing JSON
+  remains readable; no DB migration is required. A non-louder measured result
+  cannot replace the current saved version in boost-only mode.
+- **Rendering:** both FFmpeg passes use the same -1.2 dBTP working ceiling. A
+  limited result more than 1 LUFS from target is rejected with a retry suggestion,
+  in addition to existing peak/duration checks. Separate WAV copies, original
+  preservation, inactive creation, preview, explicit version switching, playlist
+  identity and cue timing remain unchanged. Previously saved copies with another
+  target are clearly labelled; activating them does not apply newly chosen settings.
+- **Verified:** regression cases use the reported -13.59 LUFS / +0.28 dBTP values:
+  target -14 -> unchanged; reference -8 -> needs limiting; explicit limiting ->
+  planned +5.59 dB. Real FFmpeg synthetic-audio tests reach -8 LUFS within 1 LUFS,
+  satisfy true-peak/duration checks and retain source bytes. API tests cover
+  explicit reduction, missing/modified/stale/mismatched references, provenance,
+  idempotent retry and cleanup of an unexpectedly quieter output. Browser tests
+  cover reference search outside selection, reference exclusion, opt-in limiting,
+  preview/switch-back, stale-reference batch stop and unsupported reference levels.
+  The matching/review UI was visually checked at 800x600 with scrollable controls.
+  Final checks: **331 tests pass** (94 core, 54 infrastructure, 97 API, 47 client
+  unit, 39 browser), client build passes, lint has zero errors and 13 existing
+  warnings. Existing NuGet advisories are unchanged.
+- **Limitations:** integrated loudness matching does not guarantee identical
+  perceived level in every section or on a particular deck/mixer. Limiting may
+  flatten transients and amplify vinyl noise; listen before activating copies.
+  No user audio was processed/changed, no live database/installation was modified,
+  and no CDJ hardware claim is made. The merged unified-drag fix is retained.
+
 ## 2026-09-11: One row drag for WISP playlists and external audio files
 
 - **Cause of the regression:** the internal-drag repair made rows HTML-only and
