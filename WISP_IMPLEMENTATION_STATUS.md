@@ -2,6 +2,44 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: Discover Anywhere track-search reliability
+
+- **Root cause verified live:** `Brent Laurence - Big Buds`, video
+  `keTtiDqQrpc`, is categorised as 22 rather than Music (10). WISP's hard-coded
+  `videoCategoryId=10` filter excluded it. The old request returned two other
+  tracks; the unrestricted, normalized search returned this exact video first.
+- **Implemented:** free-text search now queries all video categories in
+  relevance order, with up to 25 results and no Topic-channel upload injection
+  or subsequent 24-row truncation. Artist/title separators are normalized
+  without removing hyphens inside names or intentional `-word` exclusions.
+  Search titles/channel names are HTML-decoded before rendering.
+- **Direct links:** recognised YouTube watch/short/embed/live URLs and youtu.be
+  links resolve through `videos.list` using a validated, case-sensitive ID.
+  Playlist/time parameters are ignored. The pasted URL is never fetched as an
+  arbitrary network destination. Direct lookups avoid the local search-call
+  budget, but still require API credentials and available Google quota.
+- **Reliability/feedback:** one search request per uncached text lookup;
+  successful results are cached with distinct text/video keys. Empty/error
+  responses are not cached for the rest of the day. Concurrent source failures
+  are collected safely. UI adds Retry search, direct-link guidance and a YouTube
+  website fallback, and labels the quota meter as WISP's local counter instead
+  of claiming it is authoritative Google-project usage.
+- **Related Discover bug fixed:** Watch embeds and release fallback searches
+  incorrectly targeted `www.Tv.com`; they now use tested YouTube URL helpers.
+- **Verification:** 178 backend tests and 19 client tests pass, including 14 new
+  backend search cases and two link regressions. Updated endpoint tested against
+  live YouTube in an isolated HTTP host: exact video first for text (6 results),
+  sole result for the pasted link; only one search.list request for both.
+  Browser checks replaying those live responses verify Anywhere handoff, display,
+  embed URL, direct-link lookup, empty results, retry and quota messages. Build
+  and lint pass with existing warnings. Working library/configuration unchanged;
+  no WISP standalone executable or installer packaged.
+- **Limits:** this is API-ranked search (first 25 results), not a guarantee of
+  parity with personalised YouTube website results. Private/deleted/unavailable
+  videos can still fail direct lookup. My artists/catalogue refresh is unchanged.
+  References: [search filters and query syntax](https://developers.google.com/youtube/v3/docs/search/list),
+  [video lookup](https://developers.google.com/youtube/v3/docs/videos/list).
+
 ## 2026-09-11: Soulseek transfer cancellation and history cleanup
 
 - **Implemented:** queued/downloading rows have a visible Cancel action;
