@@ -9,7 +9,7 @@ export function ExternalFileDrag({ ids, controller }: { ids: string[]; controlle
   return <div className="flex min-w-0 flex-wrap items-center gap-2">
     <button type="button" disabled={disabled} draggable={false}
       aria-label={`Drag ${ids.length} audio files to rekordbox`}
-      title={available ? 'Hold and drag this handle into a rekordbox playlist. Sends original audio files only; WISP cues are not transferred.' : 'Multi-file dragging requires the Windows desktop app.'}
+      title={available ? 'Hold and drag this handle into a rekordbox playlist. Sends active audio versions only; WISP cues are not transferred.' : 'Multi-file dragging requires the Windows desktop app.'}
       className="inline-flex touch-none select-none items-center gap-1.5 rounded border border-[var(--color-accent)]/60 bg-[var(--color-accent)]/10 px-3 py-1 text-xs disabled:opacity-50 enabled:cursor-grab active:cursor-grabbing"
       onPointerDown={(e) => {
         if (disabled || e.button !== 0) return

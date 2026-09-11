@@ -2,6 +2,49 @@
 
 Last reviewed: 2026-09-11
 
+## 2026-09-11: One row drag for WISP playlists and external audio files
+
+- **Cause of the regression:** the internal-drag repair made rows HTML-only and
+  reserved Windows file dragging for a separate toolbar handle. The previous
+  native payload offered only `CF_HDROP`, so switching rows back to native mode
+  alone would break WISP's MIME-based playlist/mix targets again.
+- **Implemented:** capable Windows hosts now start one copy-only OLE session
+  from selected library/playlist rows, offering both Unicode `CF_HDROP` active
+  file paths and `application/x-wisp-track-ids` in Chromium's native custom-MIME
+  Pickle format. WISP reads the IDs through its existing playlist/mix handlers;
+  Explorer/rekordbox can request real audio files from the same data object.
+  Current and legacy Chromium clipboard format names are both offered. No
+  `DownloadURL`, HTTP audio URL, fake browser File, or source-file move is used.
+- **Selection and safety:** Ctrl+A spans pages; an unselected row drags only
+  itself. Playlist occurrences preserve their ID order internally; repeated
+  physical paths are deduplicated for external files. Track paths are resolved
+  from the DB (including explicitly active normalised versions), never trusted
+  from frontend file paths. Missing files still permit internal organisation,
+  but suppress the entire external file list instead of silently sending a
+  partial selection. Existing duplicate confirmations remain in place.
+- **Compatibility:** the toolbar file handle remains available. Ordinary web
+  browsers/older hosts retain internal HTML row dragging; only a host advertising
+  `unifiedTrackDrag` enables dual-format rows. A rebuilt/restarted desktop app is
+  needed, not just an updated frontend. External drags transfer audio files only,
+  not WISP cue/playlist metadata. Dragging never updates the system clipboard.
+- **Verification:** Windows native tests enumerate both formats, read every
+  file through `DragQueryFile`, independently decode ID payloads up to 20,000
+  entries and retrieve/release both formats repeatedly. Browser regressions use
+  real mouse row starts plus Chromium CDP drag destination events carrying IDs
+  and Files together, covering 1,205-track selections across pages, internal and
+  external handoff paths, missing files, cancellation/retry, and all three
+  duplicate choices. Browser bridge/API fixtures remain isolated mocks.
+  Full verification: 229 backend + 38 client unit + 35 browser tests pass (302
+  total); client build passes and lint reports zero errors / 13 existing warnings.
+- **Remaining acceptance check:** the installed Photino/WebView2 OLE loop and an
+  actual rekordbox import have not been exercised end-to-end here. After release,
+  use the SAME selected rows to (1) drop into a WISP playlist, (2) drop into an
+  Explorer test folder and (3) drop into rekordbox; verify counts and playability.
+  Both apps should run at the same privilege level (normally non-administrator).
+  Live music, database and installed application were not modified by these tests.
+- **Separate pending work:** reference-track loudness matching/boost-only review
+  was paused for this drag regression; it is not included in this fix.
+
 ## 2026-09-11: Non-destructive loudness normalisation and linked audio versions
 
 - **Workflow:** select one or many library/playlist tracks (Ctrl+A spans pages),

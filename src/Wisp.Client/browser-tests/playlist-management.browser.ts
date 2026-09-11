@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { fileURLToPath } from 'node:url'
 
 const library = ['Alpha', 'Beta'].map((title, i) => ({
   id: `track-${i}`, title, artist: 'Test artist', filePath: `D:\\Music\\${title}.aiff`, fileName: `${title}.aiff`,
@@ -191,6 +192,26 @@ test('dropping on a sidebar playlist uses the same duplicate confirmation', asyn
   await duplicate.getByRole('button', { name: 'Add again', exact: true }).click()
   await expect.poll(() => state.entries.other.length).toBe(3)
 })
+
+for (const choice of ['Skip existing', 'Add again', 'Cancel']) {
+  test(`unified native IDs plus Files retain duplicate confirmation: ${choice}`, async ({ page }) => {
+    const state = await setup(page)
+    const box = await page.getByText('Other playlist', { exact: true }).first().boundingBox()
+    const session = await page.context().newCDPSession(page)
+    const data = { items: [{ mimeType: 'application/x-wisp-track-ids', data: JSON.stringify(['track-0', 'track-1']) }],
+      files: [fileURLToPath(import.meta.url)], dragOperationsMask: 1 }
+    try {
+      for (const type of ['dragEnter', 'dragOver', 'drop'] as const)
+        await session.send('Input.dispatchDragEvent', { type, x: box!.x + 10, y: box!.y + 8, data })
+    } finally { await session.detach() }
+    const dialog = page.getByRole('dialog', { name: 'Already in this playlist' })
+    await expect(dialog).toBeVisible()
+    expect(state.entries.other).toHaveLength(1)
+    await dialog.getByRole('button', { name: choice, exact: true }).click()
+    await expect(dialog).not.toBeVisible()
+    await expect.poll(() => state.entries.other.length).toBe(choice === 'Cancel' ? 1 : choice === 'Add again' ? 3 : 2)
+  })
+}
 
 test('duplicate scan checks every page, confirms before removal, and refreshes counts', async ({ page }, testInfo) => {
   const state = await setup(page, 1002)

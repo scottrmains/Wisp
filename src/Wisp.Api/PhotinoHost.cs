@@ -136,7 +136,7 @@ public static class PhotinoHost
     private static object? Dispatch(PhotinoWindow window, BridgeRequest request, IServiceProvider services) => request.Method switch
     {
         "pickFolder" => PickFolder(window, request.Args),
-        "desktopCapabilities" => new { externalFileDrag = OperatingSystem.IsWindows(), maxDragTracks = Library.LibraryFileDrag.MaxTracks },
+        "desktopCapabilities" => new { externalFileDrag = OperatingSystem.IsWindows(), unifiedTrackDrag = OperatingSystem.IsWindows(), maxDragTracks = Library.LibraryFileDrag.MaxTracks },
         "dragFiles" => DragFiles(window, request.Args, services),
         "pickAudioFile" => PickAudioFile(window, request.Args),
         "openInExplorer" => OpenInExplorer(request.Args),
@@ -171,18 +171,21 @@ public static class PhotinoHost
             ? value.Deserialize<Guid[]>() ?? [] : [];
         using var scope = services.CreateScope();
         var resolver = new Library.LibraryFileDrag(scope.ServiceProvider.GetRequiredService<Wisp.Infrastructure.Persistence.WispDbContext>());
-        var paths = resolver.Resolve(ids);
+        var includeTrackIds = args?.TryGetProperty("includeTrackIds", out var include) == true && include.ValueKind == JsonValueKind.True;
+        var selection = resolver.ResolveSelection(ids, allowInternalOnly: includeTrackIds);
+        var paths = selection.Paths;
         Log.Information("File drag: resolved {RequestedCount} track IDs to {FileCount} files", ids.Length, paths.Length);
         NativeFileDrag.Result? result = null;
         Exception? dragError = null;
         // Never let a managed exception escape the reverse-P/Invoke UI callback.
         window.Invoke(() =>
         {
-            try { if (OperatingSystem.IsWindows()) result = NativeFileDrag.Start(paths); }
+            try { if (OperatingSystem.IsWindows()) result = NativeFileDrag.Start(paths, includeTrackIds ? selection.TrackIds : null); }
             catch (Exception ex) { dragError = ex; }
         });
         if (dragError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(dragError).Throw();
-        return result;
+        return result is not null && selection.MissingCount > 0 && result.Reason is null
+            ? result with { Reason = "internal-only-missing-files" } : result;
     }
 
     private static object? OpenExternal(JsonElement? args)
