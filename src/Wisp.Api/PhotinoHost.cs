@@ -34,6 +34,11 @@ public static class PhotinoHost
             .SetContextMenuEnabled(devToolsEnabled)
             .SetDevToolsEnabled(devToolsEnabled);
 
+        // Use the same icon as the executable for the window and taskbar.
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "wisp.ico");
+        if (OperatingSystem.IsWindows() && File.Exists(iconPath))
+            window.SetIconFile(iconPath);
+
         if (saved is { X: { } x, Y: { } y } && IsReasonablePosition(x, y))
             window = window.SetLeft(x).SetTop(y);
         else

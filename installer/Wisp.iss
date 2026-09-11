@@ -22,6 +22,7 @@ Compression=lzma2/fast
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\Wisp.exe
+SetupIconFile={#PublishDir}\Assets\wisp.ico
 CloseApplications=yes
 RestartApplications=no
 DisableProgramGroupPage=yes

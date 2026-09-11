@@ -1,6 +1,14 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-09
+Last reviewed: 2026-09-11
+
+## 2026-09-11: Wispa branding
+
+The approved Labrador/record logo is now a scalable vector master with generated
+multi-resolution Windows icons. It is used in the sidebar (expanded and collapsed),
+Settings header, browser tab, executable, Photino window/taskbar and installer.
+Branding source, provenance and regeneration instructions live in
+`design/branding/README.md`. This change does not alter USB export behavior.
 
 ## 2026-09-09: current status and Windows packaging
 

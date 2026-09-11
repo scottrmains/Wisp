@@ -7,6 +7,7 @@
     <AssemblyName>Wisp</AssemblyName>
     <Product>Wisp</Product>
     <Description>Local DJ prep assistant</Description>
+    <ApplicationIcon>..\Wisp.Client\public\branding\wisp.ico</ApplicationIcon>
     <OutputType Condition="'$(Configuration)' == 'Release' and '$(RuntimeIdentifier)' == 'win-x64'">WinExe</OutputType>
   </PropertyGroup>
 
@@ -25,6 +26,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Wisp.Core\Wisp.Core.csproj" />
     <ProjectReference Include="..\Wisp.Infrastructure\Wisp.Infrastructure.csproj" />
+    <None Include="..\Wisp.Client\public\branding\wisp.ico" Link="Assets\wisp.ico"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
