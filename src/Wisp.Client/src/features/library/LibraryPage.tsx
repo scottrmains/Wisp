@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type SetStateAction } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tracks } from '../../api/library'
 import { playlists as playlistsApi } from '../../api/playlists'
@@ -37,6 +37,11 @@ import { RowContextMenu, type ContextMenuItem } from './RowContextMenu'
 import { TrackPrepWorkspace } from './TrackPrepWorkspace'
 import { useScan } from './useScan'
 import { useTrackFileDialog } from './TrackFileDialog'
+import { ResizablePrepPane } from './ResizablePrepPane'
+import { ExternalFileDrag } from './ExternalFileDrag'
+import { collectSelection, selectionScope } from './librarySelection'
+
+const EMPTY_SELECTION = new Set<string>()
 
 /// Library content for the routed App layout — no top-nav, no chain dock,
 /// no mini-player. Those are App-level fixtures. This component owns the
@@ -48,8 +53,13 @@ export function LibraryPage() {
     setQuery(next)
     useUiPrefs.getState().setLibrarySort(next.sort ?? 'artist')
   }
-  const [selected, setSelected] = useState<Track | null>(null)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [storedSelected, setSelected] = useState<Track | null>(null)
+  const [selection, setSelection] = useState({ scope: '', ids: new Set<string>() })
+  const selectionTracks = useRef(new Map<string, Track>())
+  const selectionRequest = useRef<AbortController | null>(null)
+  const [selectionStatus, setSelectionStatus] = useState({ scope: '', pending: false, error: null as string | null })
+  const filtersVisible = useUiPrefs((s) => s.libraryFiltersVisible)
+  const toggleFilters = useUiPrefs((s) => s.toggleLibraryFilters)
   const anchorIdRef = useRef<string | null>(null)
   const [focusTab, setFocusTab] = useState<InspectorTab | null>(null)
   const [cleanupTarget, setCleanupTarget] = useState<Track | null>(null)
@@ -98,12 +108,66 @@ export function LibraryPage() {
     ? { ...query, playlistId: activePlaylistId }
     : query
 
+  const scopeKey = selectionScope(effectiveQuery)
+  const [previousScope, setPreviousScope] = useState(scopeKey)
+  // Discard, rather than just hide, selection when switching scope. Otherwise
+  // returning to an earlier playlist could revive a stale all-track selection.
+  if (previousScope !== scopeKey) {
+    setPreviousScope(scopeKey)
+    setSelection({ scope: scopeKey, ids: new Set() })
+    setSelected(null)
+    setSelectionStatus({ scope: scopeKey, pending: false, error: null })
+  }
+  const selectingAll = selectionStatus.scope === scopeKey && selectionStatus.pending
+  const selectionError = selectionStatus.scope === scopeKey ? selectionStatus.error : null
+  const selectedIds = selection.scope === scopeKey ? selection.ids : EMPTY_SELECTION
+  const selected = selection.scope === scopeKey ? storedSelected : null
+  const setSelectedIds = (next: SetStateAction<Set<string>>) => setSelection((previous) => ({
+    scope: scopeKey,
+    ids: typeof next === 'function' ? next(previous.scope === scopeKey ? previous.ids : EMPTY_SELECTION) : next,
+  }))
+
+  useEffect(() => {
+    // A filter/playlist change must cancel an in-flight all-pages selection.
+    selectionRequest.current?.abort()
+    selectionRequest.current = null
+    selectionTracks.current.clear()
+    anchorIdRef.current = null
+    return () => { selectionRequest.current?.abort() }
+  }, [scopeKey])
+
+  const selectAll = async () => {
+    if (selectionRequest.current) return
+    const controller = new AbortController()
+    selectionRequest.current = controller
+    setSelectionStatus({ scope: scopeKey, pending: true, error: null })
+    try {
+      const all = await collectSelection(effectiveQuery, tracks.list, controller.signal)
+      if (controller.signal.aborted) return
+      selectionTracks.current = new Map(all.map((t) => [t.id, t]))
+      setSelectedIds(new Set(all.map((t) => t.id)))
+      setSelected(all[0] ?? null)
+    } catch (e) {
+      if (!controller.signal.aborted) setSelectionStatus({ scope: scopeKey, pending: false, error: (e as Error).message })
+    } finally {
+      if (selectionRequest.current === controller) {
+        selectionRequest.current = null
+        setSelectionStatus((s) => ({ ...s, pending: false }))
+      }
+    }
+  }
+
   const tracksQuery = useQuery({
     queryKey: ['tracks', effectiveQuery],
     queryFn: () => tracks.list(effectiveQuery),
   })
   const total = tracksQuery.data?.total ?? 0
   const items = tracksQuery.data?.items ?? []
+  useEffect(() => {
+    // Keep row payloads for manual Ctrl/Shift selections across page changes,
+    // as well as for Select all, so internal WISP drags don't truncate either.
+    for (const track of tracksQuery.data?.items ?? []) selectionTracks.current.set(track.id, track)
+  }, [tracksQuery.data])
 
   const hasActiveFilters = !!(
     query.search || query.key || query.bpmMin || query.bpmMax ||
@@ -119,6 +183,8 @@ export function LibraryPage() {
   }
 
   const onSelectRow = (t: Track, mods: { meta: boolean; shift: boolean }) => {
+    selectionRequest.current?.abort()
+    selectionTracks.current.set(t.id, t)
     setFocusTab(null)
     if (mods.meta) {
       setSelectedIds((prev) => {
@@ -148,6 +214,7 @@ export function LibraryPage() {
   }
   const onActivateRow = (t: Track) => playTrack(t.id)
   const clearSelection = () => {
+    selectionRequest.current?.abort()
     setSelected(null)
     setSelectedIds(new Set())
     anchorIdRef.current = null
@@ -155,7 +222,8 @@ export function LibraryPage() {
 
   const onDragStartRow = (t: Track): Track[] => {
     if (selectedIds.has(t.id) && selectedIds.size > 1) {
-      return items.filter((x) => selectedIds.has(x.id))
+      const known = new Map([...selectionTracks.current, ...items.map((x) => [x.id, x] as const)])
+      return [...selectedIds].map((id) => known.get(id)).filter((x): x is Track => !!x)
     }
     setSelected(t)
     setSelectedIds(new Set([t.id]))
@@ -288,12 +356,19 @@ export function LibraryPage() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (e.defaultPrevented || document.querySelector('dialog[open]')) return
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        void selectAll()
+        return
+      }
       if (e.key === 'Escape' && selectedIds.size > 0) {
         clearSelection()
         e.preventDefault()
         return
       }
+      if (target?.closest('button, [role="separator"]')) return
       if (e.key === 'r' || e.key === 'R') {
         if (selected) {
           // Load the highlighted row into the workspace + focus the Recommendations tab.
@@ -338,11 +413,11 @@ export function LibraryPage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, items, togglePlay, selectedIds.size])
+  }, [selected, items, togglePlay, selectedIds.size, scopeKey])
 
   // First-launch / cleared-library state — bumps the user toward Scan or away from
   // an empty Library so they don't sit looking at a blank panel.
-  if (showLibraryEmptyState) {
+  if (showLibraryEmptyState && !workspaceActive && !activePlaylistId) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="text-3xl font-semibold tracking-tight">Your library is empty</div>
@@ -379,17 +454,17 @@ export function LibraryPage() {
           context-menu item that loads the track). Self-hides when no track is
           loaded. Single-click selection no longer triggers this — that was
           getting in the way of casual browsing. */}
-      <TrackPrepWorkspace
+      {workspaceActive && <ResizablePrepPane><TrackPrepWorkspace
         onAddToChain={activePlanId ? addToActivePlan : undefined}
         onCleanup={setCleanupTarget}
         onArchive={onArchiveOrRestore}
         focusTab={focusTab ?? undefined}
-      />
+      /></ResizablePrepPane>}
 
       {activePlaylist && (
-        <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 px-4 py-2 text-xs">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 px-4 py-2 text-xs">
           <span className="text-[var(--color-muted)]">Scoped to playlist:</span>
-          <span className="font-medium text-white">{activePlaylist.name}</span>
+          <span className="max-w-xs truncate font-medium text-white" title={activePlaylist.name}>{activePlaylist.name}</span>
           <span className="text-[var(--color-muted)] tabular-nums">
             ({activePlaylist.trackCount} {activePlaylist.trackCount === 1 ? 'track' : 'tracks'})
           </span>
@@ -408,7 +483,17 @@ export function LibraryPage() {
           </button>
         </div>
       )}
-      <LibraryFilters query={query} onChange={changeQuery} total={total} />
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-border)] px-4 py-2 text-xs">
+        <button onClick={toggleFilters} aria-expanded={filtersVisible} className="rounded border border-[var(--color-border)] px-2 py-1">{filtersVisible ? 'Hide filters' : 'Show filters'}{hasActiveFilters ? ' · active' : ''}</button>
+        <button disabled={selectingAll || total === 0} onClick={() => void selectAll()} className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-50" title="Select every matching track, across all pages (Ctrl+A)">
+          {selectingAll ? 'Selecting all pages…' : `Select all ${total.toLocaleString()} tracks`}
+        </button>
+        {selectingAll && <button onClick={() => selectionRequest.current?.abort()} className="underline">Cancel selection</button>}
+        <ExternalFileDrag key={scopeKey} ids={[...selectedIds]} />
+        <span className="ml-auto text-[var(--color-muted)]">{selectedIds.size.toLocaleString()} selected · {total.toLocaleString()} matching</span>
+        {selectionError && <span role="alert" className="basis-full text-red-300">{selectionError}</span>}
+      </div>
+      {filtersVisible && <div className="max-h-40 shrink-0 overflow-y-auto"><LibraryFilters query={query} onChange={changeQuery} total={total} /></div>}
       {selectedIds.size > 1 && (
         <BulkActionBar
           count={selectedIds.size}
@@ -420,7 +505,7 @@ export function LibraryPage() {
           onClear={clearSelection}
         />
       )}
-      <div className="min-h-0 flex-1">
+      <div className="min-h-20 flex-1" aria-label="Library track list">
         <LibraryTable
           tracks={items}
           loading={tracksQuery.isLoading}
@@ -436,6 +521,11 @@ export function LibraryPage() {
           onDragStartRow={onDragStartRow}
         />
       </div>
+      {total > (query.size ?? 500) && <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-1 text-xs">
+        <span>Page {query.page ?? 1} of {Math.ceil(total / (query.size ?? 500))}</span>
+        <button disabled={(query.page ?? 1) <= 1} onClick={() => changeQuery({ ...query, page: (query.page ?? 1) - 1 })} className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40">Previous page</button>
+        <button disabled={(query.page ?? 1) * (query.size ?? 500) >= total} onClick={() => changeQuery({ ...query, page: (query.page ?? 1) + 1 })} className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40">Next page</button>
+      </div>}
 
       {cleanupTarget && (
         <CleanupModal

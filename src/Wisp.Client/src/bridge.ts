@@ -75,6 +75,7 @@ export function invoke<T = unknown>(method: string, args?: unknown): Promise<T> 
 }
 
 export const bridge = {
+  dragFiles: (trackIds: string[]) => invoke<{ dropAccepted: boolean; fileCount: number }>('dragFiles', { trackIds }),
   pickAudioFile: (initialPath?: string) =>
     invoke<{ path: string | null }>('pickAudioFile', { initialPath }),
   pickFolder: (initialPath?: string) =>

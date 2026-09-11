@@ -5,6 +5,14 @@ import type { DiscoverySort } from '../api/types'
 export type InspectorTab = 'overview' | 'recommendations' | 'cues' | 'metadata' | 'notes' | 'tags'
 
 interface UiPrefsState {
+  libraryPrepHeight: number
+  setLibraryPrepHeight: (height: number) => void
+  prepWaveformVisible: boolean
+  togglePrepWaveform: () => void
+  prepDetailsVisible: boolean
+  togglePrepDetails: () => void
+  libraryFiltersVisible: boolean
+  toggleLibraryFilters: () => void
   discoverySort: DiscoverySort
   setDiscoverySort: (sort: DiscoverySort) => void
   librarySort: string
@@ -57,6 +65,14 @@ const DEFAULT_WIDTH = 448
 export const useUiPrefs = create<UiPrefsState>()(
   persist(
     (set) => ({
+      libraryPrepHeight: 340,
+      setLibraryPrepHeight: (height) => set({ libraryPrepHeight: Number.isFinite(height) ? Math.max(100, Math.min(1200, Math.round(height))) : 340 }),
+      prepWaveformVisible: true,
+      togglePrepWaveform: () => set((s) => ({ prepWaveformVisible: !s.prepWaveformVisible })),
+      prepDetailsVisible: true,
+      togglePrepDetails: () => set((s) => ({ prepDetailsVisible: !s.prepDetailsVisible })),
+      libraryFiltersVisible: true,
+      toggleLibraryFilters: () => set((s) => ({ libraryFiltersVisible: !s.libraryFiltersVisible })),
       discoverySort: '-published',
       setDiscoverySort: (discoverySort) => set({ discoverySort }),
       librarySort: '-added',

@@ -27,7 +27,7 @@ async function handle<T>(res: Response): Promise<T> {
   return (await res.json()) as T
 }
 
-export async function apiGet<T>(path: string, params?: Record<string, unknown>): Promise<T> {
+export async function apiGet<T>(path: string, params?: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const url = new URL(path, window.location.origin)
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -35,7 +35,7 @@ export async function apiGet<T>(path: string, params?: Record<string, unknown>):
       url.searchParams.set(k, String(v))
     }
   }
-  return handle<T>(await fetch(url.pathname + url.search))
+  return handle<T>(await fetch(url.pathname + url.search, { signal }))
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {

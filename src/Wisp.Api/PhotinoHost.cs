@@ -14,7 +14,7 @@ public static class PhotinoHost
     private const int DefaultWidth = 1400;
     private const int DefaultHeight = 900;
 
-    public static void Run(string url, WispSettingsStore settings, bool devToolsEnabled = false)
+    public static void Run(string url, WispSettingsStore settings, IServiceProvider services, bool devToolsEnabled = false)
     {
         var saved = settings.Current.Window;
 
@@ -47,7 +47,7 @@ public static class PhotinoHost
         window.RegisterWebMessageReceivedHandler((sender, message) =>
         {
             var win = (PhotinoWindow)sender!;
-            HandleMessage(win, message);
+            HandleMessage(win, message, services);
         });
 
         Log.Information("Photino: loading {Url}", url);
@@ -81,7 +81,7 @@ public static class PhotinoHost
     private static bool IsReasonablePosition(int x, int y)
         => x > -10000 && x < 10000 && y > -10000 && y < 10000;
 
-    private static void HandleMessage(PhotinoWindow window, string raw)
+    private static void HandleMessage(PhotinoWindow window, string raw, IServiceProvider services)
     {
         BridgeRequest? request;
         try
@@ -99,7 +99,7 @@ public static class PhotinoHost
 
         try
         {
-            var result = Dispatch(window, request);
+            var result = Dispatch(window, request, services);
             Reply(window, request.Id, result, error: null);
         }
         catch (Exception ex)
@@ -109,9 +109,10 @@ public static class PhotinoHost
         }
     }
 
-    private static object? Dispatch(PhotinoWindow window, BridgeRequest request) => request.Method switch
+    private static object? Dispatch(PhotinoWindow window, BridgeRequest request, IServiceProvider services) => request.Method switch
     {
         "pickFolder" => PickFolder(window, request.Args),
+        "dragFiles" => DragFiles(window, request.Args, services),
         "pickAudioFile" => PickAudioFile(window, request.Args),
         "openInExplorer" => OpenInExplorer(request.Args),
         "openExternal" => OpenExternal(request.Args),
@@ -136,6 +137,19 @@ public static class PhotinoHost
 
         System.Diagnostics.Process.Start(psi);
         return new { ok = true };
+    }
+
+    private static object? DragFiles(PhotinoWindow window, JsonElement? args, IServiceProvider services)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("External file dragging is currently supported on Windows only.");
+        var ids = args?.TryGetProperty("trackIds", out var value) == true
+            ? value.Deserialize<Guid[]>() ?? [] : [];
+        using var scope = services.CreateScope();
+        var resolver = new Library.LibraryFileDrag(scope.ServiceProvider.GetRequiredService<Wisp.Infrastructure.Persistence.WispDbContext>());
+        var paths = resolver.Resolve(ids);
+        NativeFileDrag.Result? result = null;
+        window.Invoke(() => { if (OperatingSystem.IsWindows()) result = NativeFileDrag.Start(paths); });
+        return result;
     }
 
     private static object? OpenExternal(JsonElement? args)
