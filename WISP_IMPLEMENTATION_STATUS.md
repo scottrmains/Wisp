@@ -2,6 +2,59 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: CDJ Memory Cue encoding repair — hardware test pending
+
+- **Fixed:** classic `PCPT` entries now occupy exactly 56 bytes. The old writer
+  declared 56 but emitted 60, writing cue type as uint32 rather than one byte
+  plus the three-byte `00 03 e8` field. This shifted cue/loop timestamps and
+  broke the next record boundary. Corrected the `0x00010000` marker and matched
+  the reference PMAI header and empty cue-list sentinel as well.
+- **Verified locally:** literal format-oracle tests and independent field-offset
+  decoding cover zero/multiple cues, time zero, milliseconds, loops and malformed
+  records. Opt-in comparison with the privately preserved September rekordbox
+  reference matched all six classic Memory Cue records across three DAT files
+  (normalizing only creation-order versus timestamp-order link fields).
+  The reference currently has two stored points per track, including a near-start
+  point; no USB/hardware acceptance is inferred from this comparison.
+- **Fixed validation:** before installation and again afterwards, decode every
+  cue's signature, length, type, flags, ordering and timestamps. Check audio-path
+  tag, section boundaries and unique cue lists. The former count-only validator
+  accepted malformed records. Regression tests explicitly recreate that bug.
+- **Diagnostic reference:** the exporter can read an explicitly preserved
+  `<WISP_DATA_DIR>/pioneer-reference/export.pdb` (normally under
+  `%LOCALAPPDATA%/Wisp`) before searching separate connected USBs. An explicit
+  `WISP_PIONEER_TEMPLATE` override takes priority and fails if missing/invalid.
+  The target itself cannot be its own reference. Reference selection happens
+  before copying music; no reference is automatically learned from Wisp output.
+- **Local test preparation:** the owner's F: export.pdb and USBANLZ directory
+  were copied privately to that reference folder, outside Git. Database SHA-256
+  matched before/after copy. This is NOT an audio/full-USB backup. F: was not
+  written or formatted. Formatting the test USB no longer removes the only
+  available database template on this PC.
+- **Export UX:** prevent repeat clicks, show errors in Wisp dialogs, and state
+  the retained-catalogue limitation in both fresh and replacement confirmation.
+  Version-2 export receipts record each cue/loop timestamp in milliseconds.
+- **Verification:** 26 targeted Pioneer tests pass with the private PDB and DAT
+  reference enabled. Full backend suite: 369 passing tests. Client unit tests:
+  53 passing; browser suite: 69 passing, including fresh/replacement/cancel/error
+  CDJ export flows. Client production build and lint (zero errors) pass. Existing
+  SQLite/OpenAPI dependency advisory warnings remain unrelated to this change.
+- **Not shipped as full compatibility:** no new hardware result yet. Template
+  tracks remain visible; clean independent catalogue generation, Pioneer
+  waveforms/beatgrids and VBR seek analysis remain unresolved. Synthetic loop
+  tests are not hardware proof. This repair does not change the catalogue
+  allocator that previously permitted three-track playback on CDJ-850.
+- **Next test:** run the updated build, format the intended test USB as FAT32
+  only after retaining any wanted files, save two clearly separated Wisp **CDJ
+  Memory** cues per track, explicitly export a small playlist, safely eject, and
+  open the playlist prefixed `WISP` on each player. Check audio and use
+  **CUE/LOOP CALL**, not just the large transport CUE button, to verify both saved
+  times. Record CDJ-850 and original CDJ-900 results separately. Extra template
+  tracks and no waveform are expected in this isolated cue test.
+
+Format reference: [Crate Digger's independent ANLZ schema](https://github.com/Deep-Symmetry/crate-digger/blob/main/src/main/kaitai/rekordbox_anlz.ksy).
+This entry supersedes older claims below that cue counts alone validate export.
+
 ## 2026-09-13: Phase 26f — finished-mix exports and large-master playback
 
 - **Implemented:** Recordings → choose a mix → Export finished mix. Choose a

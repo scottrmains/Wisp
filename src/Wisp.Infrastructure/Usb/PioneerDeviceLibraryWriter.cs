@@ -402,7 +402,11 @@ public sealed class PioneerDeviceLibraryWriter
         file.AddRange("PMAI"u8.ToArray());
         AppendBe(file, 28);
         AppendBe(file, 0); // patched after sections are appended
-        file.AddRange(new byte[16]);
+        // Fixed PMAI fields observed on the rekordbox reference export.
+        AppendBe(file, 1);
+        AppendBe(file, 0x10000);
+        AppendBe(file, 0x10000);
+        AppendBe(file, 0);
         var pathBytes = Encoding.BigEndianUnicode.GetBytes(contentPath + "\0");
         AppendTag(file, "PPTH", 16, body =>
         {
@@ -424,7 +428,7 @@ public sealed class PioneerDeviceLibraryWriter
         AppendBe(tag, type);
         AppendBe16(tag, 0);
         AppendBe16(tag, (ushort)cues.Count);
-        AppendBe(tag, type == 0 && cues.Count > 0 ? 1 : 0);
+        AppendBe(tag, type == 0 && cues.Count > 0 ? 1u : uint.MaxValue);
         for (var i = 0; i < cues.Count; i++) AppendCuePoint(tag, cues[i], i, cues.Count);
         WriteBeAt(tag, 8, tag.Count);
         file.AddRange(tag);
@@ -437,11 +441,16 @@ public sealed class PioneerDeviceLibraryWriter
         AppendBe(output, 56);
         AppendBe(output, 0); // memory cue rather than hot cue
         AppendBe(output, 0); // not an active loop
-        AppendBe(output, 0x00100000);
+        AppendBe(output, 0x00010000);
         AppendBe16(output, index == 0 ? ushort.MaxValue : (ushort)(index - 1));
         AppendBe16(output, index == total - 1 ? ushort.MaxValue : (ushort)(index + 1));
-        AppendBe(output, cue.Kind == DeviceCueKind.Loop ? 2 : 1);
-        AppendBe(output, 1000);
+        // PCPT offset 0x1c is ONE byte of type, followed by three bytes
+        // 00 03 e8. Writing two uint32s here shifts both timestamps and
+        // emits 60 bytes despite declaring 56, corrupting subsequent cues.
+        // Layout: Deep-Symmetry/crate-digger rekordbox_anlz.ksy cue_entry;
+        // cross-checked against the September 2026 rekordbox USB reference.
+        output.Add(cue.Kind == DeviceCueKind.Loop ? (byte)2 : (byte)1);
+        output.AddRange(new byte[] { 0, 3, 0xe8 });
         AppendBe(output, ToMilliseconds(cue.StartSeconds));
         AppendBe(output, cue.Kind == DeviceCueKind.Loop && cue.EndSeconds is { } end ? ToMilliseconds(end) : uint.MaxValue);
         output.AddRange(new byte[16]);

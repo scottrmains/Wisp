@@ -38,6 +38,8 @@ public sealed class PioneerUsbExportServiceTests : IDisposable
         var receipt = await File.ReadAllTextAsync(result.ReceiptPath);
         Assert.Contains("MemoryCueCount", receipt);
         Assert.Contains("\"MemoryCueCount\": 1", receipt);
+        Assert.Contains("\"Version\": 2", receipt);
+        Assert.Contains("\"StartMilliseconds\": 12345", receipt);
         Assert.True(Directory.Exists(Path.Combine(usb, "Contents", "WISP")));
         Assert.Single(Directory.EnumerateFiles(usb, "ANLZ0000.DAT", SearchOption.AllDirectories));
         Assert.False(Directory.Exists(Path.Combine(usb, ".wisp-pioneer-staging")));
@@ -181,13 +183,18 @@ public sealed class PioneerUsbExportServiceTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(source)!);
         await File.WriteAllBytesAsync(source, [1, 2, 3, 4]);
         var track = MakeTrack(source);
+        var before = await File.ReadAllBytesAsync(templatePath);
+        var cues = new[] { new DeviceCue { TrackId = track.Id, Kind = DeviceCueKind.MemoryCue, StartSeconds = 12.345 },
+            new DeviceCue { TrackId = track.Id, Kind = DeviceCueKind.MemoryCue, StartSeconds = 67.890 } };
+        const string analysisPath = "/PIONEER/USBANLZ/WISPTEST/ANLZ0000.DAT";
         var result = new PioneerDeviceLibraryWriter().WriteFromTemplate(Path.Combine(_root, "fixture-staged"), templatePath,
-            [new PioneerExportTrack(1, "/Contents/WISP/Artist/Fixture.mp3", "", track, [])],
+            [new PioneerExportTrack(1, "/Contents/WISP/Artist/Fixture.mp3", analysisPath, track, cues)],
             [new PioneerExportPlaylist(1, "Wisp fixture verification", [1])]);
-        var mappedTrack = new PioneerExportTrack(result.TrackIdMap![1], "/Contents/WISP/Artist/Fixture.mp3", "", track, []);
+        var mappedTrack = new PioneerExportTrack(result.TrackIdMap![1], "/Contents/WISP/Artist/Fixture.mp3", analysisPath, track, cues);
         var mappedPlaylist = new PioneerExportPlaylist(result.PlaylistIdMap![1], "Wisp fixture verification", [mappedTrack.DeviceId]);
 
         PioneerDeviceLibraryValidator.Validate(result.PdbPath, [mappedTrack], [mappedPlaylist], allowAdditionalRows: true, validateFreshPageLayout: false);
+        Assert.Equal(before, await File.ReadAllBytesAsync(templatePath));
     }
 
     private static Track MakeTrack(string source) => new()

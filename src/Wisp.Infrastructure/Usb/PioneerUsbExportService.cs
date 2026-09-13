@@ -44,6 +44,10 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
         var unsupported = selected.Where(t => !SupportedExtensions.Contains(Path.GetExtension(t.FileName))).ToList();
         if (unsupported.Count > 0) throw new UnsupportedPioneerFormatException($"{unsupported.Count} track(s) are not supported by the CDJ-850 profile. Convert them to MP3, AAC, WAV or AIFF first.");
 
+        // Resolve before copying potentially gigabytes of music. A locally
+        // preserved reference allows the diagnostic USB itself to be formatted.
+        var templatePdb = IsDriveRoot(root) ? FindPlayerAcceptedTemplate(root) : null;
+
         var staging = Path.Combine(root, $".wisp-pioneer-staging-{Guid.NewGuid():N}");
         var backupRoot = Path.Combine(root, "WISP", "backups");
         string? pioneerBackup = null;
@@ -76,14 +80,13 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
             List<PioneerExportPlaylist> installedPlaylists;
             if (IsDriveRoot(root))
             {
-                var templatePdb = FindPlayerAcceptedTemplate(root);
                 // Keep this first physical compatibility pass unmistakable on
                 // the player: the template itself can already contain a
                 // playlist with the same name as the Wisp source.
                 var templatePlaylists = exportPlaylists
                     .Select(playlist => playlist with { Name = $"WISP — {playlist.Name}" })
                     .ToList();
-                write = writer.WriteFromTemplate(staging, templatePdb, planned, templatePlaylists);
+                write = writer.WriteFromTemplate(staging, templatePdb!, planned, templatePlaylists);
                 installedTracks = planned.Select(track => track with { DeviceId = write.TrackIdMap![track.DeviceId] }).ToList();
                 installedPlaylists = templatePlaylists.Select(playlist => playlist with
                 {
@@ -142,14 +145,17 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
                 validateFreshPageLayout: write.TrackIdMap is null);
 
             var receipt = new PioneerExportReceipt(
-                Version: 1,
+                Version: 2,
                 CollectionName: collectionName,
                 ExportedAt: DateTimeOffset.UtcNow,
                 TrackCount: planned.Count,
                 PlaylistCount: exportPlaylists.Count,
                 PioneerBackupPath: pioneerBackup,
                 ContentsBackupPath: contentsBackup,
-                Tracks: installedTracks.Select(t => new PioneerExportReceiptTrack(t.Track.Id, t.DeviceId, t.ContentPath, t.AnalysisPath, t.DeviceCues.Count)).ToList());
+                Tracks: installedTracks.Select(t => new PioneerExportReceiptTrack(t.Track.Id, t.DeviceId, t.ContentPath, t.AnalysisPath, t.DeviceCues.Count,
+                    t.DeviceCues.OrderBy(c => c.StartSeconds).Select(c => new PioneerExportReceiptCue(
+                        c.Kind.ToString(), (long)Math.Round(c.StartSeconds * 1000),
+                        c.Kind == DeviceCueKind.Loop && c.EndSeconds is { } end ? (long)Math.Round(end * 1000) : null)).ToList())).ToList());
             var receiptPath = Path.Combine(root, "WISP", "pioneer-export-receipt.json");
             await File.WriteAllTextAsync(receiptPath, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }), ct);
             return new PioneerUsbExportResult(planned.Count, exportPlaylists.Count, installedPdb, receiptPath, pioneerBackup, contentsBackup);
@@ -194,23 +200,12 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
 
     private static string FindPlayerAcceptedTemplate(string targetRoot)
     {
-        var configured = Environment.GetEnvironmentVariable("WISP_PIONEER_TEMPLATE");
-        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return Path.GetFullPath(configured);
-
-        var target = Path.GetFullPath(targetRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var candidates = DriveInfo.GetDrives()
+        return PioneerTemplateLocator.Resolve(targetRoot,
+            Environment.GetEnvironmentVariable("WISP_PIONEER_TEMPLATE"),
+            Path.Combine(WispPaths.AppDataDir, "pioneer-reference", "export.pdb"),
+            DriveInfo.GetDrives()
             .Where(drive => drive.IsReady)
-            .Select(drive => Path.Combine(drive.RootDirectory.FullName, "PIONEER", "rekordbox", "export.pdb"))
-            .Where(File.Exists)
-            .Select(Path.GetFullPath)
-            .Where(path => !path.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            .Where(path => new FileInfo(path).Length >= 4096)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (candidates.Count == 1) return candidates[0];
-        if (candidates.Count == 0)
-            throw new PioneerTemplateRequiredException("Connect a separate USB exported by rekordbox so Wisp can use its player-accepted Pioneer database as a read-only template.");
-        throw new PioneerTemplateRequiredException("More than one Pioneer database template was found. Set WISP_PIONEER_TEMPLATE to the exact export.pdb file Wisp should read.");
+            .Select(drive => Path.Combine(drive.RootDirectory.FullName, "PIONEER", "rekordbox", "export.pdb")));
     }
 
     private static bool IsDriveRoot(string path)
@@ -244,4 +239,5 @@ public sealed class UnsupportedPioneerFormatException(string message) : InvalidO
 public sealed class PioneerTemplateRequiredException(string message) : InvalidOperationException(message);
 public sealed record PioneerUsbExportResult(int TrackCount, int PlaylistCount, string StagedPdbPath, string ReceiptPath, string? PioneerBackupPath, string? ContentsBackupPath);
 public sealed record PioneerExportReceipt(int Version, string CollectionName, DateTimeOffset ExportedAt, int TrackCount, int PlaylistCount, string? PioneerBackupPath, string? ContentsBackupPath, IReadOnlyList<PioneerExportReceiptTrack> Tracks);
-public sealed record PioneerExportReceiptTrack(Guid TrackId, int DeviceId, string ContentPath, string AnalysisPath, int MemoryCueCount);
+public sealed record PioneerExportReceiptTrack(Guid TrackId, int DeviceId, string ContentPath, string AnalysisPath, int MemoryCueCount, IReadOnlyList<PioneerExportReceiptCue>? MemoryCues = null);
+public sealed record PioneerExportReceiptCue(string Kind, long StartMilliseconds, long? EndMilliseconds);
