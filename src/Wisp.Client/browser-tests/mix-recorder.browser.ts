@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-async function setup(page: Page, interrupted = false) {
+async function setup(page: Page, interrupted = false, repeatCloseOnCancel = false) {
   let session = { id: '11111111-1111-1111-1111-111111111111', title: 'Practice mix', directoryPath: 'D:/Music/WISP Recordings/take',
     endpointId: 'input-1', deviceName: 'Input 1 (Xone:24C)', sampleRate: 44100, startedAt: '2026-09-13T12:00:00Z',
     state: interrupted ? 'Recoverable' : 'Ready', audioBytes: 44100 * 8 * 60, issue: interrupted ? 'WISP closed before saving finished.' : null as string | null,
@@ -38,7 +38,7 @@ async function setup(page: Page, interrupted = false) {
     }
     if (path.endsWith('/stop')) { busy = false; session.state = 'Ready'; return route.fulfill({ json: {} }) }
     if (path.endsWith('/recover')) { session.state = 'Ready'; session.issue = 'Recovered interrupted take.'; return route.fulfill({ status: 204 }) }
-    if (path.endsWith('/keep-recording')) { closeRequested = false; return route.fulfill({ status: 204 }) }
+    if (path.endsWith('/keep-recording')) { closeRequested = repeatCloseOnCancel; return route.fulfill({ status: 204 }) }
     if (path.endsWith('/remove')) { removals.push(route.request().postDataJSON() as Record<string, unknown>); exists = false; return route.fulfill({ status: 204 }) }
     if (path === '/api/tracks') return route.fulfill({ json: { items: [], total: 0, page: 1, size: 500 } })
     return route.fulfill({ json: [] })
@@ -98,6 +98,19 @@ test('destination failure is actionable and does not show an active recording', 
   await page.getByRole('button', { name: 'Start mix recording', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('NTFS or exFAT')
   await expect(page.getByRole('button', { name: /● Mix recording/ })).toHaveCount(0)
+})
+
+test('a second native close between status polls still opens a confirmation', async ({ page }) => {
+  const fixture = await setup(page, false, true)
+  await page.getByRole('button', { name: 'Start mix recording', exact: true }).click()
+  fixture.requestClose()
+  const dialog = page.getByRole('dialog', { name: 'Recording is still active' })
+  await dialog.getByRole('button', { name: 'Keep recording', exact: true }).click()
+  // The server receives another close before any poll observes false. The UI
+  // must recheck unchanged status, without restarting or stopping the capture.
+  await dialog.getByRole('button', { name: 'Stop and save', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-closed', 'true')
+  expect(fixture.starts).toHaveLength(1)
 })
 
 test('entry removal and audio deletion use distinct explicit confirmations', async ({ page }) => {

@@ -196,6 +196,12 @@ to the beginning/middle/end and verify both decks and stereo. In a separate shor
 test, try closing while recording and exercise both close-dialog choices. Do not
 use an irreplaceable mix for the first long-session test.
 
+**Hardware follow-up:** user completed a 10:37 mix on Input 1 and reports both
+decks recorded correctly. Read-only analysis confirms a valid stereo 44.1 kHz
+float master, matching checkpoint length, -1.9 dBTP true peak and no >=1-second
+silence below -60 dBFS on either channel. This supports advancing to Phase 26c;
+it does not close the multi-hour, native-close, sleep or unplug acceptance checks.
+
 ## Phase 26c — Recordings workspace and playback
 
 **Depends on:** 26b; UX prototype can precede engine completion.

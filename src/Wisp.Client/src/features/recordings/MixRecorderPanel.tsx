@@ -41,7 +41,9 @@ export function MixRecordingIndicator() {
         await alertDialog({ title: 'WISP stayed open', message: e instanceof Error ? e.message : 'Check the recording before closing.', tone: 'error' })
       } finally { handlingClose.current = false }
     })()
-  }, [status.data?.closeRequested, setPage])
+    // A second native close can arrive between polls, leaving the boolean true
+    // in both snapshots. Recheck every successful poll, not only boolean edges.
+  }, [status.data?.closeRequested, status.dataUpdatedAt, setPage])
   if (!status.data?.busy) return null
   return <button className="shrink-0 border-b border-[var(--color-border)] px-4 py-2 text-left text-sm text-red-400"
     onClick={() => setPage('recordings')}>● Mix recording · {duration(status.data.seconds)} · {status.data.session?.state} · View / stop</button>

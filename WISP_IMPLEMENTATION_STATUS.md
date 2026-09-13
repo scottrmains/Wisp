@@ -2,6 +2,25 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Phase 26b hardware check and repeat-close fix
+
+- User reports both decks recorded correctly in a roughly ten-minute mix on
+  Input 1. Read-only FFmpeg analysis of the resulting local master found 10:37.41
+  of stereo 44.1 kHz float audio, successful full decoding, matching file/checkpoint
+  lengths, -1.9 dBTP true peak and no per-channel silence of at least one second
+  below -60 dBFS. Metadata is Ready with no issue. This is technical validation,
+  not a listening critique or proof against brief glitches; audio was unchanged.
+- GitHub PR #23 exposed a repeat-close race: two native close attempts between
+  status polls could leave the UI's observed boolean unchanged and suppress the
+  second confirmation. Recheck on every successful status poll while retaining
+  the single-dialog guard. Add a deterministic regression with no intervening
+  false snapshot. This prerequisite is fixed before starting Phase 26c from develop.
+- Verification: all 49 browser tests and 47 client unit tests pass; client build
+  passes and lint retains zero errors / 13 pre-existing warnings. No backend or
+  audio-storage changes were needed for the repeat-close fix.
+- Multi-hour capture, physical sleep/unplug and native close acceptance remain
+  outstanding. Phase 26c is requested but awaits the owner merging Phase 26b.
+
 ## 2026-09-13: Phase 26b — durable full-length mix recording
 
 - **Implemented for review:** full-length stereo recording from the explicitly
