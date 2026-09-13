@@ -2,6 +2,45 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Phase 26d — saved blueprints and actual recording tracklists
+
+- **Implemented for review:** optional Mix Plan selection before recording and
+  Record this plan from the plan page. Setup still requires explicit Start; no
+  automatic capture or song recognition. Session and immutable blueprint snapshot
+  are registered atomically before capture. Each new take saves the current plan.
+- Existing/imported mixes can link a plan later, clearly labelled as a snapshot
+  taken then, not historical proof of the original plan. Re-linking/unlinking keeps
+  every older snapshot and the actual tracklist. Links work in both directions;
+  the plan page lists takes with any historical snapshot of that plan.
+- Actual entries are independent of the plan: explicit draft copy into an empty
+  list, library/manual additions, repeated occurrences, removal and reordering.
+  Unconfirmed, Played/Untimed and Played/Timed are distinct. Set start here uses
+  playback position; optional live Track started uses backend captured frames.
+  Manual time correction, clearing, seek-to-entry and waveform markers are included.
+  The shared in-app text prompt now uses a labelled, focus-trapped dialog (matching
+  existing confirmations), with validation feedback and focus restoration on cancel.
+  Equal starts are valid; conflicting order warns and offers explicit sorting.
+- Recorded starts never become song cue points. Generic review markers never
+  become track entrances. No drafts are represented as confirmed performance.
+  Full comparison/revised-plan feedback tools remain Phase 26e; exports remain 26f.
+- Separate tables and optimistic revisions protect against stale overwrites and
+  capture finalisation races. Plan/track deletion keeps historical text; recording
+  removal never deletes its plan. Downgrade guards refuse nonempty history loss.
+- **Verification:** 417 tests (100 core / 66 infrastructure / 143 API / 50 client /
+  58 browser); client build and browser-test typecheck pass. Lint has zero errors
+  and 13 pre-existing warnings; existing NuGet vulnerability warnings remain.
+  Tests cover A/B/C planned versus A/X/C actual, live-plan edits between takes,
+  repeated/deleted sources, import then link, stale writes, clock-based entrances,
+  failed-save retry, navigation, and the existing drag/playlist/close regressions.
+  Isolated test profiles only; no changes to live library data or D:/Mixes audio,
+  no installer packaging and no new hardware compatibility claim.
+- **User test:** open an existing take, expand Saved blueprint, link a plan and
+  Copy blueprint as draft. Remove what you skipped, add what you played instead,
+  then seek and Set start here. Confirmed played can also remain untimed.
+- **UI direction:** the owner wants functionality first and a dedicated recording
+  page design pass at the end. Current controls reuse WISP styles/modals; this is
+  not the final recording layout. Existing >4 GiB browser playback limitation remains.
+
 ## 2026-09-13: Clarified Mix Plan linking before Phase 26d
 
 - **Agreed design, not implemented:** a Mix Plan is an optional blueprint saved as

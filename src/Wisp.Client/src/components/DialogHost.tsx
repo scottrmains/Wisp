@@ -113,9 +113,14 @@ function PromptBody({ opts, resolve }: { opts: PromptOptions; resolve: (v: strin
   const [value, setValue] = useState(opts.defaultValue ?? '')
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDialogElement>(null)
   useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const dialog = dialogRef.current!
+    dialog.showModal()
     inputRef.current?.focus()
     inputRef.current?.select()
+    return () => { dialog.close(); previous?.focus() }
   }, [])
 
   const submit = () => {
@@ -135,13 +140,19 @@ function PromptBody({ opts, resolve }: { opts: PromptOptions; resolve: (v: strin
   }
 
   return (
-    <div className="w-full max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 shadow-2xl">
-      <h2 className="text-base font-semibold">{opts.title}</h2>
+    <dialog ref={dialogRef} aria-labelledby="prompt-title"
+      onCancel={e => { e.preventDefault(); resolve(null) }} onKeyDown={e => e.stopPropagation()}
+      onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) resolve(null) } }}
+      className="m-auto w-[min(24rem,calc(100vw-2rem))] max-h-[85vh] overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 text-[var(--color-text)] shadow-2xl backdrop:bg-black/70">
+      <h2 id="prompt-title" className="text-base font-semibold">{opts.title}</h2>
       {opts.message && (
         <p className="mt-1 text-xs text-[var(--color-muted)]">{opts.message}</p>
       )}
       <input
         ref={inputRef}
+        aria-labelledby="prompt-title"
+        aria-invalid={!!error}
+        aria-describedby={error ? 'prompt-error' : undefined}
         value={value}
         onChange={(e) => { setValue(e.target.value); setError(null) }}
         onKeyDown={(e) => {
@@ -151,7 +162,7 @@ function PromptBody({ opts, resolve }: { opts: PromptOptions; resolve: (v: strin
         placeholder={opts.placeholder}
         className="mt-3 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
       />
-      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      {error && <p id="prompt-error" role="alert" className="mt-2 text-xs text-red-400">{error}</p>}
       <div className="mt-4 flex justify-end gap-2">
         <button
           onClick={() => resolve(null)}
@@ -167,7 +178,7 @@ function PromptBody({ opts, resolve }: { opts: PromptOptions; resolve: (v: strin
           {opts.confirmLabel ?? 'OK'}
         </button>
       </div>
-    </div>
+    </dialog>
   )
 }
 

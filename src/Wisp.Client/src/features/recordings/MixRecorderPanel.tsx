@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '../../api/client'
+import { mixPlans } from '../../api/mixPlans'
+import { useRecordingNavigation } from './useRecordingTracklist'
 import { bridge, bridgeAvailable, invoke } from '../../bridge'
 import { alertDialog, confirmDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
@@ -60,12 +62,15 @@ export function MixRecordingIndicator() {
 export function MixRecorderPanel({ endpointId, inputTestBusy }: { endpointId: string; inputTestBusy: boolean }) {
   const qc = useQueryClient()
   const status = useRecorderStatus()
+  const plans = useQuery({ queryKey: ['mixPlans'], queryFn: mixPlans.list })
+  const planId = useRecordingNavigation(s => s.blueprintPlanId)
   const settings = useQuery({ queryKey: ['recording-settings'], queryFn: () => apiGet<{ folder: string | null }>('/api/recordings/settings') })
   const sessions = useQuery({ queryKey: sessionsKey, queryFn: () => apiGet<Session[]>('/api/recordings/'), refetchInterval: 2000 })
   const [title, setTitle] = useState('Practice mix')
   const [folder, setFolder] = useState<string | null>(null)
   const [previous, setPrevious] = useState<string | null>(null)
   const request = useRef<string | null>(null)
+  useEffect(() => { request.current = null }, [planId])
   const destination = folder ?? settings.data?.folder ?? ''
   const busy = status.data?.busy ?? false
   const refresh = () => { void qc.invalidateQueries({ queryKey: statusKey }); void qc.invalidateQueries({ queryKey: sessionsKey }) }
@@ -73,8 +78,10 @@ export function MixRecorderPanel({ endpointId, inputTestBusy }: { endpointId: st
     usePlayer.getState()._commands?.pause()
     document.querySelectorAll('audio').forEach(a => a.pause())
     request.current ??= crypto.randomUUID()
-    return apiPost('/api/recordings/start', { requestId: request.current, title, folder: destination, endpointId, previousTakeId: previous })
-  }, onSuccess: () => { request.current = null; refresh() } })
+    const id = request.current
+    await apiPost('/api/recordings/start', { requestId: id, title, folder: destination, endpointId, previousTakeId: previous, planId })
+    useRecordingNavigation.getState().select(id)
+  }, onSuccess: () => { request.current = null; refresh(); void qc.invalidateQueries({ queryKey: ['recording-workspace-mixes'] }); void qc.invalidateQueries({ queryKey: ['plan-recordings'] }) } })
   const action = useMutation({ mutationFn: async ({ id, operation, body }: { id: string; operation: string; body?: unknown }) =>
     apiPost(`/api/recordings/${id}/${operation}`, body), onSuccess: refresh })
   const pick = async () => {
@@ -102,12 +109,15 @@ export function MixRecorderPanel({ endpointId, inputTestBusy }: { endpointId: st
         onChange={e => { setFolder(e.target.value); request.current = null }} /></label>
     </div>
     <div className="flex flex-wrap gap-2">
+      <label className="flex min-w-0 items-center gap-2 text-sm">Blueprint (optional)<select className={input} value={planId ?? ''} disabled={busy || start.isPending} onChange={e => useRecordingNavigation.getState().chooseBlueprint(e.target.value || null)}><option value="">No Mix Plan</option>{planId && !plans.data?.some(p => p.id === planId) && <option value={planId}>Selected plan unavailable</option>}{plans.data?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
       <button className={button} disabled={busy || !bridgeAvailable()} onClick={() => void pick()}>Choose recordings folder</button>
       <button className={`${button} bg-[var(--color-accent)] text-[var(--color-bg)]`} disabled={busy || inputTestBusy || start.isPending || !endpointId || !title.trim() || !destination || !status.data || status.isError}
         onClick={() => start.mutate()}>{start.isPending ? 'Starting…' : 'Start mix recording'}</button>
       <button className={button} disabled={!busy || action.isPending} onClick={() => action.mutate({ id: status.data!.session!.id, operation: 'stop' })}>Stop and save mix</button>
     </div>
     {previous && <p className="text-sm">This will be a new take linked to the previous recording. <button className="underline" disabled={busy} onClick={() => setPrevious(null)}>Clear link</button></p>}
+    <p className="text-xs text-[var(--color-muted)]">A linked plan is snapshotted when you start. It is only a blueprint, not proof of what you played. Each new take gets its own snapshot; previous takes are never changed.</p>
+    {plans.error && <p role="alert" className="text-sm text-red-400">Mix Plans could not load. You can record without a plan or retry loading the page.</p>}
     <p className="text-xs text-[var(--color-muted)]">Saved under WISP Recordings in your chosen folder, excluded from the track library. Uses the input selected above. Keep the computer awake. Files over 4 GB use RF64; use an RF64-capable player such as Audacity for those masters. MP3 export comes later.</p>
     {status.data?.session && <div className="space-y-2" aria-label="Mix recording status">
       <p role="status">{status.data.session.state} · {status.data.session.deviceName}</p>

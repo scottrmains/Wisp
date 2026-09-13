@@ -4,8 +4,9 @@ Date: 2026-09-13
 
 **Status: Phase 26a short capture on Xone:24C Input 1 confirmed working by the
 user. Phase 26b implemented for review with synthetic/fault-injection evidence;
-long hardware recording remains unverified. Phase 26c workspace is implemented
-for review with the RF64 playback limit below. Phases 26d–26g remain planned.**
+long hardware recording remains unverified (the user's roughly ten-minute two-deck
+test passed). Phase 26c workspace and Phase 26d blueprint/actual tracklists are
+implemented for review, with the RF64 playback limit below. Phases 26e–26g remain planned.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -231,8 +232,8 @@ keyboard operation; inspect at 800x600 and larger sizes with long track/note tex
 
 - Search/sort, resizable history, streamed playback, waveform zoom/window, volume,
   looping and pre-roll are delivered. Recording setup and review sections collapse.
-  The tracklist section is an honest Phase 26d placeholder; failed-export UI depends
-  on Phase 26f. Basic ratings/labelled point markers were brought forward to make
+  The original tracklist placeholder has now been replaced by Phase 26d below;
+  failed-export UI depends on Phase 26f. Basic ratings/labelled point markers were brought forward to make
   rating sort and Mark this moment useful now; detailed comments remain Phase 26e.
 - Waveforms are generated on explicit request with cancellable background progress,
   bounded buffers/buckets and multiresolution extrema cached in the isolated profile.
@@ -314,28 +315,54 @@ never invented library identities. Recorded-mix timestamps never become song cue
 
 ### Implementation and acceptance checklist
 
-- [ ] **Record this plan** atomically captures plan order/notes/display metadata
+- [x] **Record this plan** atomically captures plan order/notes/display metadata
   at session creation. Standalone/imported recordings can link later with clear
   wording that this snapshots the plan now, not its unknown historical state.
-- [ ] Preserve immutable planned snapshot plus editable performed tracklist;
+- [x] Preserve immutable planned snapshot plus editable performed tracklist;
   skip/reorder/add tracks without mutating that snapshot or the live plan.
-- [ ] Implement optional draft copying, independent played-confirmation/timestamp
+- [x] Implement optional draft copying, independent played-confirmation/timestamp
   states, manual-text tracks and distinct repeat-occurrence identities as above.
-- [ ] Mark track entrances live or after recording; show untimed entries as
+- [x] Mark track entrances live or after recording; show untimed entries as
   untimed. Link waveform markers to individual occurrences. Do not manufacture
   timestamps from track lengths or cue positions.
-- [ ] Plan detail lists linked takes; recording links back to its source plan.
+- [x] Plan detail lists linked takes; recording links back to its source plan.
   Deleting/relinking a plan must not silently discard the original snapshot.
-- [ ] Test repeated tracks, missing/deleted source entities, plan edits during
+- [x] Test repeated tracks, missing/deleted source entities, plan edits during
   recording, post-import linkage and recording deletion without plan deletion.
-- [ ] End-to-end test A → B → C planned versus A → X → C performed: optional
+- [x] API and mocked-browser workflow tests for A → B → C planned versus A → X → C performed: optional
   draft copy, B removed, X added, starts assigned at the waveform, no mutation to
   the plan/snapshot, and no requirement to interact during capture.
-- [ ] Test a plan-free mix, confirmed-but-untimed tracks, unconfirmed draft exclusion,
+- [x] Test a plan-free mix, confirmed-but-untimed tracks, unconfirmed draft exclusion,
   equal/out-of-order starts and correction/clearing of times without invented values.
 
 **Exit gate:** edit the live plan after Take 1; Take 1 remains historically intact,
 while Take 2 snapshots the edited order. Deviations can be recorded independently.
+
+### Phase 26d implementation notes (2026-09-13)
+
+- `Record this plan` opens recording setup with an explicit optional plan selection;
+  it never starts capture automatically. The server saves a snapshot in the same
+  transaction as the session, before opening capture. Each new take snapshots afresh.
+- Separate `RecordingPlanSnapshots` and revision-checked `RecordingTracklists`
+  tables keep capture finalisation independent of edits. No live-plan/track cascade
+  deletes historical text. Downgrading refuses to drop nonempty history tables.
+- Link/unlink retains all older snapshots and actual entries. Copy blueprint is an
+  explicit empty-list starting point (maximum 500 entries); nothing is marked played
+  by copying. Manual and library tracks can be repeated as distinct occurrences.
+- Set start here, manual time correction, clear time and optional live Track started
+  are implemented. Timed confirmed entries appear on the waveform and have Go to
+  start actions. Equal times are valid; conflicting order requires an explicit sort.
+  Clearing confirmation clears its timestamp; clearing the time retains confirmation.
+- Browser coverage uses isolated mocked APIs plus real browser audio playback;
+  backend integration tests use isolated SQLite profiles, synthetic capture and real
+  FFmpeg imports. This is not a new Xone/CDJ hardware test or automatic recognition.
+- **User acceptance next:** link an existing mix, copy its blueprint, remove a skipped
+  track, add an unexpected track and assign entrances. Verify an edited live plan
+  does not rewrite the take. Full comments/revised-plan creation remain Phase 26e;
+  MP3/tracklist export remains Phase 26f.
+- **Deferred UI pass requested by the owner:** retain functional controls for now;
+  redesign/consolidate the recording workspace after the workflow is complete as
+  part of Phase 26g. The present page is not the final layout.
 
 ## Phase 26e — Review and next-attempt workflow
 
