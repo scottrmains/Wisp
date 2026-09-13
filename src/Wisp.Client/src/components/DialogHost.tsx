@@ -67,11 +67,21 @@ function ChoiceBody({ opts, resolve }: { opts: ChoiceOptions; resolve: (v: strin
 
 function ConfirmBody({ opts, resolve }: { opts: ConfirmOptions; resolve: (v: boolean) => void }) {
   const cancelRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => { cancelRef.current?.focus() }, [])
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const dialog = dialogRef.current!
+    dialog.showModal()
+    cancelRef.current?.focus()
+    return () => { dialog.close(); previous?.focus() }
+  }, [])
 
   return (
-    <div className="w-full max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 shadow-2xl">
-      <h2 className="text-base font-semibold">{opts.title}</h2>
+    <dialog ref={dialogRef} aria-labelledby="confirmation-title"
+      onCancel={e => { e.preventDefault(); resolve(false) }} onKeyDown={e => e.stopPropagation()}
+      onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) resolve(false) } }}
+      className="m-auto w-[min(24rem,calc(100vw-2rem))] max-h-[85vh] overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 text-[var(--color-text)] shadow-2xl backdrop:bg-black/70">
+      <h2 id="confirmation-title" className="text-base font-semibold">{opts.title}</h2>
       {opts.message && (
         <p className="mt-2 text-sm whitespace-pre-line text-[var(--color-muted)]">{opts.message}</p>
       )}
@@ -95,7 +105,7 @@ function ConfirmBody({ opts, resolve }: { opts: ConfirmOptions; resolve: (v: boo
           {opts.confirmLabel ?? (opts.danger ? 'Delete' : 'Confirm')}
         </button>
       </div>
-    </div>
+    </dialog>
   )
 }
 

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '../../api/client'
 import { useCurrentPage } from '../../state/currentPage'
 import { usePlayer } from '../../state/player'
+import { MixRecorderPanel } from './MixRecorderPanel'
+import { useRecorderStatus } from './useRecorderStatus'
 
 interface InputDevice {
   id: string; name: string; mixFormat: string | null; sampleRate: number
@@ -51,6 +53,7 @@ function LevelMeter({ label, peak, clipped }: { label: string; peak: number; cli
 }
 
 export function RecordingInputPage() {
+  const mix = useRecorderStatus()
   const qc = useQueryClient()
   const test = useInputTest()
   const devices = useQuery({ queryKey: ['recording-input-devices'],
@@ -60,7 +63,7 @@ export function RecordingInputPage() {
   const audio = useRef<HTMLAudioElement>(null)
   const selectedId = selection ?? devices.data?.selectedEndpointId ?? ''
   const selected = devices.data?.devices.find(d => d.id === selectedId)
-  const busy = active(test.data)
+  const busy = active(test.data) || !!mix.data?.busy
   const start = useMutation({ mutationFn: async () => {
     audio.current?.pause()
     usePlayer.getState()._commands?.pause()
@@ -74,10 +77,10 @@ export function RecordingInputPage() {
   return <div className="h-full overflow-y-auto p-4 sm:p-6">
     <div className="mx-auto max-w-4xl space-y-6">
       <header>
-        <p className="mb-1 text-xs uppercase tracking-wider text-[var(--color-muted)]">Recordings · Phase 1</p>
-        <h1 className="text-2xl font-semibold">Test your recording input</h1>
+        <p className="mb-1 text-xs uppercase tracking-wider text-[var(--color-muted)]">Recordings · Capture</p>
+        <h1 className="text-2xl font-semibold">Record your mix</h1>
         <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
-          Capture up to 30 seconds, then listen back to check both decks. This is an input check, not the full mix recorder.
+          Choose your stereo input and recording folder. Use the short input test below if you need to check your routing first.
           No live monitoring, gain processing or library import.
         </p>
       </header>
@@ -110,7 +113,10 @@ export function RecordingInputPage() {
         </details>
       </section>
 
+      <MixRecorderPanel endpointId={selected?.canTest ? selectedId : ''} inputTestBusy={active(test.data)} />
+
       <section aria-label="Input test" className="space-y-4 border-y border-[var(--color-border)] py-5">
+        <h2 className="text-lg font-medium">Test your recording input</h2>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p role="status" className="text-sm font-medium">{test.data?.state ?? 'Loading test status…'}</p>
@@ -120,14 +126,14 @@ export function RecordingInputPage() {
             <button className={`${button} bg-[var(--color-accent)] text-[var(--color-bg)]`}
               disabled={!selected?.canTest || busy || start.isPending || test.isPending || test.isError}
               onClick={() => start.mutate()}>{start.isPending ? 'Starting…' : 'Record 30-second test'}</button>
-            <button className={button} disabled={!busy || stop.isPending} onClick={() => stop.mutate()}>Stop test</button>
+            <button className={button} disabled={!active(test.data) || stop.isPending} onClick={() => stop.mutate()}>Stop test</button>
           </div>
         </div>
-        {busy && <p className="break-words text-sm">Capturing: {test.data?.deviceName}. Stops automatically after 30 seconds, even if you leave this page.</p>}
+        {active(test.data) && <p className="break-words text-sm">Capturing: {test.data?.deviceName}. Stops automatically after 30 seconds, even if you leave this page.</p>}
         <LevelMeter label="L" peak={test.data?.leftPeak ?? 0} clipped={test.data?.leftClipped ?? false} />
         <LevelMeter label="R" peak={test.data?.rightPeak ?? 0} clipped={test.data?.rightClipped ?? false} />
         {(test.data?.leftClipped || test.data?.rightClipped) && <p className="text-sm text-red-400">Clipping detected during this test. Lower the level feeding the recording input and try again.</p>}
-        <p className="text-xs text-[var(--color-muted)]">Short diagnostic clips only. Crash recovery and long mix recording are not available yet. Keep WISP open until the test finishes.</p>
+        <p className="text-xs text-[var(--color-muted)]">Short diagnostic clips only. This test does not use the full recorder’s checkpoint recovery. Keep WISP open until the test finishes.</p>
       </section>
 
       {(error || test.data?.message) && <p role="alert" className="text-sm text-red-400">{error?.message ?? test.data?.message}</p>}

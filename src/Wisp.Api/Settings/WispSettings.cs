@@ -17,6 +17,7 @@ public sealed record WispSettings
     public string? FfmpegPath { get; init; }
     public string? NormalizationMusicFolder { get; init; }
     public string? RecordingInputEndpointId { get; init; }
+    public string? RecordingFolder { get; init; }
 }
 
 public sealed record WindowState(int Width, int Height, int? X, int? Y);

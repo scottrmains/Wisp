@@ -25,12 +25,14 @@ public sealed class RecordingInputTest : IHostedService
     private TaskCompletionSource? stop;
     private InputTestResult result = new(null, "Idle");
     private bool shuttingDown;
+    private readonly CaptureLease captureLease;
 
-    public RecordingInputTest(IRecordingInputDevices devices, ILogger<RecordingInputTest> log, string folder)
+    public RecordingInputTest(IRecordingInputDevices devices, ILogger<RecordingInputTest> log, string folder, CaptureLease? captureLease = null)
     {
         this.devices = devices;
         this.log = log;
         this.folder = Path.GetFullPath(folder);
+        this.captureLease = captureLease ?? new CaptureLease();
         try
         {
             if (File.Exists(ReportPath))
@@ -65,12 +67,17 @@ public sealed class RecordingInputTest : IHostedService
             if (running is { IsCompleted: false })
                 throw new InvalidOperationException("An input test is already running. Stop it before starting another.");
             if (!device.CanTest) throw new InvalidOperationException(device.UnavailableReason);
-            persistSelection?.Invoke(); // Reject conflicts before changing saved settings.
-            result = new(requestId, "Preparing", device.Name, device.Id, device.MixFormat,
-                device.SampleRate, WindowsVersion: Environment.OSVersion.VersionString);
-            stop = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            running = Task.Run(() => RunAsync(requestId, device, stop.Task));
-            return result;
+            var lease = this.captureLease.Acquire();
+            try
+            {
+                persistSelection?.Invoke(); // Reject conflicts before changing saved settings.
+                result = new(requestId, "Preparing", device.Name, device.Id, device.MixFormat,
+                    device.SampleRate, WindowsVersion: Environment.OSVersion.VersionString);
+                stop = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                running = Task.Run(async () => { using (lease) await RunAsync(requestId, device, stop.Task); });
+                return result;
+            }
+            catch { lease.Dispose(); throw; }
         }
     }
 
