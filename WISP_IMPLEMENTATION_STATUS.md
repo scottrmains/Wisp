@@ -2,6 +2,58 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Phase 26a — recording input discovery and short stereo test
+
+- **Implemented for review:** new Recordings sidebar entry opens an explicitly
+  labelled input-test workspace, not a full mix recorder. Choose an exact capture
+  endpoint, capture up to 30 seconds, inspect L/R levels and latched clipping,
+  stop early, listen back and save routing observations. A global indicator survives
+  navigation; frontend reload reconnects without restarting capture. The design
+  follows WISP's existing layout/theme with a scrollable small-window view.
+- **Audio:** NAudio 2.2.1 WASAPI shared-mode capture at the endpoint's current sample
+  rate, two channels, 32-bit float WAV. This is the Windows transport/file format,
+  not a claim of 32-bit ADC precision. No loopback/default-device fallback, no gain,
+  limiting, sample-rate up-conversion, software monitoring or automatic recording.
+  Non-stereo/unsupported-rate endpoints are explained and disabled. An exhaustive
+  format picker is not included; change the shared format in Windows and refresh.
+- **Safety/storage:** explicit endpoint saved in existing settings, no DB migration
+  or library-track creation. Test clips and per-clip JSON evidence live under the
+  active WISP profile's `recording-input-tests` directory; completed prior clips are
+  retained, and the latest result/observations reload after restart. Audio access
+  resolves a current test GUID, not an arbitrary client path. Temp files are scoped
+  to the test; collisions never delete a pre-existing temporary clip. The library
+  scanner excludes the reserved test folder even when scanning a parent directory.
+  Starts are retry-safe and conflicting sessions cannot change settings.
+  Clips are not deleted automatically; the UI displays their location.
+- **Discovery evidence, not capture acceptance:** the read-only
+  `dotnet src/Wisp.Api/bin/Debug/net10.0/Wisp.dll --list-recording-inputs` command
+  bypasses profile creation/DB/host and reports Input 1, 2 and 3 (Xone:24C), all
+  stereo 44.1 kHz shared IEEE float. Windows driver inventory reports Allen & Heath
+  5.72.0.19773. No real recording, live profile edit or installed-app modification
+  was performed. The mixer USB mode and full-mix routing are still unverified.
+- **Verification:** isolated fake-device/API tests cover explicit selection,
+  format/sample preservation, independent channels, clipping, duration cap,
+  duplicate/conflicting requests, disconnect/permission errors, empty input,
+  unwritable storage and evidence reload. Browser tests cover explicit/missing
+  devices, meters, float WAV decoding, stop/playback, observations, navigation,
+  reload, failure states and 800x600 layout. **349 tests pass**: 94 core, 54
+  infrastructure (including real FFmpeg fixtures), 111 API, 47 client unit and
+  43 browser. Client build passes; lint has zero errors / 13 existing warnings.
+  Internal/external drag and loudness suites are retained. Existing NuGet security
+  advisories for Microsoft.OpenApi 2.0.0 and SQLitePCLRaw 2.1.11 are unchanged.
+- **Remaining gate:** in the updated app, select Input 1 (Xone:24C) as a candidate,
+  check STREAM routing, record deck 1 alone, deck 2 alone, then both, and exercise
+  channel faders. Listen back and verify L/R with a known stereo source. Save USB
+  mode, driver and observations. Only the user's physical test can close 26a.
+- **Limitations:** a bounded diagnostic, not production mix capture. It buffers
+  at most 30 seconds (46.1 MB at 192 kHz), writes/finalises on stop, and has no crash
+  recovery. Keep WISP open through completion; a killed process can lose this test.
+  Device failure with received frames preserves a labelled incomplete clip. NAudio's
+  high-level capture does not expose all hardware discontinuity flags, so this is
+  not proof of dropout-free long sessions. History management, durable capture,
+  waveform/review/plan links and 320 kbps exports remain Phases 26b–26g. No installer
+  was generated and no CDJ compatibility claim is made.
+
 ## 2026-09-13: Recordings and Mix Plan review planning
 
 - **Documentation only:** added the tracked Phase 26

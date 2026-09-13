@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Compass,
+  CircleDot,
   Heart,
   Library as LibraryIcon,
   Pencil,
@@ -30,6 +31,7 @@ interface SectionDef {
 const SECTIONS: SectionDef[] = [
   { id: 'library', label: 'Library', icon: LibraryIcon },
   { id: 'mix-plans', label: 'Mix Plans', icon: SlidersVertical },
+  { id: 'recordings', label: 'Recordings', icon: CircleDot },
   { id: 'discover', label: 'Discover', icon: Compass },
   { id: 'wanted', label: 'Wanted', icon: Heart },
   { id: 'crate-digger', label: 'Crate Digger', icon: Pickaxe },

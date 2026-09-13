@@ -10,6 +10,7 @@ import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 import { DialogHost } from './components/DialogHost'
+import { RecordingInputIndicator, RecordingInputPage } from './features/recordings/RecordingInputPage'
 
 // These feature areas are not needed for first paint of the library workspace.
 // Keep their dependencies out of the startup bundle and load only on navigation.
@@ -57,7 +58,7 @@ function App() {
 
   // Mix Plans has its own full chain workspace; showing the compact dock there too
   // would render the same plan twice. Hide it on that page only.
-  const showChainDock = !!activePlanId && page !== 'mix-plans'
+  const showChainDock = !!activePlanId && page !== 'mix-plans' && page !== 'recordings'
   // Hide the bottom MiniPlayer (visually) whenever the Library workspace is in
   // front — the workspace already shows playback controls + waveform for the
   // loaded track, so two strips would just duplicate.
@@ -93,6 +94,7 @@ function App() {
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
+        <RecordingInputIndicator />
         <main className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<div className="p-6 text-sm text-[var(--color-muted)]">Loading workspaceâ€¦</div>}>
           {page === 'library' && <LibraryPage />}
@@ -100,6 +102,7 @@ function App() {
           {page === 'discover' && <DiscoverPage />}
           {page === 'wanted' && <WantedPage />}
           {page === 'crate-digger' && <CrateDiggerPage />}
+          {page === 'recordings' && <RecordingInputPage />}
           </Suspense>
         </main>
 

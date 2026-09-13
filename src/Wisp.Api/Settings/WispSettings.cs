@@ -16,6 +16,7 @@ public sealed record WispSettings
     /// `ffmpeg.exe` next to `Wisp.exe`, then PATH.
     public string? FfmpegPath { get; init; }
     public string? NormalizationMusicFolder { get; init; }
+    public string? RecordingInputEndpointId { get; init; }
 }
 
 public sealed record WindowState(int Width, int Height, int? X, int? Y);
