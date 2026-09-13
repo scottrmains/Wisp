@@ -2,6 +2,28 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: CDJ-900 hardware acceptance — waveform and Memory Cues working
+
+- **Owner-confirmed result after `5f05fb1`:** following the analysis-path repair
+  and re-export in the ongoing F:/Smoke Test Mix/CDJ-900 test, the owner reports
+  that both the waveform and Memory Cues are working. Together with the earlier
+  playlist/playback confirmation, this verifies direct Wisp export with overview
+  waveform display and Memory Cue recall in this tested CDJ-900 workflow.
+- **Scope:** this is user-reported physical hardware evidence, not just a binary
+  parser/test pass. The report does not individually certify all 11 timestamps,
+  loops, every supported audio format, large libraries or the CDJ-850. Those
+  cases need separate acceptance tests; do not label export universally flawless.
+- **Key repair:** player-derived audio-path hashing places Wisp's analysis where
+  the CDJ looks for it. A PDB link alone was insufficient. Preserve this lookup
+  behavior and its regression tests in future exporter changes.
+- **Remaining work:** remove retained reference catalogue entries/template
+  dependency, handle analysis hash collisions beyond safe rejection, and address
+  VBR seek indexes/beat grids/detailed waveforms as separately scoped features.
+  No additional code, USB changes or formatting were needed to record this result.
+
+This successful hardware report supersedes the pending waveform/Memory Cue
+acceptance statements in the historical entries below for this CDJ-900 test.
+
 ## 2026-09-13: CDJ analysis lookup path repair — hardware retest pending
 
 - **Hardware result:** the owner re-exported with waveform support and still
