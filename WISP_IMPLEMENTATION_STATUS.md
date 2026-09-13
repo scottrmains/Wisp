@@ -2,6 +2,19 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: User confirms Xone:24C Input 1 recording works
+
+- **User-tested hardware evidence:** the user recorded a short test using Input 1
+  and reported that it "seems to record it perfectly". Input 1 is now the confirmed
+  working capture choice for this setup; Phase 26b can build on this capture path.
+- **Evidence boundary:** the agent has not inspected the recorded audio. The user
+  did not separately report USB mode, individual-deck/fader testing, deliberate
+  left/right mapping or this clip's exact negotiated format. Those detailed
+  checks remain open in the plan. No long-recording or crash-recovery claim follows
+  from this short test; those belong to later phases.
+- **Change:** updated documentation only. No capture, audio modification, live
+  settings/database update or new phase implementation was performed.
+
 ## 2026-09-13: Phase 26a — recording input discovery and short stereo test
 
 - **Implemented for review:** new Recordings sidebar entry opens an explicitly

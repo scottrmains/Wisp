@@ -2,8 +2,8 @@
 
 Date: 2026-09-13
 
-**Status: Phase 26a input-test implementation delivered for review; physical stereo
-routing acceptance remains pending. Phases 26b–26g are not implemented.**
+**Status: Phase 26a short capture on Xone:24C Input 1 confirmed working by the
+user; detailed routing checks remain open below. Phases 26b–26g are not implemented.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -87,6 +87,7 @@ this proposed native capture engine. Do not assume NAudio 3 APIs are available.
   devices and permissions with actionable errors, never silently use a microphone.
 - [x] Add input-test L/R meters, clipping latches and a short isolated test recording
   with playback, a global activity indicator and persisted user observations.
+- [x] User confirms a successful short recording with Input 1 (Xone:24C).
 - [ ] Physically verify both decks separately and together, channel fader response
   and stereo channel mapping by listening to a captured test.
 - [ ] Xone:24C baseline: STREAM mode routes MIX L/R to USB channels 1/2; DVS PRO
@@ -105,6 +106,14 @@ only this short clip; it is explicitly not the durable Phase 26b recorder.
 
 **Exit gate:** the user confirms a short captured file contains the intended full
 stereo mix. Hardware evidence is recorded separately from automated fake-device tests.
+
+**2026-09-13 user hardware feedback:** "ive recorded a test with input 1 and it
+seems to record it perfectly". This establishes Input 1 as the working capture
+choice for the user's current setup and supports proceeding to Phase 26b. The
+agent has not independently inspected this recording. USB mode, separate-deck and
+fader checks, deliberate L/R mapping, and the exact format of this particular
+capture were not explicitly reported; retain those checklist items rather than
+claiming a completed routing matrix. This short test is not long-session evidence.
 
 ## Phase 26b — Durable recording engine and storage
 
