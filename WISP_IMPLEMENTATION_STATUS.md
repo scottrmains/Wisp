@@ -1,6 +1,26 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-11
+Last reviewed: 2026-09-13
+
+## 2026-09-13: Recordings and Mix Plan review planning
+
+- **Documentation only:** added the tracked Phase 26
+  [Recordings implementation plan](WISP_RECORDINGS_IMPLEMENTATION_PLAN.md).
+  The Git-ignored legacy master plan also has a local Phase 26 pointer; it is not
+  newly tracked or included in the PR.
+  No capture engine, UI, schema migration or audio processing is implemented by
+  this change; no live database, music, recording device or installation changed.
+- **Scope:** seven gated phases cover Xone:24C input proof, durable capture and
+  recovery, recording history/playback/import, immutable plan snapshots with
+  editable performed tracklists, ratings/timestamped feedback and new plan
+  revisions, lossless/320 kbps MP3 export, and regression/hardware acceptance.
+- **Decisions:** preserve original masters and historic plans; track occurrences
+  and recording-relative timestamps are distinct from library track cue positions.
+  No automatic recognition, destructive plan updates or recording normalisation.
+- **Unverified:** Windows `Input 1 (Xone:24C)` routing, negotiated capture format,
+  long-session reliability and interruption recovery need physical tests. The
+  documented STREAM vs DVS/DAW routing informs the test, not a compatibility claim.
+  All implementation checkboxes remain open; first full release requires all gates.
 
 ## 2026-09-11: Reference loudness matching and boost-only review
 
