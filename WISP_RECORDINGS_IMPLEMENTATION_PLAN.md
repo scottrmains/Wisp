@@ -2,7 +2,8 @@
 
 Date: 2026-09-13
 
-**Status: planned only. No recording feature has been implemented or hardware-verified.**
+**Status: Phase 26a short capture on Xone:24C Input 1 confirmed working by the
+user; detailed routing checks remain open below. Phases 26b–26g are not implemented.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -78,21 +79,41 @@ this proposed native capture engine. Do not assume NAudio 3 APIs are available.
 
 **Depends on:** nothing. **Purpose:** retire hardware uncertainty before UI polish.
 
-- [ ] Enumerate Windows recording endpoints and supported stereo formats; evaluate
-  WASAPI shared capture using the installed NAudio version. Investigate alternative
-  drivers only if a documented hardware limitation requires them.
-- [ ] Persist explicit endpoint identity, not System default; handle missing/busy
+- [x] Enumerate Windows recording endpoints and their current shared stereo format;
+  implement WASAPI shared capture using NAudio 2.2.1. The test uses that sample rate
+  with float transport, not an exhaustive format picker or hardware-bit-depth claim.
+  Investigate alternative drivers only if a documented hardware limitation requires them.
+- [x] Persist explicit endpoint identity, not System default; handle missing/busy
   devices and permissions with actionable errors, never silently use a microphone.
-- [ ] Add input-test L/R meters and a short isolated test recording. Verify both
-  decks separately and together, channel fader response and stereo channel mapping.
+- [x] Add input-test L/R meters, clipping latches and a short isolated test recording
+  with playback, a global activity indicator and persisted user observations.
+- [x] User confirms a successful short recording with Input 1 (Xone:24C).
+- [ ] Physically verify both decks separately and together, channel fader response
+  and stereo channel mapping by listening to a captured test.
 - [ ] Xone:24C baseline: STREAM mode routes MIX L/R to USB channels 1/2; DVS PRO
   and DAW route it to 5/6. Windows `Input 1 (Xone:24C)` is a candidate stereo
   endpoint, not proof of routing. Verify rather than infer from its name.
 - [ ] Document chosen endpoint, mode, driver, Windows version, negotiated format
   and playback result. Keep software monitoring off by default to avoid feedback.
 
+**2026-09-13 development evidence:** read-only enumeration sees Input 1/2/3
+(Xone:24C), each stereo 44.1 kHz shared IEEE float. Windows reports Allen & Heath
+driver 5.72.0.19773. No real audio was captured by the agent and the mixer mode is
+not inferred from device names. Captured test reports will include the endpoint,
+format and Windows version; the user records mode/driver/listening observations.
+Software monitoring is absent. The diagnostic is capped at 30 seconds and buffers
+only this short clip; it is explicitly not the durable Phase 26b recorder.
+
 **Exit gate:** the user confirms a short captured file contains the intended full
 stereo mix. Hardware evidence is recorded separately from automated fake-device tests.
+
+**2026-09-13 user hardware feedback:** "ive recorded a test with input 1 and it
+seems to record it perfectly". This establishes Input 1 as the working capture
+choice for the user's current setup and supports proceeding to Phase 26b. The
+agent has not independently inspected this recording. USB mode, separate-deck and
+fader checks, deliberate L/R mapping, and the exact format of this particular
+capture were not explicitly reported; retain those checklist items rather than
+claiming a completed routing matrix. This short test is not long-session evidence.
 
 ## Phase 26b — Durable recording engine and storage
 
