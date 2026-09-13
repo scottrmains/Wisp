@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Clarified Mix Plan linking before Phase 26d
+
+- **Agreed design, not implemented:** a Mix Plan is an optional blueprint saved as
+  an immutable snapshot; each recording has an independent editable actual tracklist.
+  Recording remains hands-off and a spontaneous mix never requires a plan.
+- Explicitly copying planned tracks creates unconfirmed, untimed draft occurrences.
+  Users can remove skipped tracks, reorder, add library/manual-text tracks and assign
+  entrance times at the waveform with Set start here. Repeated tracks have separate
+  occurrence IDs; confirmation and timestamp presence are independent states.
+- Times are recording-relative entrances, allow overlapping transitions and are
+  never inferred from track length or song cues. Plan comparison, text exports and
+  creation of a revised plan must distinguish confirmed performance from draft plans.
+- Added acceptance cases and revision/export rules to the tracked recordings plan.
+  This is documentation only; Phase 26d linking/tracklists remain unimplemented.
+
 ## 2026-09-13: Phase 26c — recordings workspace and playback
 
 - **Implemented for review:** a lazy-loaded Recordings workspace with searchable
