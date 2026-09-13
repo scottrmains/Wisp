@@ -1,13 +1,13 @@
 namespace Wisp.Infrastructure.Audio;
 
-/// Prevent the short input test and long recorder from opening concurrent inputs.
+/// Exclude concurrent input capture and heavy mix import/export disk work.
 public sealed class CaptureLease
 {
     private int busy;
     public IDisposable Acquire()
     {
         if (Interlocked.CompareExchange(ref busy, 1, 0) != 0)
-            throw new InvalidOperationException("Another recording or input test is active. Stop it first.");
+                throw new InvalidOperationException("Another recording, input test, mix import or mix export is active. Finish or cancel it first.");
         return new Release(this);
     }
     private sealed class Release(CaptureLease owner) : IDisposable

@@ -31,7 +31,9 @@ public class FileScanner : IFileScanner
                 && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                     .Contains("recording-input-tests", StringComparer.OrdinalIgnoreCase)
                 && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                    .Contains(Wisp.Infrastructure.Audio.RecordingDiskStore.FolderName, StringComparer.OrdinalIgnoreCase))
+                    .Contains(Wisp.Infrastructure.Audio.RecordingDiskStore.FolderName, StringComparer.OrdinalIgnoreCase)
+                && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Contains(Wisp.Infrastructure.Audio.MixExportEncoder.FolderName, StringComparer.OrdinalIgnoreCase))
                 yield return path;
         }
     }

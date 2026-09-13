@@ -7,7 +7,8 @@ user. Phase 26b implemented for review with synthetic/fault-injection evidence;
 long hardware recording remains unverified (the user's roughly ten-minute two-deck
 test passed). Phase 26c workspace, Phase 26d blueprint/actual tracklists and Phase
 26e feedback/revised-plan workflow are implemented for review, with the RF64
-playback limit below. Phases 26f–26g remain planned.**
+playback limit below. Phase 26f exports and compatible derivative playback are
+implemented for review. Phase 26g UI restructuring and hardware acceptance remain.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -436,23 +437,72 @@ Take 2 in browser/API tests without changing Take 1 or losing selected feedback.
 
 **Depends on:** 26b durable masters; 26c/26d for UI and tracklist exports.
 
-- [ ] Export original lossless master/compatible WAV and explicit 320 kbps CBR MP3
+- [x] Export original lossless master/compatible WAV and explicit 320 kbps CBR MP3
   using verified FFmpeg capabilities; title/date and optional textual tracklist.
   Keep annotations in WISP; don't promise players will read timestamp comments.
-- [ ] Optional timestamped text tracklist uses only confirmed entrance markers;
+- [x] Optional timestamped text tracklist uses only confirmed entrance markers;
   unconfirmed draft occurrences are excluded. Confirmed played-but-untimed entries
   may appear only in a clearly labelled untimed section, never with invented times.
-- [ ] Export jobs show progress/cancellation/errors; retries cannot overwrite
+- [x] Export jobs show progress/cancellation/errors; retries cannot overwrite
   originals or existing exports without explicit choice. Encode once from master,
   validate decode/duration/codec/bitrate and atomically publish the finished file.
-- [ ] Reserve/check space for simultaneous master, temporary conversion and output;
+- [x] Reserve/check space for simultaneous master, temporary conversion and output;
   cancelled exports remove only owned temporary files. Missing FFmpeg leaves the
   master playable and gives a clear repair path.
-- [ ] Local recording folders/backups/chunks/peaks/exports stay out of Git. Explain
+- [x] Local recording folders/backups/chunks/peaks/exports stay out of Git. Explain
   that audio and WISP database metadata both need backup to preserve review history.
 
 **Exit gate:** long and short fixtures export/play successfully, verified as stereo
 320 kbps MP3 where selected; master bytes and review data stay unchanged.
+
+### Phase 26f implementation notes (2026-09-13)
+
+- **Export finished mix** adds stereo 44.1 kHz 320 kbps CBR MP3, stereo 24-bit PCM
+  WAV at the original sample rate, or a byte-identical float WAV/RF64 master copy.
+  The 24-bit option is a conversion, not a byte-identical copy or fidelity upgrade.
+  No gain normalisation, limiting or clipping repair. Standard WAV exports that
+  would exceed 4 GiB are rejected with MP3/original-master alternatives.
+- Each request creates a unique package under `<destination>/WISP Mix Exports`:
+  audio, optional `tracklist.txt`, and `export.json` with title/date, identities
+  and hashes. MP3/WAV also carry title/date tags; exact masters retain original bytes.
+  No overwrite option, silent replacement, library import or USB/CDJ database export.
+- Saved actual-tracklist revision is checked at start, then copied immutably.
+  Confirmed times are ordered chronologically (including repeated tracks and equal
+  times); confirmed untimed entries have their own labelled section. Drafts and
+  private ratings/comments are excluded. Live plans never stand in for actual tracks.
+- Durable export request IDs/history survive reload/restart. Background progress,
+  cancellation and errors are visible on the Recordings page. Capture/input tests
+  and mix import/export share a lease; export cannot compete with an active capture.
+  Shutdown cancels processing. Restart marks unfinished jobs Interrupted; retry is
+  a new package, not automatic resume or re-encoding over existing output.
+- Verify source format/length/hash under a read-only file lock; encode once; check
+  all MP3 frame bitrates/channel modes or WAV subtype/frame count, and fully decode
+  the result with bounded buffers to verify duration. Flush/hash the result, then
+  atomically rename the package directory on the destination volume. This needs
+  only one new audio copy alongside the existing master, with estimated free-space
+  preflight and a monitored 64 MiB reserve. FAT32 rejects oversized outputs.
+- Cancellation removes only fixed filenames in the owned temporary directory.
+  Unexpected files/links, inaccessible partials or completed packages after a DB
+  commit failure are retained and explained, never recursively erased. A crash
+  after publish but before DB commit requires a new export to register a playable
+  copy; retained files remain usable externally. Nonempty export history blocks downgrade.
+- Large RF64 masters now play in WISP through an available verified MP3 export;
+  normal masters also offer explicit export/original playback selection. Review
+  timestamps remain recording-relative. Moving/changing an export disables that
+  copy until its drive returns or a new export is made. No automatic export on play.
+- **Verification:** 468 tests: 115 core, 70 infrastructure, 164 API, 53 client and
+  66 browser. Includes full 3-minute and >4 GiB / approximately 46.6-minute sparse
+  synthetic MP3 encode/decode, cancellation of a real encoder process, fault-injected
+  disk/DB failure, exact-copy and metadata preservation, immutable text tracklists,
+  HTTP range responses, scanner exclusion and restart cleanup. Browser tests use
+  isolated mocked APIs with real browser audio, not the live database or Xone input.
+- **Remaining acceptance:** listen to one of the owner's real mixes exported to MP3
+  in an independent player. >4 GiB automation uses synthetic silence, not proof of
+  musical fidelity or hardware continuity. The source audio plus WISP database both
+  need backup; an export is not a review-history backup. The Phase 26g structural
+  UI redesign and long-session/native-close/sleep/unplug hardware checks remain open.
+
+Encoding reference: [FFmpeg libmp3lame options](https://ffmpeg.org/ffmpeg-codecs.html#libmp3lame).
 
 ## Phase 26g — Full acceptance and controlled release
 

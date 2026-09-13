@@ -10,6 +10,8 @@ import { RecordingTracklistPanel } from './RecordingTracklistPanel'
 import { useRecordingNavigation, useRecordingTracklist } from './useRecordingTracklist'
 import { RecordingFeedbackPanel } from './RecordingFeedbackPanel'
 import { useDraftStorageWarning, useFeedbackDrafts, useRecordingFeedback } from './useRecordingFeedback'
+import { ExportActivity, RecordingExportPanel } from './RecordingExportPanel'
+import { useMixExports, exportName } from './useMixExports'
 
 interface Mix { session: Session; rating: number | null; reviewStatus?: string; duration: number; missing: boolean }
 interface Job { id: string; recordingId: string; kind: string; state: string; progress: number; error: string | null }
@@ -52,6 +54,7 @@ export function RecordingsWorkspace() {
         <button className={button} disabled={!!recorder.data?.busy || busy || !bridgeAvailable()} onClick={() => void importMix()}>Import a mix</button>
       </header>
       <p className="text-xs text-[var(--color-muted)]">Imports keep an exact managed source copy plus a 44.1 kHz stereo playback master. Your original file stays untouched.</p>
+      <ExportActivity />
       {draftStorageWarning && <p role="alert" className="text-sm text-amber-300">{draftStorageWarning}</p>}
       {Object.keys(feedbackDrafts).length > 0 && <div className="flex flex-wrap items-center gap-2 text-xs text-amber-300" role="status">Local feedback drafts: {Object.keys(feedbackDrafts).map(id => <button className={button} key={id} onClick={() => setSelected(id)}>{mixes.data?.find(m => m.session.id === id)?.session.title ?? 'Unavailable mix'}{feedbackDrafts[id].error ? ' · Save failed' : feedbackDrafts[id].saving ? ' · Saving' : ' · Unsaved'}</button>)}</div>}
       {(error || mixes.error) && <p role="alert" className="text-sm text-red-400">{error ?? mixes.error?.message}</p>}
@@ -97,12 +100,17 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
   const review = useQuery({ queryKey: ['recording-review', id], queryFn: () => apiGet<Review>(`/api/recording-workspace/${id}/review`) })
   const tracklist = useRecordingTracklist(id)
   const feedback = useRecordingFeedback(id)
+  const exports = useMixExports(id)
+  const [playbackExport, setPlaybackExport] = useState('auto')
+  const largeMaster = mix.session.audioBytes >= 4294967200
+  const playableExports = (exports.data ?? []).filter(e => e.available && (e.format === 'mp3' || (e.format === 'wav' && e.outputBytes < 4294967200)))
+  const derived = playbackExport === 'auto' ? (largeMaster ? playableExports.find(e => e.format === 'mp3') : undefined) : playableExports.find(e => e.id === playbackExport)
   const peaks = useQuery({ queryKey: ['recording-peaks', id], queryFn: async () => (await apiGet<Peaks | null>(`/api/recording-workspace/${id}/peaks`)) ?? null, enabled: mix.session.state === 'Ready' && !mix.missing,
     refetchInterval: processing ? 1000 : false })
   useEffect(() => { if (job?.recordingId === id && job.state === 'Ready') void qc.invalidateQueries({ queryKey: ['recording-peaks', id] }) }, [job?.recordingId, job?.state, id, qc])
   const save = useMutation({ mutationFn: (next: Review) => apiPost(`/api/recording-workspace/${id}/review`, next), onSuccess: () => { setLabel(''); void qc.invalidateQueries({ queryKey: ['recording-review', id] }); void qc.invalidateQueries({ queryKey: ['recording-feedback', id] }); void qc.invalidateQueries({ queryKey: mixesKey }) } })
   const live = recorder.data?.busy && recorder.data.session?.id === id
-  const disabled = !!recorder.data?.busy || mix.missing || mix.session.state !== 'Ready' || mix.session.audioBytes >= 4294967200
+  const disabled = !!recorder.data?.busy || mix.session.state !== 'Ready' || (!derived && (mix.missing || largeMaster || playbackExport !== 'auto'))
   const span = Math.max(.01, mix.duration / zoom)
   const seek = (time: number) => { const value = Math.min(mix.duration, Math.max(0, time)); if (audio.current) audio.current.currentTime = value; setPosition(value) }
   const toggle = async () => { if (!audio.current || disabled) return; setError(null); if (audio.current.paused) { try { await audio.current.play() } catch { setError('Playback failed. Reconnect the recording drive or relink its master under file management.') } } else audio.current.pause() }
@@ -117,12 +125,13 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
   const mark = () => { if (!review.data) return; save.mutate({ ...review.data, markers: [...review.data.markers, { id: crypto.randomUUID(), seconds: live ? recorder.data!.seconds : position, label: label.trim() || 'Review this moment' }] }) }
   return <section aria-label="Mix playback" className="space-y-4">
     <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="min-w-0 break-words text-xl font-semibold">{mix.session.title}</h2><span className="tabular-nums text-sm">{clock(position)} / {clock(mix.duration)}</span></div>
-    <audio ref={audio} preload="none" src={disabled ? undefined : `/api/recordings/${id}/audio`}
+    {playableExports.length > 0 && <label className="flex flex-wrap items-center gap-2 text-sm">Playback source<select className={field} value={playbackExport} onChange={e => { audio.current?.pause(); setPlaying(false); setPosition(0); setPlaybackExport(e.target.value) }}><option value="auto">{largeMaster ? 'Automatic · verified MP3 export' : 'Original master'}</option>{playableExports.map(e => <option key={e.id} value={e.id}>{exportName(e.format)} · {new Date(e.createdAt).toLocaleString()}</option>)}</select></label>}
+    <audio ref={audio} preload="none" src={disabled ? undefined : derived ? `/api/recording-exports/audio/${derived.id}` : `/api/recordings/${id}/audio`}
       onLoadedMetadata={() => { if (audio.current) audio.current.volume = volume }}
       onTimeUpdate={() => { const time = audio.current?.currentTime ?? 0; if (loop && loopEnd > loopStart && time >= loopEnd) seek(loopStart); else setPosition(time) }}
       onPlay={() => { usePlayer.getState()._commands?.pause(); document.querySelectorAll('audio').forEach(a => { if (a !== audio.current) a.pause() }); setPlaying(true) }}
       onPause={() => setPlaying(false)} onEnded={() => { if (loop && !disabled) { seek(loopStart); void audio.current?.play().catch(() => setError('Could not restart the loop.')) } else setPlaying(false) }}
-      onError={() => setError('Audio unavailable. Reconnect its drive or relink the original master under file management.')} />
+      onError={() => setError(derived ? 'Export audio unavailable. Reconnect its drive or create a new export. Your original master is unchanged.' : 'Audio unavailable. Reconnect its drive or relink the original master under file management.')} />
     {peaks.data ? <><RecordingWaveform peaks={peaks.data} position={position} start={start} span={span} seek={seek} markers={[...(review.data?.markers ?? []), ...(feedback.data?.annotations ?? []).map(a => ({ seconds: a.seconds })), ...(tracklist.data?.entries ?? []).filter(e => e.played && e.startSeconds != null).map(e => ({ seconds: e.startSeconds! }))]} />
       <div className="flex justify-between text-xs tabular-nums text-[var(--color-muted)]"><span>{clock(start)}</span><span>{clock(Math.min(mix.duration, start + span))}</span></div></> : <div className="flex min-h-40 items-center justify-center border-y border-[var(--color-border)] p-4 text-sm text-[var(--color-muted)]">
       {mix.missing ? 'Master file is missing. Reconnect its drive or use Relink missing master below.' : mix.session.state !== 'Ready' ? `Recording is ${mix.session.state.toLowerCase()}. Playback becomes available after saving.` : 'Prepare the waveform to see the shape of your mix. Playback works while analysis is pending.'}</div>}
@@ -134,7 +143,7 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
       <label className="flex items-center gap-2 text-sm">Volume<input aria-label="Mix volume" type="range" min={0} max={1} step={.01} value={volume} onChange={e => { setVolume(+e.target.value); if (audio.current) audio.current.volume = +e.target.value }} /></label>
       <button className={button} disabled={processing || mix.missing || mix.session.state !== 'Ready'} onClick={() => { void apiPost(`/api/recording-workspace/${id}/peaks`).then(() => qc.invalidateQueries({ queryKey: ['recording-workspace-job'] })).catch(e => setError(String(e))) }}>{peaks.data ? 'Rebuild waveform' : 'Prepare waveform'}</button>
     </div>
-    {mix.session.audioBytes >= 4294967200 && <p className="text-sm text-amber-300">This RF64 master is too large for the browser player. Waveform and markers are available; use an RF64-capable external player for audio.</p>}
+    {largeMaster && <p className="text-sm text-amber-300">{derived ? 'Playing a verified export; the RF64 master is unchanged. Review times still refer to the original recording.' : 'This RF64 master is too large for the browser player. Create a 320 kbps MP3 under Export finished mix below to enable in-app playback, or use an RF64-capable external player.'}</p>}
     <p className="text-xs text-[var(--color-muted)]">Playback is disabled during capture to avoid feeding your mix back into the recording. No software monitoring.</p>
     <label className="flex items-center gap-3 text-sm">Position<input aria-label="Mix position" className="min-w-0 flex-1" type="range" min={0} max={mix.duration || 1} step={.1} value={position} disabled={disabled} onChange={e => seek(+e.target.value)} /></label>
     <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -155,6 +164,7 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
         {review.data?.markers.map(marker => <div key={marker.id} className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] py-2 text-sm"><button className="min-w-0 break-words py-2 text-left hover:underline" onClick={() => seek(marker.seconds - preRoll)}>{clock(marker.seconds)} · {marker.label}</button><button className={button} disabled={save.isPending} aria-label={`Remove marker ${marker.label}`} onClick={() => save.mutate({ ...review.data!, markers: review.data!.markers.filter(m => m.id !== marker.id) })}>Remove</button></div>)}
       </div>
     </details>
+    <RecordingExportPanel id={id} ready={mix.session.state === 'Ready' && !mix.missing} busy={!!recorder.data?.busy} />
     <RecordingTracklistPanel id={id} position={position} seek={seek} live={!!live && recorder.data?.session?.state === 'Recording'} canSetStart={!disabled} />
     <RecordingFeedbackPanel id={id} title={mix.session.title} position={position} duration={mix.duration} live={!!live && recorder.data?.session?.state === 'Recording'} canPlay={!disabled} seek={seek} loop={(from, to) => { const end = Math.min(mix.duration, to); const begin = Math.max(0, from); if (end > begin) { setLoopStart(begin); setLoopEnd(end); setLoop(true); seek(begin) } }} />
   </section>
