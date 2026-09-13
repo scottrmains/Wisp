@@ -75,6 +75,7 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
         {
             Directory.CreateDirectory(staging);
             var planned = CreateDeviceTracks(selected, deviceCues, includeAnalysis: !CatalogueOnlyHardwareValidation);
+            PioneerAnalysisPath.RequireDistinct(planned);
             for (var index = 0; index < planned.Count; index++)
             {
                 var track = planned[index];
@@ -217,7 +218,7 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
             var title = Sanitize(track.Title ?? Path.GetFileNameWithoutExtension(track.FileName));
             var suffix = track.Id.ToString("N")[..8];
             var contentPath = $"/Contents/WISP/{artist}/{title} [{suffix}]{extension}";
-            var analysisPath = includeAnalysis ? $"/PIONEER/USBANLZ/P{id % 1000:000}/{id:X8}/ANLZ0000.DAT" : "";
+            var analysisPath = includeAnalysis ? PioneerAnalysisPath.ForAudio(contentPath) : "";
             var selectedCues = includeAnalysis
                 ? cues.Where(c => c.TrackId == track.Id).OrderBy(c => c.StartSeconds).ToList()
                 : [];

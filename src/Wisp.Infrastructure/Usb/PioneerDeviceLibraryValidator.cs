@@ -21,6 +21,7 @@ public static class PioneerDeviceLibraryValidator
         bool allowAdditionalRows = false,
         bool validateFreshPageLayout = true)
     {
+        PioneerAnalysisPath.RequireDistinct(tracks);
         var bytes = File.ReadAllBytes(pdbPath);
         if (bytes.Length < PageSize || ReadLe32(bytes, 4) != PageSize)
             throw new InvalidOperationException("Generated Pioneer database has an invalid page header.");
@@ -60,6 +61,10 @@ public static class PioneerDeviceLibraryValidator
         foreach (var track in tracks)
         {
             if (string.IsNullOrWhiteSpace(track.AnalysisPath)) continue;
+            // Waveform-bearing exports must be discoverable by the player itself,
+            // not just via a self-consistent (but ignored) PDB analyze_path string.
+            if (track.Waveform is not null && track.AnalysisPath != PioneerAnalysisPath.ForAudio(track.ContentPath))
+                throw new InvalidOperationException("Pioneer analysis is not at the audio-path-derived player lookup location.");
             var row = ReadRows(bytes, 0).Single(r => ReadLe32(bytes, r + 0x48) == track.DeviceId);
             if (ReadTrackString(bytes, row, 14) != track.AnalysisPath || ReadTrackString(bytes, row, 20) != track.ContentPath)
                 throw new InvalidOperationException("Pioneer database does not link to the exported audio and analysis files.");

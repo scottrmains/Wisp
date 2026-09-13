@@ -2,6 +2,50 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: CDJ analysis lookup path repair — hardware retest pending
+
+- **Hardware result:** the owner re-exported with waveform support and still
+  saw no waveform. F:'s version-3 receipt confirms the new exporter was used;
+  all seven DAT files contain the generated previews. Software validation was
+  insufficient: a self-consistent PDB link does not establish player discovery.
+- **Concrete path mismatch:** for Blue Monday, Wisp wrote analysis under
+  `P001/00000001`, while the CDJ created its own file under `P050/00018218`.
+  The published rekordbox audio-path hash reproduces the latter exactly. It
+  also reproduces all three saved rekordbox reference directories and the
+  previously observed CDJ-created directories for the other two loaded tracks.
+  This establishes an incorrect lookup location; it does not prove there are
+  no other analysis-acceptance requirements on CDJ-850/900.
+- **Fixed:** derive `PIONEER/USBANLZ/Pxxx/yyyyyyyy/ANLZ0000.DAT` from the exact
+  USB-relative audio path using UTF-16 code units and uint32 wraparound, instead
+  of sequential DeviceSQL IDs. PDB links, DAT placement and receipt paths use
+  the same result. Waveform-bearing export validation now also requires this
+  player-derived location. Waveform payloads, cue encoding, audio, catalogue
+  allocation and USB layout are unchanged in this follow-up.
+- **Collision safety:** detect duplicate analysis paths before copying tracks
+  and before sidecar writes. The 200003-bucket hash can collide; until shared
+  bucket allocation is hardware-verified, stop with an actionable error rather
+  than overwrite another selected track's waveform/cues.
+- **Verified:** 115 Core, 128 Infrastructure and 166 API tests. Added published
+  path vectors, UTF-16/overflow coverage, a genuine hash-collision case, rejection
+  of the former self-consistent ID-based folder and opt-in comparison against
+  private rekordbox/player-created folders. Reanalyzed all seven actual export
+  tracks into an isolated template-based test database at the corrected paths,
+  validating their previews and all 11 cue timestamps. USB and production data
+  were read-only. Client code is unchanged from the preceding 72-browser /
+  53-unit-test pass; no installer generated. One published example disagrees
+  with that source's own algorithm and is not used as a trusted test oracle;
+  the actual local rekordbox/CDJ evidence matches.
+- **Next:** rebuild/restart the updated debug app and export the same playlist
+  to F: again, accepting the existing-library backup/replacement. No formatting
+  is needed. Safely eject, load from the WISP playlist and check the overview.
+  This lookup repair could also affect cue discovery, but Memory Cue recall
+  remains unconfirmed. Missing VBR/beat-grid/detailed-waveform support and the
+  retained reference catalogue remain separate limitations.
+
+Algorithm source (reported hardware work used CDJ-3000, so checked locally
+against the owner's older-player files rather than assuming compatibility):
+[fourfour — ANLZ path hash](https://github.com/morizkraemer/fourfour/blob/master/pioneer-usb-writer/reference-code/PIONEER.md#1-anlz-path-hash-algorithm).
+
 ## 2026-09-13: CDJ overview waveform export — software verified, player test pending
 
 - **New hardware evidence:** after the MBR/single-FAT32 preparation, the owner

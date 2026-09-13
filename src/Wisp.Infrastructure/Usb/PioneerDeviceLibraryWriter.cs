@@ -122,6 +122,7 @@ public sealed class PioneerDeviceLibraryWriter
 
     private static void WriteAnalysisSidecars(string stagingRoot, IReadOnlyList<PioneerExportTrack> tracks)
     {
+        PioneerAnalysisPath.RequireDistinct(tracks);
         foreach (var track in tracks)
         {
             if (string.IsNullOrWhiteSpace(track.AnalysisPath)) continue;

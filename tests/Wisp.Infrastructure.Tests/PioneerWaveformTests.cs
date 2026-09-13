@@ -114,7 +114,7 @@ public sealed class PioneerWaveformTests : IDisposable
         var (path, waveform, track) = await WriteWaveform();
         var writer = new PioneerDeviceLibraryWriter();
         var noWave = writer.Write(Path.Combine(_root, "no-wave"), [track with { Waveform = null }], []);
-        var missing = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(noWave.PdbPath)!)!, "USBANLZ", "TEST", "ANLZ0000.DAT");
+        var missing = Path.Combine(_root, "no-wave", track.AnalysisPath.TrimStart('/'));
         Assert.Throws<InvalidOperationException>(() => PioneerDeviceLibraryValidator.ValidateAnalysis(missing, track.ContentPath, track.DeviceCues, waveform));
         var pdb = Path.Combine(_root, "PIONEER", "rekordbox", "export.pdb");
         var original = File.ReadAllBytes(pdb);
@@ -206,7 +206,7 @@ public sealed class PioneerWaveformTests : IDisposable
             Assert.Contains(waveform.Preview, b => (b & 31) > 0);
             Assert.True(waveform.Preview.Distinct().Count() > 1);
             Assert.Equal(hash, System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
-            tracks.Add(new(entry.DeviceId, entry.ContentPath, entry.AnalysisPath, Track(path),
+            tracks.Add(new(entry.DeviceId, entry.ContentPath, PioneerAnalysisPath.ForAudio(entry.ContentPath), Track(path),
                 entry.MemoryCues!.Select(cue => new DeviceCue { Kind = Enum.Parse<DeviceCueKind>(cue.Kind), StartSeconds = cue.StartMilliseconds / 1000d, EndSeconds = cue.EndMilliseconds / 1000d }).ToList(), waveform));
         }
         Assert.NotEmpty(tracks);
@@ -221,10 +221,10 @@ public sealed class PioneerWaveformTests : IDisposable
     {
         using var pcm = Pcm(44100, _ => 0.2f);
         var waveform = await PioneerWaveformAnalyzer.ReadPcmAsync(pcm, default);
-        var track = new PioneerExportTrack(1, "/Contents/WISP/test.mp3", "/PIONEER/USBANLZ/TEST/ANLZ0000.DAT", Track("test.mp3"),
+        var track = new PioneerExportTrack(1, "/Contents/WISP/test.mp3", PioneerAnalysisPath.ForAudio("/Contents/WISP/test.mp3"), Track("test.mp3"),
             [new DeviceCue { StartSeconds = 12.345, Kind = DeviceCueKind.MemoryCue }], waveform);
         new PioneerDeviceLibraryWriter().Write(_root, [track], []);
-        return (Path.Combine(_root, "PIONEER", "USBANLZ", "TEST", "ANLZ0000.DAT"), waveform, track);
+        return (Path.Combine(_root, track.AnalysisPath.TrimStart('/')), waveform, track);
     }
 
     private static Track Track(string path) => new() { Id = Guid.NewGuid(), FilePath = path, FileName = Path.GetFileName(path), FileHash = "test", Duration = TimeSpan.FromMinutes(10) };
