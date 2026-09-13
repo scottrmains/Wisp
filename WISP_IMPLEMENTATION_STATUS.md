@@ -41,13 +41,25 @@ Last reviewed: 2026-09-13
   Browser checks include GPT blocking, missing/swapped USBs, refresh/error
   recovery, confirmation/cancel and no folder-picker call. Visual inspection at
   1400px and 800px; selector is lazy-loaded. No local installer generated.
-- **Next hardware prerequisite:** preserve all wanted files from the whole USB,
-  then explicitly authorize recreating that physical device as **MBR with one
-  FAT32 partition**. This would erase BOTH F: and H: on that stick. No formatting,
-  repartitioning or USB writes were performed during diagnosis/selector work.
-  The local Pioneer reference remains available. After layout correction, export
-  and test the WISP-prefixed playlist; catalogue cleanup and Pioneer waveform
-  support remain unresolved, and Memory Cue recall still needs physical proof.
+- **USB preparation completed after separate owner approval:** backed up all 29
+  non-system files from both F: and H: (115,197,663 bytes), verifying each copy's
+  length and SHA-256 before erasure. Only Windows-managed `System Volume
+  Information` was excluded. The private backup and verification manifest are at
+  `E:\Wisp USB Backups\2026-09-13-before-mbr-76F3C2B2`, outside Git. Recreated only
+  the identity-checked USB as **MBR with one FAT32 partition**, 32 KiB clusters,
+  labelled `WISP USB` at F:. The former H: boot partition is removed; its files
+  remain in the backup. No internal disks were changed. Windows retained GPT
+  after clearing and temporarily held F:'s old mapping; guarded preparation
+  stopped at each unexpected state before completing the verified layout.
+- **Post-preparation verification:** Windows reports one MBR/FAT32 partition;
+  Wisp's read-only `--list-cdj-usbs` reports `CanExport: true` and no compatibility
+  problem. The volume contains only Windows filesystem metadata: old exports
+  were not restored. The separate local Pioneer reference remains available.
+- **Next hardware test:** freshly export `Smoke Test Mix` from Wisp to F:, safely
+  eject, then test the WISP-prefixed playlist and Memory Cues using the player's
+  CUE/LOOP CALL controls. Layout acceptance by Wisp is not hardware acceptance;
+  CDJ-900 playback and Memory Cue recall still need physical proof. Catalogue
+  cleanup and Pioneer waveform support remain unresolved.
 
 Source: [AlphaTheta — CDJ-900 USB device not recognized](https://support.alphatheta.com/en-US/articles/19545774076185?product=4416496076569).
 
