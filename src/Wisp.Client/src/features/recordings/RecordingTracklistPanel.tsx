@@ -7,8 +7,8 @@ import { useActivePlan } from '../../state/activePlan'
 import { useCurrentPage } from '../../state/currentPage'
 import { formatTrackStart, parseTrackStart, tracklistKey, useRecordingTracklist, type PerformedEntry, type PlanSnapshot } from './useRecordingTracklist'
 
-const button = 'min-h-11 rounded border border-[var(--color-border)] px-3 py-2 text-sm hover:bg-[var(--color-surface)] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
-const field = 'min-h-11 min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm'
+const button = 'wm-button'
+const field = 'wm-field'
 
 function Snapshot({ snapshot }: { snapshot: PlanSnapshot }) {
   return <div className="space-y-2 text-sm">
@@ -31,7 +31,7 @@ export function RecordingTracklistPanel({ id, position, seek, live, canSetStart 
   const plans = useQuery({ queryKey: ['mixPlans'], queryFn: mixPlans.list })
   const [planId, setPlanId] = useState(''); const [search, setSearch] = useState('')
   const [artist, setArtist] = useState(''); const [title, setTitle] = useState(''); const [error, setError] = useState<string | null>(null)
-  const [adding, setAdding] = useState(true)
+  const [adding, setAdding] = useState(false)
   const library = useQuery({ queryKey: ['recording-track-search', search.trim()], queryFn: ({ signal }) => apiGet<{ id: string; artist: string; title: string }[]>('/api/recording-tracklists/library', { q: search.trim() }, signal), enabled: search.trim().length > 1 })
   const data = query.data; const entries = data?.entries ?? []; const snapshots = data?.snapshots ?? []
   const active = snapshots.find(s => s.id === data?.activeSnapshotId)
@@ -58,7 +58,7 @@ export function RecordingTracklistPanel({ id, position, seek, live, canSetStart 
     patch(entry, { startSeconds: seconds, played: true })
   }
   return <section aria-label="Recording tracklist" className="space-y-4 border-t border-[var(--color-border)] pt-4">
-    <div><h3 className="font-semibold">Blueprint & actual tracklist</h3><p className="mt-1 text-xs text-[var(--color-muted)]">The plan is your starting point. The actual tracklist is what you confirm you played—nothing is detected automatically.</p></div>
+    <div><h3 className="font-semibold">What you actually played</h3><p className="mt-1 text-xs text-[var(--color-muted)]">The plan is your starting point. Confirm the tracks and their starts here—nothing is detected automatically.</p></div>
     {(query.error || save.error || error || plans.error) && <p role="alert" className="text-sm text-red-400">{error ?? save.error?.message ?? query.error?.message ?? plans.error?.message} <button className="underline" onClick={() => { setError(null); save.reset(); void query.refetch() }}>Refresh tracklist</button></p>}
     {query.isPending && <p role="status" className="text-sm">Loading tracklist…</p>}
     <details><summary className="cursor-pointer py-2 text-sm font-medium">Saved blueprint · {active?.planName ?? 'No active plan'}</summary>
@@ -79,16 +79,16 @@ export function RecordingTracklistPanel({ id, position, seek, live, canSetStart 
     {data?.timesDisagree && <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-amber-300">Track order differs from the timestamps. Your chosen order has been kept.<button className={button} disabled={busy} onClick={() => update([...entries].sort((a, b) => (a.startSeconds ?? Infinity) - (b.startSeconds ?? Infinity)))}>Order by start time</button></div>}
     <ol className="space-y-2">{entries.map((entry, index) => <li key={entry.id} aria-label={`Tracklist entry ${index + 1}`} className="space-y-2 border-t border-[var(--color-border)] py-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1"><span className="min-w-0 break-words text-sm font-medium">{index + 1}. {entry.artist && `${entry.artist} — `}{entry.title}</span>
-        <span className="text-xs text-[var(--color-muted)]">{entry.played ? entry.startSeconds == null ? 'Played · Untimed' : `Played · ${formatTrackStart(entry.startSeconds)}` : 'Unconfirmed · Untimed'} · {entry.blueprintEntryId ? 'From saved blueprint' : 'Added independently'}{entry.trackId && data?.missingTrackIds?.includes(entry.trackId) ? ' · Library track missing (text preserved)' : ''}</span></div>
-      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-xs text-[var(--color-muted)]">{entry.played ? entry.startSeconds == null ? 'Played · Untimed' : `Played · ${formatTrackStart(entry.startSeconds)}` : 'Unconfirmed · Untimed'} · {entry.blueprintEntryId ? 'From saved blueprint' : 'Added independently'}{entry.trackId && data?.missingTrackIds?.includes(entry.trackId) ? ' · Library track missing (text preserved)' : ''}</span>{entry.startSeconds != null && <button className="wm-button wm-quiet" disabled={!canSetStart} onClick={() => seek(entry.startSeconds!)}>Go to start</button>}</div>
+      <details className="wm-track-edit"><summary>Edit track · timing & order</summary><div className="flex flex-wrap items-center gap-2 text-sm">
         <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={entry.played} disabled={busy} onChange={e => patch(entry, { played: e.target.checked, startSeconds: e.target.checked ? entry.startSeconds : null })} />Confirmed played</label>
         {live ? <button className={button} disabled={busy} onClick={() => update(entries, entry.id)}>Track started (live)</button> : <button className={button} disabled={busy || !canSetStart} onClick={() => patch(entry, { played: true, startSeconds: position })}>Set start here</button>}
         <button className={button} disabled={busy || live} onClick={() => void editStart(entry)}>Edit start time</button>
-        {entry.startSeconds != null && <><button className={button} disabled={!canSetStart} onClick={() => seek(entry.startSeconds!)}>Go to start</button><button className={button} disabled={busy} onClick={() => patch(entry, { startSeconds: null })}>Clear time</button></>}
+        {entry.startSeconds != null && <button className={button} disabled={busy} onClick={() => patch(entry, { startSeconds: null })}>Clear time</button>}
         <button className={button} aria-label={`Move entry ${index + 1} up`} disabled={busy || index === 0} onClick={() => move(index, -1)}>↑</button>
         <button className={button} aria-label={`Move entry ${index + 1} down`} disabled={busy || index === entries.length - 1} onClick={() => move(index, 1)}>↓</button>
         <button className={button} disabled={busy} onClick={async () => { if (await confirmDialog({ title: 'Remove actual tracklist entry?', message: `Remove “${entry.title}” from this recording's actual tracklist? The library track, audio and blueprint are untouched.`, confirmLabel: 'Remove entry' })) update(entries.filter(e => e.id !== entry.id)) }}>Remove tracklist entry</button>
-      </div>
+      </div></details>
     </li>)}</ol>
     <details open={adding} onToggle={e => setAdding(e.currentTarget.open)}><summary className="cursor-pointer py-2 text-sm font-medium">Add actual tracks</summary>
       <div className="space-y-3 pt-2">

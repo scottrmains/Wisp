@@ -258,12 +258,16 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
         var session = await Record(); var path = Path.Combine(session.DirectoryPath, "master.wav"); var hash = await MixRecorder.Hash(path);
         Assert.Equal(HttpStatusCode.NoContent, (await Client.GetAsync("/api/recording-workspace/job")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await Client.GetAsync($"/api/recording-workspace/{session.Id}/peaks")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.GetAsync($"/api/recording-workspace/{session.Id}/thumbnail")).StatusCode);
         var workspace = app.Services.GetRequiredService<RecordingWorkspace>(); workspace.StartPeaks(session.Id);
         await Until(() => workspace.Status?.State != "Running"); Assert.Equal("Ready", workspace.Status!.State);
         var peaks = await workspace.Peaks(session.Id); Assert.NotNull(peaks); Assert.Equal(1.2, peaks.Duration, 3);
         Assert.All(peaks.Levels[0].Min, n => Assert.Equal(-.5f, n)); Assert.All(peaks.Levels[0].Max, n => Assert.Equal(.25f, n));
+        var thumbnail = await Client.GetFromJsonAsync<float[]>($"/api/recording-workspace/{session.Id}/thumbnail");
+        Assert.Equal(32, thumbnail!.Length); Assert.All(thumbnail, value => Assert.Equal(.5f, value));
         Assert.Equal(hash, await MixRecorder.Hash(path));
         File.Move(path, path + ".moved"); Assert.Null(await workspace.Peaks(session.Id));
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.GetAsync($"/api/recording-workspace/{session.Id}/thumbnail")).StatusCode);
         var mixes = await Client.GetStringAsync("/api/recording-workspace/mixes"); Assert.Contains("\"missing\":true", mixes);
     }
 

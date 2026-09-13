@@ -22,6 +22,11 @@ async function setup(page: Page, interrupted = false, repeatCloseOnCancel = fals
   })
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
+    if (path === '/api/recording-workspace/mixes') return route.fulfill({ json: exists ? [{ session, rating: null, duration: 60, missing: false }] : [] })
+    if (path.endsWith('/review')) return route.fulfill({ json: { revision: 0, rating: null, markers: [] } })
+    if (path.startsWith('/api/recording-feedback/')) return route.fulfill({ json: { revision: 0, rating: null, status: 'Practice', notes: '', annotations: [] } })
+    if (path.startsWith('/api/recording-tracklists/')) return route.fulfill({ json: { revision: 0, entries: [], snapshots: [] } })
+    if (path.endsWith('/peaks')) return route.fulfill({ json: null })
     if (path === '/api/mix-plans') return route.fulfill({ json: [{ id: 'plan-1', name: 'Practice blueprint', trackCount: 3 }] })
     if (path === '/api/recording-input/devices') return route.fulfill({ json: { selectedEndpointId: 'input-1', devices: [
       { id: 'input-1', name: 'Input 1 (Xone:24C)', mixFormat: 'Float 44100 Hz stereo', channels: 2, sampleRate: 44100, canTest: true },
@@ -44,18 +49,19 @@ async function setup(page: Page, interrupted = false, repeatCloseOnCancel = fals
     if (path === '/api/tracks') return route.fulfill({ json: { items: [], total: 0, page: 1, size: 500 } })
     return route.fulfill({ json: [] })
   })
-  await page.goto('/'); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Record a mix', exact: true })).toBeVisible()
+  await page.goto('/'); await page.getByRole('button', { name: 'Mixes', exact: true }).click()
+  if (interrupted) await page.getByRole('region', { name: 'Mix history' }).getByRole('button', { name: /Practice mix/ }).click()
+  else await page.getByRole('button', { name: 'Record a mix', exact: true }).click()
+  if (!interrupted) await expect(page.getByRole('heading', { name: 'Record your mix', exact: true })).toBeVisible()
   return { starts, removals, requestClose: () => { closeRequested = true }, failStart: () => { startError = true } }
 }
 
 test('full recording survives navigation/reload and input tests stay disabled until stopped', async ({ page }, info) => {
   const fixture = await setup(page)
-  await page.getByLabel('Blueprint (optional)').selectOption('plan-1')
+  await page.getByLabel('Planned set (optional)').selectOption('plan-1')
   await page.getByRole('button', { name: 'Start mix recording', exact: true }).click()
   expect(fixture.starts[0].planId).toBe('plan-1')
-  await expect(page.getByRole('button', { name: 'Record 30-second test', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Stop test', exact: true })).toBeDisabled()
+  await expect(page.getByRole('region', { name: 'Input test' })).toBeHidden()
   await page.getByRole('button', { name: 'Library', exact: true }).click()
   await expect(page.getByRole('button', { name: /● Mix recording/ })).toBeVisible()
   await page.reload(); await page.getByRole('button', { name: /● Mix recording/ }).click()
@@ -71,9 +77,8 @@ test('full recording survives navigation/reload and input tests stay disabled un
 test('recover interrupted take, then explicitly start a separate linked take', async ({ page }) => {
   const fixture = await setup(page, true)
   await page.getByRole('button', { name: 'Recover saved audio' }).click()
-  await expect(page.getByLabel('Mix recording status').getByText('Recovered interrupted take.', { exact: true })).toBeVisible()
-  const takes = page.getByText('Saved takes and recovery', { exact: true }).locator('..')
-  if (await takes.getAttribute('open') === null) await takes.locator('summary').click()
+  await page.getByRole('button', { name: 'Details & files' }).click()
+  await expect(page.getByRole('region', { name: 'Mix file management' })).toContainText('Recovered interrupted take.')
   await page.getByRole('button', { name: 'New linked take', exact: true }).click()
   await page.getByRole('button', { name: 'Start mix recording', exact: true }).click()
   expect(fixture.starts[0].previousTakeId).toBe('11111111-1111-1111-1111-111111111111')
@@ -120,9 +125,8 @@ test('a second native close between status polls still opens a confirmation', as
 test('entry removal and audio deletion use distinct explicit confirmations', async ({ page }) => {
   const fixture = await setup(page, true)
   await page.getByRole('button', { name: 'Recover saved audio' }).click()
-  await expect(page.getByLabel('Mix recording status').getByText('Recovered interrupted take.', { exact: true })).toBeVisible()
-  const takes = page.getByText('Saved takes and recovery', { exact: true }).locator('..')
-  if (await takes.getAttribute('open') === null) await takes.locator('summary').click()
+  await page.getByRole('button', { name: 'Details & files' }).click()
+  await expect(page.getByRole('region', { name: 'Mix file management' })).toContainText('Recovered interrupted take.')
   await page.getByRole('button', { name: 'Delete managed audio', exact: true }).click()
   const deletion = page.getByRole('dialog', { name: 'Permanently delete managed audio?' })
   await expect(deletion).toContainText('cannot be undone')
