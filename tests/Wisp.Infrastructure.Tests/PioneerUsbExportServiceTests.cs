@@ -38,7 +38,7 @@ public sealed class PioneerUsbExportServiceTests : IDisposable
         var receipt = await File.ReadAllTextAsync(result.ReceiptPath);
         Assert.Contains("MemoryCueCount", receipt);
         Assert.Contains("\"MemoryCueCount\": 1", receipt);
-        Assert.Contains("\"Version\": 2", receipt);
+        Assert.Contains("\"Version\": 3", receipt);
         Assert.Contains("\"StartMilliseconds\": 12345", receipt);
         Assert.True(Directory.Exists(Path.Combine(usb, "Contents", "WISP")));
         Assert.Single(Directory.EnumerateFiles(usb, "ANLZ0000.DAT", SearchOption.AllDirectories));

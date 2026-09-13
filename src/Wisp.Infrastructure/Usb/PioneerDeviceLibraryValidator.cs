@@ -60,9 +60,23 @@ public static class PioneerDeviceLibraryValidator
         foreach (var track in tracks)
         {
             if (string.IsNullOrWhiteSpace(track.AnalysisPath)) continue;
+            var row = ReadRows(bytes, 0).Single(r => ReadLe32(bytes, r + 0x48) == track.DeviceId);
+            if (ReadTrackString(bytes, row, 14) != track.AnalysisPath || ReadTrackString(bytes, row, 20) != track.ContentPath)
+                throw new InvalidOperationException("Pioneer database does not link to the exported audio and analysis files.");
+            if (track.Waveform is { } waveform && ReadTrackString(bytes, row, 15) != waveform.AnalyzedAt.UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture))
+                throw new InvalidOperationException("Pioneer database is missing the waveform analysis date.");
             var analysis = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(pdbPath))!)!, track.AnalysisPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-            ValidateAnalysis(analysis, track.ContentPath, track.DeviceCues);
+            ValidateAnalysis(analysis, track.ContentPath, track.DeviceCues, track.Waveform);
         }
+    }
+
+    private static string ReadTrackString(byte[] bytes, int row, int index)
+    {
+        var start = row + BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(row + 0x5e + index * 2, 2));
+        var kind = bytes[start];
+        if ((kind & 1) != 0) return Encoding.ASCII.GetString(bytes, start + 1, (kind >> 1) - 1);
+        var length = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(start + 1, 2)) - 4;
+        return (kind == 0x90 ? Encoding.Unicode : Encoding.ASCII).GetString(bytes, start + 4, length);
     }
 
     /// <summary>
@@ -170,7 +184,8 @@ public static class PioneerDeviceLibraryValidator
     /// Decode the actual classic cue records, not just PCOB's advertised count.
     /// This intentionally does not share serialization helpers with the writer.
     /// </summary>
-    public static void ValidateAnalysis(string analysisPath, string contentPath, IReadOnlyList<DeviceCue> expectedCues)
+    public static void ValidateAnalysis(string analysisPath, string contentPath, IReadOnlyList<DeviceCue> expectedCues,
+        PioneerWaveform? expectedWaveform = null)
     {
         if (!File.Exists(analysisPath)) throw new InvalidOperationException($"Missing Pioneer analysis sidecar '{analysisPath}'.");
         var bytes = File.ReadAllBytes(analysisPath);
@@ -183,6 +198,8 @@ public static class PioneerDeviceLibraryValidator
         var foundPath = false;
         var foundMemory = false;
         var foundHot = false;
+        var foundPreview = false;
+        var foundTiny = false;
         var expected = expectedCues.OrderBy(c => c.StartSeconds).ToList();
         foreach (var cue in expected)
         {
@@ -205,6 +222,20 @@ public static class PioneerDeviceLibraryValidator
                     Encoding.BigEndianUnicode.GetString(bytes, position + 16, length - 18) != contentPath)
                     throw new InvalidOperationException("Pioneer analysis audio path does not match the exported track.");
                 foundPath = true;
+            }
+            var isPreview = bytes.AsSpan(position, 4).SequenceEqual("PWAV"u8);
+            var isTiny = bytes.AsSpan(position, 4).SequenceEqual("PWV2"u8);
+            if (isPreview || isTiny)
+            {
+                var columns = isPreview ? 400 : 100;
+                if ((isPreview ? foundPreview : foundTiny) || header != 20 || length != 20 + columns ||
+                    ReadBe32(bytes, position + 12) != columns || ReadBe32(bytes, position + 16) != 0x10000)
+                    throw new InvalidOperationException("Invalid or duplicate Pioneer waveform preview section.");
+                if (isTiny && bytes.AsSpan(position + 20, columns).ContainsAnyExceptInRange((byte)0, (byte)15))
+                    throw new InvalidOperationException("Pioneer tiny waveform height is out of range.");
+                if (expectedWaveform is not null && !bytes.AsSpan(position + 20, columns).SequenceEqual(isPreview ? expectedWaveform.Preview : expectedWaveform.Tiny))
+                    throw new InvalidOperationException("Pioneer waveform does not match the analyzed audio.");
+                if (isPreview) foundPreview = true; else foundTiny = true;
             }
             if (bytes.AsSpan(position, 4).SequenceEqual("PCOB"u8))
             {
@@ -243,6 +274,8 @@ public static class PioneerDeviceLibraryValidator
             position += length;
         }
         if (!foundPath || !foundMemory || !foundHot) throw new InvalidOperationException("Missing Pioneer audio path or cue lists.");
+        if (expectedWaveform is not null && (!foundPreview || !foundTiny || expectedWaveform.SampleFrames <= 0))
+            throw new InvalidOperationException("Missing Pioneer waveform previews or decoded audio.");
     }
 
     private static uint ExpectedMilliseconds(double seconds)

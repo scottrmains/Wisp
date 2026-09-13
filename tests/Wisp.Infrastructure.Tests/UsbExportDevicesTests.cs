@@ -58,7 +58,7 @@ public sealed class UsbExportDevicesTests : IDisposable
         var good = Device(target);
         var calls = 0;
         var devices = new FakeDevices(() => ++calls == 1 && changedAfterCopy ? [good] : [good with { PartitionStyle = "GPT" }]);
-        var service = new PioneerUsbExportService(new PioneerDeviceLibraryWriter(), devices);
+        var service = new PioneerUsbExportService(new PioneerDeviceLibraryWriter(), devices, new FakeWaveforms());
         await Assert.ThrowsAsync<UsbExportTargetException>(() => service.ExportAsync(target, "Test", [track], [new UsbPlaylist("Test", [track])], [], true,
             CancellationToken.None, good.DeviceId));
         Assert.Equal(changedAfterCopy ? 2 : 1, calls);
@@ -71,6 +71,12 @@ public sealed class UsbExportDevicesTests : IDisposable
     private sealed class FakeDevices(Func<IReadOnlyList<UsbExportDevice>> list) : IUsbExportDevices
     {
         public Task<IReadOnlyList<UsbExportDevice>> ListAsync(CancellationToken ct) => Task.FromResult(list());
+    }
+
+    private sealed class FakeWaveforms : IPioneerWaveformAnalyzer
+    {
+        public Task<PioneerWaveform> AnalyzeAsync(string path, CancellationToken ct) =>
+            Task.FromResult(new PioneerWaveform(new byte[400], new byte[100], 44100, DateTimeOffset.UtcNow));
     }
 
     public void Dispose()

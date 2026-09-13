@@ -201,6 +201,10 @@ public static class MixPlanEndpoints
         {
             return Results.BadRequest(new { code = "unsupported_format", message = ex.Message });
         }
+        catch (PioneerWaveformException ex)
+        {
+            return Results.BadRequest(new { code = "cdj_waveform_failed", message = ex.Message });
+        }
         catch (PioneerTemplateRequiredException ex)
         {
             return Results.BadRequest(new { code = "pioneer_template_required", message = ex.Message });

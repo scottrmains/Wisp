@@ -9,9 +9,8 @@ namespace Wisp.Infrastructure.Usb;
 /// <summary>
 /// Produces the conventional (pre-OneLibrary) Pioneer Device Library consumed by
 /// CDJ-850-era players. It deliberately generates only the classic feature set:
-/// metadata, playlists, BPM and PCOB Memory Cue/loop analysis. Wisp does not
-/// fabricate a beat grid or waveform when it has not performed compatible audio
-/// analysis.
+/// metadata, playlists, BPM, PCOB Memory Cue/loop analysis and decoded-audio
+/// overview waveforms. Wisp does not fabricate a beat grid or seek index.
 /// </summary>
 public sealed class PioneerDeviceLibraryWriter
 {
@@ -128,7 +127,7 @@ public sealed class PioneerDeviceLibraryWriter
             if (string.IsNullOrWhiteSpace(track.AnalysisPath)) continue;
             var analysisFile = Path.Combine(stagingRoot, track.AnalysisPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(analysisFile)!);
-            File.WriteAllBytes(analysisFile, BuildAnalysis(track.ContentPath, track.DeviceCues));
+            File.WriteAllBytes(analysisFile, BuildAnalysis(track.ContentPath, track.DeviceCues, track.Waveform));
         }
     }
 
@@ -276,6 +275,7 @@ public sealed class PioneerDeviceLibraryWriter
         strings[10] = deviceTrack.Track.AddedAt == default ? DateTime.UtcNow.ToString("yyyy-MM-dd") : deviceTrack.Track.AddedAt.ToString("yyyy-MM-dd");
         strings[12] = deviceTrack.Track.Version;
         strings[14] = deviceTrack.AnalysisPath;
+        strings[15] = deviceTrack.Waveform?.AnalyzedAt.UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         strings[17] = deviceTrack.Track.Title ?? Path.GetFileNameWithoutExtension(deviceTrack.Track.FileName);
         strings[19] = Path.GetFileName(deviceTrack.ContentPath);
         strings[20] = deviceTrack.ContentPath;
@@ -396,7 +396,7 @@ public sealed class PioneerDeviceLibraryWriter
         BinaryPrimitives.WriteUInt16LittleEndian(page[30..], (ushort)usedSize);
     }
 
-    private static byte[] BuildAnalysis(string contentPath, IReadOnlyList<DeviceCue> cues)
+    private static byte[] BuildAnalysis(string contentPath, IReadOnlyList<DeviceCue> cues, PioneerWaveform? waveform)
     {
         var file = new List<byte>();
         file.AddRange("PMAI"u8.ToArray());
@@ -413,10 +413,26 @@ public sealed class PioneerDeviceLibraryWriter
             AppendBe(body, pathBytes.Length);
             body.AddRange(pathBytes);
         });
+        if (waveform is not null)
+        {
+            AppendWaveform(file, "PWAV", waveform.Preview, 400);
+            AppendWaveform(file, "PWV2", waveform.Tiny, 100);
+        }
         AppendCueList(file, 1, []); // canonical empty Hot Cue section
         AppendCueList(file, 0, cues.OrderBy(c => c.StartSeconds).ToList());
         WriteBeAt(file, 8, file.Count);
         return file.ToArray();
+    }
+
+    private static void AppendWaveform(List<byte> file, string tag, byte[] data, int columns)
+    {
+        if (data.Length != columns) throw new InvalidOperationException($"{tag} requires {columns} waveform columns.");
+        AppendTag(file, tag, 20, body =>
+        {
+            AppendBe(body, data.Length);
+            AppendBe(body, 0x10000);
+            body.AddRange(data);
+        });
     }
 
     private static void AppendCueList(List<byte> file, int type, IReadOnlyList<DeviceCue> cues)
@@ -511,7 +527,8 @@ public sealed class PioneerDeviceLibraryWriter
 
 }
 
-public sealed record PioneerExportTrack(int DeviceId, string ContentPath, string AnalysisPath, Track Track, IReadOnlyList<DeviceCue> DeviceCues);
+public sealed record PioneerExportTrack(int DeviceId, string ContentPath, string AnalysisPath, Track Track, IReadOnlyList<DeviceCue> DeviceCues,
+    PioneerWaveform? Waveform = null);
 public sealed record PioneerExportPlaylist(int DeviceId, string Name, IReadOnlyList<int> TrackIds);
 public sealed record PioneerLibraryWriteResult(
     string PdbPath,

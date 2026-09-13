@@ -2,6 +2,59 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: CDJ overview waveform export — software verified, player test pending
+
+- **New hardware evidence:** after the MBR/single-FAT32 preparation, the owner
+  reports that the CDJ-900 recognizes the USB and plays tracks loaded directly
+  from the WISP playlist. This establishes basic playback for that test, not
+  complete compatibility. The owner is unsure about Memory Cue recall and will
+  retest it; it is **unconfirmed**, not a confirmed failure or success.
+- **Waveform diagnosis:** the seven-track version-2 export had no `PWAV` or
+  `PWV2` sections. Its 11 cue timestamps remained intact. Additional apparently
+  player-created `ANLZ0001.DAT` files existed for three tracks; their existence
+  does not establish why the player did or did not use Wisp's cue data.
+- **Implemented:** decode each staged audio copy through the configured/bundled
+  FFmpeg and write 400-column `PWAV` and 100-column `PWV2` overview previews in
+  its `ANLZ0000.DAT`. Set the database analysis date and validate its analysis
+  and audio path links. Original audio, cue timestamps, playlist allocation and
+  physical USB layout are unchanged. This adds overview waveforms, not detailed
+  scrolling/RGB waveforms, beat grids or MP3 variable-bitrate seek indexes.
+- **Signal handling:** stream 44.1 kHz stereo PCM into bounded 10 ms energy
+  summaries, using actual decoded length rather than cached track duration.
+  Separate channel energy avoids anti-phase cancellation. Preserve silence and
+  the final partial window; fixed square-root RMS display scaling does not
+  normalize the music or alter playback gain. PWAV uses neutral whiteness;
+  Wisp is not reproducing rekordbox's proprietary spectral/color analysis.
+  Tiny-preview low-nibble range follows the privately preserved reference.
+- **Safety:** complete analysis and validation before replacing the existing
+  library. Decode failure/cancellation leaves existing USB files intact; hidden
+  FFmpeg children are terminated on failure/cancellation. Ten-minute analysis
+  timeout per track, six-hour decoded duration cap, bounded stderr. Application
+  exports cannot silently skip an unavailable analyzer. Both export endpoints
+  return actionable waveform errors through Wisp's existing dialogs.
+- **Validation/receipt:** reject missing/duplicate/malformed preview sections,
+  incorrect counts/header constants, tiny heights outside the profile range,
+  payload mismatches and wrong database links/dates. Version-3 receipts retain
+  every cue timestamp and add preview sizes and decoded sample-frame count.
+  Dialogs now explain waveform analysis and the pending physical test.
+- **Verified locally:** 115 Core, 117 Infrastructure and 166 API tests pass;
+  client build, 53 unit tests, all 72 browser tests and zero-error lint pass
+  (13 existing warnings).
+  Real FFmpeg integration ran, including anti-phase WAV, corruption handling,
+  all seven tracks from the owner's F: receipt, and an isolated template-based
+  database containing their waveforms and all 11 cues. Preview headers match
+  the three private rekordbox reference DAT files. No USB files or production
+  library data were modified by these tests. Existing SQLite/OpenAPI package
+  advisory warnings remain unrelated. No installer was generated.
+- **Next:** rebuild/restart Wisp, re-export `Smoke Test Mix` to the existing F:
+  USB, confirm the backup/replacement dialog and safely eject. Load the WISP
+  playlist on CDJ-900 and check the overview waveform. No reformat is required.
+  Waveform display and Memory Cue recall still require physical verification;
+  retained reference catalogue entries remain a known limitation.
+
+Format sources: [Crate Digger ANLZ schema](https://github.com/Deep-Symmetry/crate-digger/blob/main/src/main/kaitai/rekordbox_anlz.ksy)
+and [Beat Link preview decoder](https://github.com/Deep-Symmetry/beat-link/blob/main/src/main/java/org/deepsymmetry/beatlink/data/WaveformPreview.java).
+
 ## 2026-09-13: connected USB selector and CDJ-900 NO USB diagnosis
 
 - **Hardware report:** the owner exported `Smoke Test Mix` from the corrected

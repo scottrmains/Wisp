@@ -10,7 +10,8 @@ namespace Wisp.Infrastructure.Usb;
 /// existing Pioneer library is never touched unless the caller explicitly
 /// confirms replacement, and is then moved into a dated Wisp backup.
 /// </summary>
-public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, IUsbExportDevices? usbDevices = null)
+public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, IUsbExportDevices? usbDevices = null,
+    IPioneerWaveformAnalyzer? waveforms = null)
 {
     private readonly IUsbExportDevices _usbDevices = usbDevices ?? new WindowsUsbExportDevices();
 
@@ -59,6 +60,10 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
         // Resolve before copying potentially gigabytes of music. A locally
         // preserved reference allows the diagnostic USB itself to be formatted.
         var templatePdb = IsDriveRoot(root) ? FindPlayerAcceptedTemplate(root) : null;
+        // Null is retained only for low-level folder fixtures using synthetic audio.
+        // Application/physical-USB exports must never silently omit waveforms.
+        if (waveforms is null && (IsDriveRoot(root) || usbDeviceId is not null))
+            throw new PioneerWaveformException("The CDJ waveform analyzer is unavailable. Restart WISP with its audio tools installed.");
 
         var staging = Path.Combine(root, $".wisp-pioneer-staging-{Guid.NewGuid():N}");
         var backupRoot = Path.Combine(root, "WISP", "backups");
@@ -70,13 +75,20 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
         {
             Directory.CreateDirectory(staging);
             var planned = CreateDeviceTracks(selected, deviceCues, includeAnalysis: !CatalogueOnlyHardwareValidation);
-            foreach (var track in planned)
+            for (var index = 0; index < planned.Count; index++)
             {
+                var track = planned[index];
                 ct.ThrowIfCancellationRequested();
                 var destination = Path.Combine(staging, track.ContentPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 await CopyFileAsync(track.Track.FilePath, destination, ct);
                 File.SetLastWriteTimeUtc(destination, File.GetLastWriteTimeUtc(track.Track.FilePath));
+                if (waveforms is not null)
+                {
+                    try { planned[index] = track with { Waveform = await waveforms.AnalyzeAsync(destination, ct) }; }
+                    catch (PioneerWaveformException ex)
+                    { throw new PioneerWaveformException($"Waveform export failed for '{track.Track.Title ?? track.Track.FileName}': {ex.Message}", ex); }
+                }
             }
 
             var deviceIdByWispId = planned.ToDictionary(t => t.Track.Id, t => t.DeviceId);
@@ -159,7 +171,7 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
                 validateFreshPageLayout: write.TrackIdMap is null);
 
             var receipt = new PioneerExportReceipt(
-                Version: 2,
+                Version: 3,
                 CollectionName: collectionName,
                 ExportedAt: DateTimeOffset.UtcNow,
                 TrackCount: planned.Count,
@@ -169,7 +181,8 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
                 Tracks: installedTracks.Select(t => new PioneerExportReceiptTrack(t.Track.Id, t.DeviceId, t.ContentPath, t.AnalysisPath, t.DeviceCues.Count,
                     t.DeviceCues.OrderBy(c => c.StartSeconds).Select(c => new PioneerExportReceiptCue(
                         c.Kind.ToString(), (long)Math.Round(c.StartSeconds * 1000),
-                        c.Kind == DeviceCueKind.Loop && c.EndSeconds is { } end ? (long)Math.Round(end * 1000) : null)).ToList())).ToList());
+                        c.Kind == DeviceCueKind.Loop && c.EndSeconds is { } end ? (long)Math.Round(end * 1000) : null)).ToList(),
+                    t.Waveform?.Preview.Length ?? 0, t.Waveform?.Tiny.Length ?? 0, t.Waveform?.SampleFrames)).ToList());
             var receiptPath = Path.Combine(root, "WISP", "pioneer-export-receipt.json");
             await File.WriteAllTextAsync(receiptPath, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }), ct);
             return new PioneerUsbExportResult(planned.Count, exportPlaylists.Count, installedPdb, receiptPath, pioneerBackup, contentsBackup);
@@ -253,5 +266,6 @@ public sealed class UnsupportedPioneerFormatException(string message) : InvalidO
 public sealed class PioneerTemplateRequiredException(string message) : InvalidOperationException(message);
 public sealed record PioneerUsbExportResult(int TrackCount, int PlaylistCount, string StagedPdbPath, string ReceiptPath, string? PioneerBackupPath, string? ContentsBackupPath);
 public sealed record PioneerExportReceipt(int Version, string CollectionName, DateTimeOffset ExportedAt, int TrackCount, int PlaylistCount, string? PioneerBackupPath, string? ContentsBackupPath, IReadOnlyList<PioneerExportReceiptTrack> Tracks);
-public sealed record PioneerExportReceiptTrack(Guid TrackId, int DeviceId, string ContentPath, string AnalysisPath, int MemoryCueCount, IReadOnlyList<PioneerExportReceiptCue>? MemoryCues = null);
+public sealed record PioneerExportReceiptTrack(Guid TrackId, int DeviceId, string ContentPath, string AnalysisPath, int MemoryCueCount,
+    IReadOnlyList<PioneerExportReceiptCue>? MemoryCues = null, int WaveformPreviewColumns = 0, int WaveformTinyColumns = 0, long? DecodedSampleFrames = null);
 public sealed record PioneerExportReceiptCue(string Kind, long StartMilliseconds, long? EndMilliseconds);

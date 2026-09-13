@@ -48,21 +48,21 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
     const approved = await confirmDialog(preflight.needsPioneerReplacement
       ? {
         title: 'Replace the Pioneer library?',
-        message: 'WISP will back up the existing PIONEER directory under WISP/backups, then install the Memory Cue test library. This diagnostic still retains the reference catalogue and does not generate waveforms. On the player, use the playlist prefixed WISP; other reference tracks may not load.',
+        message: 'WISP will back up the existing PIONEER directory under WISP/backups, then install the test library with audio-derived overview waveforms and Memory Cues. This diagnostic still retains the reference catalogue. On the player, use the playlist prefixed WISP; other reference tracks may not load.',
         confirmLabel: 'Back up and replace',
         danger: true,
       }
       : {
-        title: 'Run Memory Cue compatibility test?',
-        message: `WISP will copy ${preflight.trackCount} tracks, append its playlist and write ${preflight.deviceCueCount} WISP Memory Cue(s). This test retains the template catalogue; on the CDJ, open the WISP playlist, load each track and verify its Memory Cues.`,
+        title: 'Run CDJ waveform and cue test?',
+        message: `WISP will copy ${preflight.trackCount} tracks, analyze their audio for overview waveforms and write ${preflight.deviceCueCount} WISP Memory Cue(s). Analysis may take a few minutes. This test retains the template catalogue; on the CDJ, open the WISP playlist and check its waveforms and Memory Cues.`,
         confirmLabel: 'Create test USB',
       })
     if (!approved) return
 
     const result = await cdjExport.export(source, sourceId, device.rootPath, preflight.needsPioneerReplacement, device.deviceId)
     await alertDialog({
-      title: 'CDJ Memory Cue test USB created',
-      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported and their cue records validated. Safely eject the USB, open the playlist prefixed WISP on the CDJ, and use CUE/LOOP CALL to check the saved timestamps. Physical compatibility is not yet confirmed. Extra reference tracks and missing waveforms are expected in this diagnostic.`,
+      title: 'CDJ waveform and cue test USB created',
+      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported with validated overview waveforms and cue records. Safely eject the USB, open the playlist prefixed WISP on the CDJ and check the overview waveform. Use CUE/LOOP CALL to check saved timestamps. Waveform display and Memory Cue recall still need hardware verification. Extra reference tracks remain; beat grids and detailed scrolling waveforms are not included.`,
       confirmLabel: 'Done',
     })
   }
