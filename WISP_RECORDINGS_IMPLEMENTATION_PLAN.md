@@ -5,8 +5,9 @@ Date: 2026-09-13
 **Status: Phase 26a short capture on Xone:24C Input 1 confirmed working by the
 user. Phase 26b implemented for review with synthetic/fault-injection evidence;
 long hardware recording remains unverified (the user's roughly ten-minute two-deck
-test passed). Phase 26c workspace and Phase 26d blueprint/actual tracklists are
-implemented for review, with the RF64 playback limit below. Phases 26e–26g remain planned.**
+test passed). Phase 26c workspace, Phase 26d blueprint/actual tracklists and Phase
+26e feedback/revised-plan workflow are implemented for review, with the RF64
+playback limit below. Phases 26f–26g remain planned.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -368,28 +369,68 @@ while Take 2 snapshots the edited order. Deviations can be recorded independentl
 
 **Depends on:** 26c playback and 26d occurrence identities.
 
-- [ ] Optional overall 1–5 rating, overall notes and review status; persist edits
+- [x] Optional overall 1–5 rating, overall notes and review status; persist edits
   with visible save/error feedback, including failures during navigation.
-- [ ] Point/range comments, optional categories (Transition, Phrasing, Levels,
+- [x] Point/range comments, optional categories (Transition, Phrasing, Levels,
   Track choice, Keep this), edit/delete and optional revisit/resolved state.
   Validate finite timestamps within duration; live markers use captured frames.
-- [ ] Notes may target a transition or track occurrence; don't automatically add
+- [x] Notes may target a transition or track occurrence; don't automatically add
   negative global track ratings or recommendation block-pair rules.
-- [ ] Click a note to seek with bounded pre-roll; loop selected sections. Handle
+- [x] Click a note to seek with bounded pre-roll; loop selected sections. Handle
   zero/end-of-file times and tracklist edits that remove a note association.
-- [ ] **Revise plan from this mix** previews a new named plan, chosen planned or
+- [x] **Revise plan from this mix** previews a new named plan, chosen planned or
   performed order and selected feedback. Preserve valid anchors/cues where relevant;
   keep recording timestamps labelled as review context, never as track cue values.
-- [ ] When revising from the actual tracklist, use confirmed played occurrences;
+- [x] When revising from the actual tracklist, use confirmed played occurrences;
   explicitly resolve manual/missing library references and remaining draft entries.
   Neither skipping a planned track nor improvising an extra track is a negative
   rating or an automatic recommendation change.
-- [ ] Create revision with lineage to recording/parent plan; retain previous plan
+- [x] Create revision with lineage to recording/parent plan; retain previous plan
   and take. No automatic destructive updates to the original plan. Multiple takes
   remain browsable so the user can compare ratings and revisit feedback.
 
 **Exit gate:** complete Plan -> Take 1 -> timestamped feedback -> revised Plan ->
 Take 2 in browser/API tests without changing Take 1 or losing selected feedback.
+
+### Phase 26e implementation notes (2026-09-13)
+
+- Feedback & next attempt groups satisfaction, Practice / Needs review / Ready to
+  share, overall notes, and up to 500 point/range comments. Categories, occurrence
+  or transition association, editing, removal and Revisit/Resolved filters are
+  explicit review actions. No global track rating or recommendation rules change.
+- Save feedback is explicit. Local drafts include unfinished comments and survive
+  navigation/reload; failed saves remain visible after leaving the page. Drafts
+  live in browser storage until saved to WISP, not in the database backup. Storage
+  failure warns that only the in-session copy remains. Discard/reload is confirmed;
+  stale drafts are never silently rebased over a newer saved review.
+- Feedback/rating writes share a transaction and check both feedback and legacy
+  rating/quick-marker revisions. Capture updates cannot overwrite feedback. Live
+  comments use captured frames at save time; after capture stops an unfinished
+  live comment requires an explicitly chosen playback time. Point/range validation,
+  bounded pre-roll and range-loop actions cover zero/end-of-file times.
+- Removed occurrences leave the comment's copied association label and timing
+  intact, with a detached-association notice. Associations can be cleared or changed.
+- Revise from a chosen saved blueprint or confirmed actual occurrences. Preview
+  every retained/omitted entry, explicitly acknowledge excluding drafts, and match
+  manual/deleted library references or omit them. Repeats stay distinct. Valid
+  same-track source cues/anchors are preserved; replacement-track cues are not
+  invented. Transition notes are retained only when the original next-track
+  relationship survives. Unavailable library audio is flagged for relinking.
+- Selected saved comments and optional overall notes become labelled recording
+  context in the new plan, never track cue values. Creation atomically stores a new
+  named plan plus durable recording/parent lineage, with idempotent retry and a
+  revalidated preview token. Source edits invalidate previews; previous plans,
+  recordings and feedback remain intact. Deleted new plans are not resurrected by
+  retrying the original creation request. Revision choices/previews are session UI
+  state and reset on navigation; saved feedback and created lineage persist.
+- Automated evidence: 446 tests (111 core / 66 infrastructure / 153 API / 53 client /
+  63 browser), including isolated Plan -> Take 1 -> feedback -> revision -> Take 2,
+  live clocks, atomic failures, stale edits, cue preservation and draft recovery.
+  Browser tests use mocked APIs and real browser audio; no new hardware acceptance.
+- **Owner UI direction remains deferred, not accepted as final:** make the page
+  more visual and divide the experience into clear functional areas. Phase 26g
+  must rethink the structure for capture, mix history, playback/review and tracklist/
+  plan work, rather than simply restyling the current long page of controls.
 
 ## Phase 26f — Exports and file lifecycle
 
@@ -416,6 +457,11 @@ Take 2 in browser/API tests without changing Take 1 or losing selected feedback.
 ## Phase 26g — Full acceptance and controlled release
 
 **Depends on:** 26a–26f. No claim of readiness before these checks pass.
+
+- [ ] Recording workspace UI/UX restructuring requested by the owner: a more
+  visual experience with distinct functional areas for recording, past mixes,
+  playback/feedback and tracklist/plan refinement. Review the layout with the owner;
+  current functionality-first controls are not the accepted final design.
 
 - [ ] Run core, infrastructure and API tests; client unit/browser tests, lint and
   client build. Protect both internal playlist dragging and external file dragging,

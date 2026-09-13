@@ -19,7 +19,8 @@ public static class WorkspaceEndpoints
         {
             var sessions = await db.RecordingSessions.AsNoTracking().Where(s => !s.Hidden && s.State != "Deleted").OrderByDescending(s => s.StartedAt).ToArrayAsync();
             var reviews = await db.RecordingReviews.AsNoTracking().ToDictionaryAsync(r => r.Id);
-            return Results.Ok(sessions.Select(s => new { Session = s, Rating = reviews.GetValueOrDefault(s.Id)?.Rating,
+            var feedback = await db.RecordingFeedback.AsNoTracking().ToDictionaryAsync(r => r.Id);
+            return Results.Ok(sessions.Select(s => new { Session = s, Rating = reviews.GetValueOrDefault(s.Id)?.Rating, ReviewStatus = feedback.GetValueOrDefault(s.Id)?.Status ?? "Practice",
                 Duration = s.SampleRate > 0 ? s.AudioBytes / (s.SampleRate * 8d) : 0,
                 Missing = s.State == "Ready" && !File.Exists(RecordingWorkspace.AudioPath(s)) }));
         });
