@@ -50,6 +50,7 @@ public static class PhotinoHost
             var win = (PhotinoWindow)sender!;
             HandleMessage(win, message, services);
         });
+        window.RegisterWindowClosingHandler((_, _) => services.GetRequiredService<Recordings.MixRecorder>().RequestClose());
 
         Log.Information("Photino: loading {Url}", url);
         window.Load(new Uri(url));
@@ -142,8 +143,16 @@ public static class PhotinoHost
         "openInExplorer" => OpenInExplorer(request.Args),
         "openExternal" => OpenExternal(request.Args),
         "ping" => new { pong = DateTimeOffset.UtcNow },
+        "closeAfterRecording" => CloseAfterRecording(window, services),
         _ => throw new InvalidOperationException($"Unknown bridge method '{request.Method}'")
     };
+
+    private static object CloseAfterRecording(PhotinoWindow window, IServiceProvider services)
+    {
+        services.GetRequiredService<Recordings.MixRecorder>().PrepareClose();
+        window.Close();
+        return new { ok = true };
+    }
 
     private static object? OpenInExplorer(JsonElement? args)
     {

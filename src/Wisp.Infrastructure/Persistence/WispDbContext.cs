@@ -15,6 +15,7 @@ namespace Wisp.Infrastructure.Persistence;
 public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(options)
 {
     public DbSet<Track> Tracks => Set<Track>();
+    public DbSet<Wisp.Core.Recordings.RecordingSession> RecordingSessions => Set<Wisp.Core.Recordings.RecordingSession>();
     public DbSet<ScanJob> ScanJobs => Set<ScanJob>();
     public DbSet<MixPlan> MixPlans => Set<MixPlan>();
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
@@ -34,6 +35,10 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        var recording = b.Entity<Wisp.Core.Recordings.RecordingSession>();
+        recording.HasKey(r => r.Id);
+        recording.Property(r => r.Title).HasMaxLength(200);
+        recording.HasIndex(r => r.StartedAt);
         var track = b.Entity<Track>();
         track.HasKey(t => t.Id);
         track.Property(t => t.FilePath).IsRequired();

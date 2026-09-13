@@ -3,7 +3,8 @@
 Date: 2026-09-13
 
 **Status: Phase 26a short capture on Xone:24C Input 1 confirmed working by the
-user; detailed routing checks remain open below. Phases 26b–26g are not implemented.**
+user. Phase 26b implemented for review with synthetic/fault-injection evidence;
+long hardware recording remains unverified. Phases 26c–26g remain planned.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -119,32 +120,87 @@ claiming a completed routing matrix. This short test is not long-session evidenc
 
 **Depends on:** 26a capture decision.
 
-- [ ] Add isolated-profile-tested schema migrations and application-lifetime
+- [x] Add isolated-profile-tested schema migrations and application-lifetime
   coordinator: Idle -> Preparing -> Recording -> Finalising -> Ready, with
   explicit Interrupted/Recoverable/Failed paths. No record-pause in first release.
-- [ ] Stream capture into bounded buffers and disk; do not accumulate full mixes
+- [x] Stream capture into bounded buffers and disk; do not accumulate full mixes
   in memory. Keep callback work minimal and surface overruns/dropouts rather than
   silently discard audio. Throttle meters independently of sample writes.
-- [ ] Preflight writable destination, free space, device format and existing jobs;
+- [x] Preflight writable destination, free space, device format and existing jobs;
   estimate remaining recording time and report clipping without claiming to fix it.
-- [ ] Write recoverable chunks/checkpoints and an atomic session manifest. Set a
+- [x] Write recoverable chunks/checkpoints and an atomic session manifest. Set a
   documented recovery-loss bound and test it. Finalise via temporary files and
   atomic promotion; retain recoverable audio if finalisation or DB commit fails.
-- [ ] Explicitly solve classic WAV's size ceiling: choose/test RF64 or a compatible
+- [x] Explicitly solve classic WAV's size ceiling: choose/test RF64 or a compatible
   chunked-master strategy before supporting long sessions. No silent truncation at
   4 GiB; select interoperable export behaviour and display any format limitations.
-- [ ] Handle disk-full/unplug, input disconnect, sleep/session interruption,
+- [x] Handle disk-full/unplug, input disconnect, sleep/session interruption,
   process termination and restart recovery. Close while recording offers
   **Keep recording** or **Stop and save**; route navigation stays safe. Do not
   promise capture while the application is closed or the computer sleeps.
-- [ ] Stop safely on capture loss; do not silently switch devices or stitch a
+- [x] Stop safely on capture loss; do not silently switch devices or stitch a
   resumed recording across an unmarked gap. Offer a new linked take after recovery.
-- [ ] Keep masters separate from library tracks, scanner imports and normalised
+- [x] Keep masters separate from library tracks, scanner imports and normalised
   versions. Remove-from-history and delete-managed-audio are distinct, confirmed
   actions; never remove an imported source file. Missing files support relinking.
 
 **Exit gate:** synthetic fixtures and fault injection prove retry-safe lifecycle,
 bounded memory, restart recovery, large-file strategy and preservation of originals.
+
+### 2026-09-13 implementation and evidence boundary
+
+- `RecordingSessions` migration and application-lifetime `MixRecorder` own full
+  captures independently of the page. The short diagnostic and full recorder share
+  a single native-input lease. Essential start/stop, duration, meters, destination,
+  cross-page indicator and saved-take/recovery controls are included now; this is
+  not the full Phase 26c workspace. Confirmations use WISP-themed, keyboard-contained
+  native HTML dialogs, not operating-system prompts.
+- Each take is a GUID directory under `<chosen folder>/WISP Recordings`, excluded
+  from library scanning. Capture writes a stereo 32-bit IEEE float master at the
+  selected Windows shared sample rate, unchanged. Float describes transport/storage,
+  not ADC precision; the earlier 24-bit preference is superseded for this capture
+  path to avoid an unnecessary conversion. No automatic processing or monitoring.
+- Eight queued packets, each at most half a second, bound audio memory independently
+  of duration. Durable checkpoints flush the audio before replacing `session.json`;
+  checkpoint interval is one second plus at most one packet. A killed process can
+  lose **less than six seconds of already accepted audio** (queued/in-flight/uncommitted
+  frames), while every committed checkpoint frame is retained. This is not a guarantee
+  against controller/power-loss failures or audio the driver never delivered. Recovery
+  trims only the owned uncommitted tail; it never guesses a length from damaged data.
+- RIFF WAV reserves a header slot for [RF64 ds64](https://tech.ebu.ch/publications/tech3306),
+  switching before the 4 GiB boundary without a full-file copy. Tests cover exact size
+  boundaries and FFmpeg decoding/seeking a sparse >4 GiB fixture. FAT32 destinations
+  are rejected. Large RF64 masters are not offered in the basic browser audio player;
+  use a compatible external player. 320 kbps MP3 remains Phase 26f, not implemented.
+- No-input gaps over three seconds, device errors, oversized packets, queue overflow
+  and disk errors stop the take explicitly. A hung driver stop/dispose retains the
+  native lease; no second capture can race it. Native WASAPI's high-level wrapper does
+  not expose every hardware discontinuity flag, so detection of all dropouts is NOT
+  claimed. Sleep/device-removal behavior still requires physical acceptance testing.
+- Startup flags interrupted sessions for explicit recovery. Finalisation failures,
+  including failed database commits after promotion, retain recoverable files. A new
+  linked take is a separate file/identity, never an automatic append across a gap.
+  SHA-256 allows only byte-identical master relinking. Removing an entry keeps audio;
+  separately confirmed permanent deletion targets managed audio only, never relinked
+  external files. Session metadata remains on disk for diagnosis.
+- Automated evidence includes a forcibly killed child writer, checkpoint/rename/DB
+  failures, disk reserve exhaustion, input loss, queue overflow, stalled driver stop,
+  byte preservation, scanner exclusion and isolated SQLite migration. Browser tests
+  cover recording/navigation/reload, input-test exclusion, recovery, confirmation and
+  800x600 layout. Physical multi-hour Xone capture, actual Photino close handling and
+  power/sleep/unplug tests remain open; this is not yet a production reliability claim.
+
+**Next hardware check:** choose Input 1, select an NTFS/exFAT recordings folder,
+record a 10–15 minute practice take, navigate away/back, then Stop and save. Listen
+to the beginning/middle/end and verify both decks and stereo. In a separate short
+test, try closing while recording and exercise both close-dialog choices. Do not
+use an irreplaceable mix for the first long-session test.
+
+**Hardware follow-up:** user completed a 10:37 mix on Input 1 and reports both
+decks recorded correctly. Read-only analysis confirms a valid stereo 44.1 kHz
+float master, matching checkpoint length, -1.9 dBTP true peak and no >=1-second
+silence below -60 dBFS on either channel. This supports advancing to Phase 26c;
+it does not close the multi-hour, native-close, sleep or unplug acceptance checks.
 
 ## Phase 26c — Recordings workspace and playback
 

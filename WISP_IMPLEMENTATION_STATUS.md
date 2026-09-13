@@ -2,6 +2,61 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Phase 26b hardware check and repeat-close fix
+
+- User reports both decks recorded correctly in a roughly ten-minute mix on
+  Input 1. Read-only FFmpeg analysis of the resulting local master found 10:37.41
+  of stereo 44.1 kHz float audio, successful full decoding, matching file/checkpoint
+  lengths, -1.9 dBTP true peak and no per-channel silence of at least one second
+  below -60 dBFS. Metadata is Ready with no issue. This is technical validation,
+  not a listening critique or proof against brief glitches; audio was unchanged.
+- GitHub PR #23 exposed a repeat-close race: two native close attempts between
+  status polls could leave the UI's observed boolean unchanged and suppress the
+  second confirmation. Recheck on every successful status poll while retaining
+  the single-dialog guard. Add a deterministic regression with no intervening
+  false snapshot. This prerequisite is fixed before starting Phase 26c from develop.
+- Verification: all 49 browser tests and 47 client unit tests pass; client build
+  passes and lint retains zero errors / 13 pre-existing warnings. No backend or
+  audio-storage changes were needed for the repeat-close fix.
+- Multi-hour capture, physical sleep/unplug and native close acceptance remain
+  outstanding. Phase 26c is requested but awaits the owner merging Phase 26b.
+
+## 2026-09-13: Phase 26b — durable full-length mix recording
+
+- **Implemented for review:** full-length stereo recording from the explicitly
+  chosen input, with a selected destination, levels/clipping, duration, checkpoint
+  progress, disk-space estimate and a global recording/stop indicator. Navigation
+  and frontend reload reconnect to the same native coordinator. Short input tests
+  and full recordings cannot capture simultaneously. Close while recording offers
+  Keep recording or Stop and save, using accessible WISP-themed confirmations.
+- **Persistence:** isolated-tested `RecordingSessions` schema; bounded disk writer,
+  flushed atomic checkpoints, WAV/RF64 promotion without copying the full master,
+  explicit interrupted-take recovery and separate linked takes. Queue/disk/device
+  failures stop explicitly; a stuck native stop/dispose retains its input lease.
+  Masters retain shared-mode stereo float samples without gain/format processing.
+- **Storage safety:** `<chosen folder>/WISP Recordings` is excluded from the music
+  scanner. FAT32 is rejected; 128 MiB preflight and 64 MiB reserve protect recording
+  space. Remove entry and permanent managed-audio deletion are separate confirmed
+  operations. Byte-identical SHA-256 relinking never grants permission to delete
+  the external file. No live profile/database, existing music or real mixer capture
+  was touched during implementation; verification used disposable isolated profiles.
+- **Verification:** 379 tests: 94 core, 65 infrastructure, 125 API, 47 client unit,
+  48 browser. Includes a forcibly terminated child writer/recovery, >4 GiB sparse
+  RF64 decode/seek with real FFmpeg, queue overflow, disk/rename/DB commit failures,
+  driver loss/stall, idempotency and byte preservation. Existing internal/external
+  drag, playlist and loudness suites remain passing. Client build passes, lint has
+  zero errors and 13 existing warnings. Existing Microsoft.OpenApi/SQLitePCLRaw
+  dependency vulnerability warnings remain; no package changes or installer build.
+- **Limitations:** less than six seconds of accepted but not checkpointed audio can
+  be excluded after abrupt process termination; this is not physical power-loss
+  assurance or detection of every hardware dropout. Hardware long-session/sleep/
+  unplug and real Photino close acceptance are still pending. Large RF64 masters
+  need an external compatible player. Full waveform/history, ratings, timestamp
+  comments, Mix Plan snapshots and 320 kbps MP3 export remain later phases.
+- **Next:** user tests a 10–15 minute Input 1 take and both close-dialog choices;
+  then Phase 26c builds the full recordings/playback workspace. Detailed decisions
+  and evidence boundaries are in `WISP_RECORDINGS_IMPLEMENTATION_PLAN.md`.
+
 ## 2026-09-13: User confirms Xone:24C Input 1 recording works
 
 - **User-tested hardware evidence:** the user recorded a short test using Input 1

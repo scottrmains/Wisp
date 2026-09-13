@@ -84,11 +84,16 @@ public class Program
                 opts.UseSqlite(WispPaths.DatabaseConnectionString));
 
             builder.Services.AddSingleton<WispSettingsStore>();
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.CaptureLease>();
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.RecordingDiskStore>();
+            builder.Services.AddSingleton<MixRecorder>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<MixRecorder>());
             builder.Services.AddSingleton<Wisp.Infrastructure.Audio.IRecordingInputDevices, Wisp.Infrastructure.Audio.RecordingInputDevices>();
             builder.Services.AddSingleton(sp => new RecordingInputTest(
                 sp.GetRequiredService<Wisp.Infrastructure.Audio.IRecordingInputDevices>(),
                 sp.GetRequiredService<ILogger<RecordingInputTest>>(),
-                Path.Combine(WispPaths.AppDataDir, "recording-input-tests")));
+                Path.Combine(WispPaths.AppDataDir, "recording-input-tests"),
+                sp.GetRequiredService<Wisp.Infrastructure.Audio.CaptureLease>()));
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RecordingInputTest>());
             // Mp3Transcoder reads the optional ffmpeg-path override from
             // WispSettings; injecting the lookup as a Func keeps the
@@ -190,6 +195,7 @@ public class Program
             app.MapTrackFiles();
             app.MapLoudness();
             app.MapRecordingInputs();
+            app.MapRecordings();
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();

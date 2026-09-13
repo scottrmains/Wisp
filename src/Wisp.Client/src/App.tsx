@@ -11,6 +11,7 @@ import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 import { DialogHost } from './components/DialogHost'
 import { RecordingInputIndicator, RecordingInputPage } from './features/recordings/RecordingInputPage'
+import { MixRecordingIndicator } from './features/recordings/MixRecorderPanel'
 
 // These feature areas are not needed for first paint of the library workspace.
 // Keep their dependencies out of the startup bundle and load only on navigation.
@@ -95,6 +96,7 @@ function App() {
         />
 
         <RecordingInputIndicator />
+        <MixRecordingIndicator />
         <main className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<div className="p-6 text-sm text-[var(--color-muted)]">Loading workspaceâ€¦</div>}>
           {page === 'library' && <LibraryPage />}
