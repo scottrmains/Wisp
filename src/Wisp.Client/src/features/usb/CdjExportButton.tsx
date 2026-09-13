@@ -1,8 +1,9 @@
 import { HardDriveUpload } from 'lucide-react'
-import { useRef, useState } from 'react'
-import { cdjExport, type CdjExportSource } from '../../api/cdjExport'
-import { bridge, bridgeAvailable } from '../../bridge'
+import { lazy, Suspense, useRef, useState } from 'react'
+import { cdjExport, type CdjExportSource, type CdjUsbDevice } from '../../api/cdjExport'
+import { bridgeAvailable } from '../../bridge'
 import { alertDialog, confirmDialog } from '../../components/dialog'
+const CdjUsbPicker = lazy(() => import('./CdjUsbPicker').then(module => ({ default: module.CdjUsbPicker })))
 
 interface Props {
   source: CdjExportSource
@@ -21,13 +22,12 @@ const directCdjExportAvailable = true
 /// the important failures visible before the user confirms a USB change.
 export function CdjExportButton({ source, sourceId, sourceName, disabled = false, className = '' }: Props) {
   const [exporting, setExporting] = useState(false)
+  const [choosing, setChoosing] = useState(false)
   const inFlight = useRef(false)
-  const exportToCdj = async () => {
+  const exportToCdj = async (device: CdjUsbDevice) => {
     if (!bridgeAvailable()) return
-    const picked = await bridge.pickFolder()
-    if (!picked.path) return
 
-    const preflight = await cdjExport.preflight(source, sourceId, picked.path)
+    const preflight = await cdjExport.preflight(source, sourceId, device.rootPath, device.deviceId)
     if (preflight.missingFiles.length || preflight.unsupportedFiles.length) {
       await alertDialog({
         title: 'CDJ export needs attention',
@@ -59,7 +59,7 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
       })
     if (!approved) return
 
-    const result = await cdjExport.export(source, sourceId, picked.path, preflight.needsPioneerReplacement)
+    const result = await cdjExport.export(source, sourceId, device.rootPath, preflight.needsPioneerReplacement, device.deviceId)
     await alertDialog({
       title: 'CDJ Memory Cue test USB created',
       message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported and their cue records validated. Safely eject the USB, open the playlist prefixed WISP on the CDJ, and use CUE/LOOP CALL to check the saved timestamps. Physical compatibility is not yet confirmed. Extra reference tracks and missing waveforms are expected in this diagnostic.`,
@@ -67,12 +67,13 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
     })
   }
 
-  const startExport = async () => {
+  const startExport = async (device: CdjUsbDevice) => {
     if (inFlight.current) return
     inFlight.current = true
+    setChoosing(false)
     setExporting(true)
     try {
-      await exportToCdj()
+      await exportToCdj(device)
     } catch (error) {
       await alertDialog({
         title: 'CDJ export could not complete',
@@ -87,10 +88,10 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
 
   const unavailable = !bridgeAvailable()
   const unavailableForHardware = !directCdjExportAvailable
-  return (
+  return (<>
     <button
-      onClick={() => void startExport()}
-      disabled={disabled || unavailable || unavailableForHardware || exporting}
+      onClick={() => setChoosing(true)}
+      disabled={disabled || unavailable || unavailableForHardware || exporting || choosing}
       aria-busy={exporting}
       title={unavailableForHardware
         ? 'Direct CDJ-850 export is disabled until it passes the physical-device compatibility test.'
@@ -100,5 +101,8 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
       <HardDriveUpload size={14} strokeWidth={1.8} />
       {exporting ? 'Preparing CDJ export…' : 'Export to CDJ USB'}
     </button>
-  )
+    {choosing && <Suspense fallback={<span role="status" className="text-xs text-[var(--color-muted)]">Loading USB selector…</span>}>
+      <CdjUsbPicker sourceName={sourceName} onClose={() => setChoosing(false)} onChoose={device => void startExport(device)} />
+    </Suspense>}
+  </>)
 }

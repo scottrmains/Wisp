@@ -10,8 +10,18 @@ namespace Wisp.Infrastructure.Usb;
 /// existing Pioneer library is never touched unless the caller explicitly
 /// confirms replacement, and is then moved into a dated Wisp backup.
 /// </summary>
-public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
+public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, IUsbExportDevices? usbDevices = null)
 {
+    private readonly IUsbExportDevices _usbDevices = usbDevices ?? new WindowsUsbExportDevices();
+
+    public Task<IReadOnlyList<UsbExportDevice>> ListUsbDevicesAsync(CancellationToken ct) => _usbDevices.ListAsync(ct);
+
+    public async Task<UsbExportDevice> ValidateUsbTargetAsync(string targetRoot, string? deviceId, CancellationToken ct)
+    {
+        try { return UsbExportTarget.Require(await _usbDevices.ListAsync(ct), targetRoot, deviceId); }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or JsonException)
+        { throw new UsbExportTargetException("USB detection failed. Refresh the connected devices before exporting. " + ex.Message); }
+    }
     // Playlist insertion and audio loading now pass on a CDJ-850 using the
     // accepted template. The next isolated hardware step is Wisp's PCOB
     // Memory Cue / loop analysis sidecar for those same appended tracks.
@@ -28,11 +38,13 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
         IReadOnlyList<UsbPlaylist> playlists,
         IReadOnlyList<DeviceCue> deviceCues,
         bool confirmReplaceExistingPioneerLibrary,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? usbDeviceId = null)
     {
         if (string.IsNullOrWhiteSpace(targetRoot)) throw new ArgumentException("A USB target folder is required.");
         if (!Directory.Exists(targetRoot)) throw new DirectoryNotFoundException($"USB target does not exist: {targetRoot}");
         var root = Path.GetFullPath(targetRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (IsDriveRoot(root) || usbDeviceId is not null) await ValidateUsbTargetAsync(root, usbDeviceId, ct);
         var pioneer = Path.Combine(root, "PIONEER");
         if (Directory.Exists(pioneer) && !confirmReplaceExistingPioneerLibrary)
             throw new PioneerLibraryExistsException("This USB already has a Pioneer library. Review the preflight and explicitly confirm replacement; Wisp will first back it up under WISP/backups.");
@@ -112,6 +124,8 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
 
             // No target data is moved until staging has copied every audio file and passed the
             // PDB/ANLZ validator above.
+            // Recheck physical identity and layout after staging, before moving a library.
+            if (IsDriveRoot(root) || usbDeviceId is not null) await ValidateUsbTargetAsync(root, usbDeviceId, ct);
             Directory.CreateDirectory(backupRoot);
             var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
             if (Directory.Exists(pioneer))

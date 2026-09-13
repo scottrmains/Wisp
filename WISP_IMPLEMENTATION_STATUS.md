@@ -2,6 +2,55 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: connected USB selector and CDJ-900 NO USB diagnosis
+
+- **Hardware report:** the owner exported `Smoke Test Mix` from the corrected
+  debug build; the original CDJ-900 displayed **NO USB**. This is not a successful
+  player acceptance result for the cue repair.
+- **Read-only finding:** Windows reports a single approximately 32 GB Generic
+  Flash Disk using **GPT**, with its main FAT32 volume at F: and a 512 KiB
+  `UEFI_NTFS` boot partition at H:. These are partitions of the SAME physical
+  USB, not two separate sticks. Formatting F: alone retained the GPT layout and
+  second partition. AlphaTheta explicitly lists GUID partition maps as unsupported
+  on CDJ-900. The earlier instructions to format FAT32 alone were incomplete.
+- **Export inspection:** version-2 receipt identifies seven copied tracks,
+  three playlists and 11 Memory Cues. All seven audio paths exist. Independent
+  read-only decoding of their DAT files found the corrected 56-byte record
+  boundaries and all cue timestamps matching the receipt. This does not prove
+  playback or cue recall on the player.
+- **Implemented:** Export to CDJ USB opens a Wisp-styled USB selector with a
+  labelled dropdown, refresh/automatic recheck, volume label/letter, device model,
+  capacity/free space, filesystem, partition style/count and preparation warning.
+  One entry per physical USB (largest mounted volume); internal/system disks and
+  unmounted disks are not offered. USB-attached SSDs are detected by bus type,
+  not just Windows' Removable classification. No folder browser in this flow.
+- **Implemented safeguards:** block GPT/unknown layouts, multiple partitions,
+  unsupported filesystems, system/internal/read-only/unready disks. HTTP export
+  requires the selected device identity; the backend validates it at preflight,
+  before copying and again after staging/before replacing the library. A changed
+  selection is rejected rather than silently following a reused drive letter.
+  Existing non-root infrastructure folder fixtures remain isolated test exports;
+  the application API cannot use this as a folder-picker bypass.
+- **Read-only discovery:** bounded, hidden Windows Storage inventory subprocess
+  runs a fixed Get-Disk/Get-Partition/Get-Volume script with no interpolated user
+  arguments. Detection errors block export and offer refresh. The support CLI
+  `--list-cdj-usbs` runs without starting Wisp, creating a profile or opening its
+  database. Tested against the owner's USB: F:, GPT, two partitions, blocked.
+- **Verified:** 381 backend tests (115 Core / 100 Infrastructure / 166 API),
+  53 client unit tests, 72 browser tests, client build and zero-error lint pass.
+  Browser checks include GPT blocking, missing/swapped USBs, refresh/error
+  recovery, confirmation/cancel and no folder-picker call. Visual inspection at
+  1400px and 800px; selector is lazy-loaded. No local installer generated.
+- **Next hardware prerequisite:** preserve all wanted files from the whole USB,
+  then explicitly authorize recreating that physical device as **MBR with one
+  FAT32 partition**. This would erase BOTH F: and H: on that stick. No formatting,
+  repartitioning or USB writes were performed during diagnosis/selector work.
+  The local Pioneer reference remains available. After layout correction, export
+  and test the WISP-prefixed playlist; catalogue cleanup and Pioneer waveform
+  support remain unresolved, and Memory Cue recall still needs physical proof.
+
+Source: [AlphaTheta — CDJ-900 USB device not recognized](https://support.alphatheta.com/en-US/articles/19545774076185?product=4416496076569).
+
 ## 2026-09-13: CDJ Memory Cue encoding repair — hardware test pending
 
 - **Fixed:** classic `PCPT` entries now occupy exactly 56 bytes. The old writer
