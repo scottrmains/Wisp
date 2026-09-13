@@ -13,9 +13,8 @@ interface Props {
   className?: string
 }
 
-// A removable-drive export uses a separate player-accepted Pioneer USB as a
-// read-only database template. The template USB is never modified.
-const directCdjExportAvailable = true
+// A preserved player-accepted database is still used as a read-only template.
+// CDJ-900 playlist playback, overview waveforms and Memory Cues are hardware-confirmed.
 
 /// A deliberately prominent export entry point. The server performs the
 /// format/capacity checks again during the actual write; this preflight makes
@@ -48,21 +47,21 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
     const approved = await confirmDialog(preflight.needsPioneerReplacement
       ? {
         title: 'Replace the Pioneer library?',
-        message: 'WISP will back up the existing PIONEER directory under WISP/backups, then install the test library with audio-derived overview waveforms and Memory Cues. This diagnostic still retains the reference catalogue. On the player, use the playlist prefixed WISP; other reference tracks may not load.',
+        message: 'This replaces the USB’s current Pioneer library with this export, not an incremental sync. WISP first backs up PIONEER and its previous exported audio under WISP/backups. Use the playlists prefixed WISP on the player: leftover reference entries are still listed and may not load.',
         confirmLabel: 'Back up and replace',
         danger: true,
       }
       : {
-        title: 'Run CDJ waveform and cue test?',
-        message: `WISP will copy ${preflight.trackCount} tracks, analyze their audio for overview waveforms and write ${preflight.deviceCueCount} WISP Memory Cue(s). Analysis may take a few minutes. This test retains the template catalogue; on the CDJ, open the WISP playlist and check its waveforms and Memory Cues.`,
-        confirmLabel: 'Create test USB',
+        title: 'Export to CDJ USB?',
+        message: `Copy ${preflight.trackCount} tracks with overview waveforms and ${preflight.deviceCueCount} Memory Cue(s) to ${device.label} (${device.rootPath}). Analysis may take a few minutes. WISP still uses a reference database, so extra reference entries may appear. On the CDJ, open the playlists prefixed WISP.`,
+        confirmLabel: 'Export tracks',
       })
     if (!approved) return
 
     const result = await cdjExport.export(source, sourceId, device.rootPath, preflight.needsPioneerReplacement, device.deviceId)
     await alertDialog({
-      title: 'CDJ waveform and cue test USB created',
-      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported with validated overview waveforms and cue records. Safely eject the USB, open the playlist prefixed WISP on the CDJ and check the overview waveform. Use CUE/LOOP CALL to check saved timestamps. Waveform display and Memory Cue recall still need hardware verification. Extra reference tracks remain; beat grids and detailed scrolling waveforms are not included.`,
+      title: 'CDJ export complete',
+      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported with validated overview waveforms and Memory Cue records. Safely eject the USB, then open a WISP playlist. Use CUE/LOOP CALL to recall saved cues. Playback, overview waveforms and Memory Cues have been tested on CDJ-900; the full CDJ-850 profile remains unverified. Extra reference entries remain; beat grids and detailed scrolling waveforms are not included.`,
       confirmLabel: 'Done',
     })
   }
@@ -87,15 +86,12 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
   }
 
   const unavailable = !bridgeAvailable()
-  const unavailableForHardware = !directCdjExportAvailable
   return (<>
     <button
       onClick={() => setChoosing(true)}
-      disabled={disabled || unavailable || unavailableForHardware || exporting || choosing}
+      disabled={disabled || unavailable || exporting || choosing}
       aria-busy={exporting}
-      title={unavailableForHardware
-        ? 'Direct CDJ-850 export is disabled until it passes the physical-device compatibility test.'
-        : unavailable ? 'CDJ export is available in the WISP desktop app' : `Run the CDJ-850 hardware-validation export for “${sourceName}”`}
+      title={unavailable ? 'CDJ export is available in the WISP desktop app' : `Export “${sourceName}” with overview waveforms and Memory Cues`}
       className={`inline-flex items-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
     >
       <HardDriveUpload size={14} strokeWidth={1.8} />

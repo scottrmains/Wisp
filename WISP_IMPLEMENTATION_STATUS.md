@@ -2,6 +2,44 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: CDJ milestone cleanup, recovery snapshot and Devices roadmap
+
+- **Safe closeout, not full Phase 25 completion:** preserve the owner's accepted
+  CDJ-900 playback/overview/Memory Cue baseline. Reference-only catalogue entries
+  still remain; template-independent export, catalogue pruning and broader
+  hardware/format coverage are not implemented by this cleanup.
+- **Export UI:** replace stale test-only/pending-hardware messages with accurate
+  CDJ-900 scope, safe-eject/cue-recall instructions and remaining limitations.
+  Replacement explicitly means the whole Pioneer library, not incremental sync,
+  with the previous PIONEER and WISP audio backed up first.
+- **Missed entry point fixed:** the header's Mix Plan dropdown now uses the shared
+  USB picker/export component, including physical-device identity and replacement
+  review. Removed its obsolete folder-picker API wrappers. A browser regression
+  test exercises that exact entry point and rejects any folder-picker request.
+- **Dead code removed:** the disabled catalogue-only switch and unused
+  `ClearCatalogueRows` deletion prototype. This does not change the active
+  database append/analysis encoder or remove any reference tracks from a USB.
+  Do not resurrect the unverified deletion algorithm as a compatibility fix.
+- **Recovery evidence:** with owner authorization, copied the current spare F:
+  contents to `E:\Wisp USB Backups\2026-09-13-working-cdj900-76F3C2B2` outside Git.
+  All 53 files (345,357,611 bytes), including existing backups and player files,
+  were length/SHA-256 verified, then the source inventory/hashes rechecked.
+  Only Windows System Volume Information was excluded. This is a file snapshot,
+  not a sector image; the single-partition MBR/FAT32 USB was not changed.
+  One spare USB suffices for sequential samples; other prepared USBs stay untouched.
+- **Next evidence gate:** capture a native rekordbox before/after device-track
+  deletion on that same spare, preserving both states before implementing pruning.
+  The working WISP snapshot is a recovery baseline, not that deletion fixture.
+- **Planned, not built:** [Devices workspace phases](WISP_USB_WORKSPACE_PLAN.md):
+  actual device-library browsing first, then USB-local draft ordering with explicit
+  reviewed Save to USB; later incremental playlist management and cue/history
+  import. Browsing/playing/dragging does not auto-sync. Reordering must preserve
+  audio paths and byte-identical analysis to protect the accepted hardware baseline.
+- **Verification:** 115 Core, 128 Infrastructure and 166 API tests passed using
+  an isolated build output; client build, 53 unit tests, 73 browser tests and lint
+  passed (13 existing warnings). No installer, production-data mutation or new
+  hardware test performed.
+
 ## 2026-09-13: CDJ-900 hardware acceptance — waveform and Memory Cues working
 
 - **Owner-confirmed result after `5f05fb1`:** following the analysis-path repair

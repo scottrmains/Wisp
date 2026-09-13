@@ -23,10 +23,7 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
         catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or JsonException)
         { throw new UsbExportTargetException("USB detection failed. Refresh the connected devices before exporting. " + ex.Message); }
     }
-    // Playlist insertion and audio loading now pass on a CDJ-850 using the
-    // accepted template. The next isolated hardware step is Wisp's PCOB
-    // Memory Cue / loop analysis sidecar for those same appended tracks.
-    private const bool CatalogueOnlyHardwareValidation = false;
+    // Preserve the hardware-confirmed CDJ-900 analysis path/waveform/cue baseline.
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mp3", ".m4a", ".aac", ".wav", ".aiff", ".aif",
@@ -74,7 +71,7 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
         try
         {
             Directory.CreateDirectory(staging);
-            var planned = CreateDeviceTracks(selected, deviceCues, includeAnalysis: !CatalogueOnlyHardwareValidation);
+            var planned = CreateDeviceTracks(selected, deviceCues);
             PioneerAnalysisPath.RequireDistinct(planned);
             for (var index = 0; index < planned.Count; index++)
             {
@@ -205,7 +202,7 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
         }
     }
 
-    private static List<PioneerExportTrack> CreateDeviceTracks(IReadOnlyList<Track> tracks, IReadOnlyList<DeviceCue> cues, bool includeAnalysis)
+    private static List<PioneerExportTrack> CreateDeviceTracks(IReadOnlyList<Track> tracks, IReadOnlyList<DeviceCue> cues)
     {
         return tracks.Select((track, index) =>
         {
@@ -218,10 +215,8 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, I
             var title = Sanitize(track.Title ?? Path.GetFileNameWithoutExtension(track.FileName));
             var suffix = track.Id.ToString("N")[..8];
             var contentPath = $"/Contents/WISP/{artist}/{title} [{suffix}]{extension}";
-            var analysisPath = includeAnalysis ? PioneerAnalysisPath.ForAudio(contentPath) : "";
-            var selectedCues = includeAnalysis
-                ? cues.Where(c => c.TrackId == track.Id).OrderBy(c => c.StartSeconds).ToList()
-                : [];
+            var analysisPath = PioneerAnalysisPath.ForAudio(contentPath);
+            var selectedCues = cues.Where(c => c.TrackId == track.Id).OrderBy(c => c.StartSeconds).ToList();
             return new PioneerExportTrack(id, contentPath, analysisPath, track, selectedCues);
         }).ToList();
     }
