@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import type { Tracklist } from '../src/features/recordings/useRecordingTracklist'
 
 function wav() {
   const bytes = 8000 * 2 * 60; const data = Buffer.alloc(44 + bytes)
@@ -7,14 +8,20 @@ function wav() {
   data.writeUInt16LE(2, 32); data.writeUInt16LE(16, 34); data.write('data', 36); data.writeUInt32LE(bytes, 40)
   return data
 }
-async function setup(page: Page, missing = false) {
+async function setup(page: Page, missing = false, linked = false) {
   const sessions = ['Alpha practice', 'Beta session'].map((title, n) => ({ id: `mix-${n}`, title, directoryPath: 'D:/Mixes/WISP Recordings/test',
     endpointId: 'input', deviceName: 'Xone', sampleRate: 44100, startedAt: `2026-09-${13 - n}T12:00:00Z`, state: 'Ready', audioBytes: 44100 * 8 * 60, issue: null, previousTakeId: null, relinkedPath: null }))
   const reviews: Record<string, { revision: number; rating: number | null; markers: { id: string; seconds: number; label: string }[] }> = {
     'mix-0': { revision: 0, rating: null, markers: [] }, 'mix-1': { revision: 0, rating: 4, markers: [] },
   }
   let job: { id: string; recordingId: string; kind: string; state: string; progress: number; error: string | null } | null = null
-  let live = false, failReview = false
+  let live = false, failReview = false, failTracklist = false
+  const plans = [{ id: 'plan', name: 'Original plan', notes: 'Warm-up', tracks: [], trackCount: 3 }]
+  const tracklists: Record<string, Tracklist> = Object.fromEntries(sessions.map(s => [s.id, {
+    revision: 0, activeSnapshotId: linked ? 'snapshot' : null, entries: [], timesDisagree: false, missingTrackIds: [],
+    snapshots: linked ? [{ id: 'snapshot', sourcePlanId: 'plan', planName: 'Original plan', sourceUpdatedAt: s.startedAt, takenAt: s.startedAt, timing: 'At recording start', sourceExists: true,
+      blueprint: { notes: 'Warm-up', entries: ['A', 'B', 'C'].map(title => ({ id: `blueprint-${title}`, trackId: title, artist: 'Artist', title, bpm: 128, musicalKey: '8A', cueInSeconds: 30, cueOutSeconds: null, transitionNotes: null, isAnchor: false })) } }] : [],
+  }]))
   const data = wav()
   await page.addInitScript(() => {
     let handler: ((raw: string) => void) | null = null
@@ -27,6 +34,27 @@ async function setup(page: Page, missing = false) {
   })
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
+    if (path === '/api/mix-plans') return route.fulfill({ json: linked ? plans : [] })
+    if (path === '/api/mix-plans/plan') return route.fulfill({ json: plans[0] })
+    if (path === '/api/recording-tracklists/library') return route.fulfill({ json: [{ id: 'X', artist: 'Guest', title: 'X' }] })
+    if (path === '/api/recording-tracklists/plans/plan/recordings') return route.fulfill({ json: [sessions[0]] })
+    if (path.startsWith('/api/recording-tracklists/mix-')) {
+      const [, , , id, operation] = path.split('/'); const list = tracklists[id]
+      if (route.request().method() === 'POST') {
+        if (failTracklist) return route.fulfill({ status: 409, json: { message: 'Tracklist changed; refresh before retrying.' } })
+        const body = route.request().postDataJSON()
+        if (operation === 'copy') list.entries = list.snapshots[0].blueprint.entries.map(e => ({ id: `actual-${e.id}`, trackId: e.trackId, artist: e.artist, title: e.title, played: false, startSeconds: null, blueprintEntryId: e.id }))
+        if (operation === 'entries') {
+          list.entries = body.entries
+          if (body.liveEntryId) list.entries = list.entries.map(e => e.id === body.liveEntryId ? { ...e, played: true, startSeconds: 15 } : e)
+          const times = list.entries.flatMap(e => e.startSeconds == null ? [] : [e.startSeconds]); list.timesDisagree = times.some((t, i) => i > 0 && t < times[i - 1])
+        }
+        if (operation === 'unlink') list.activeSnapshotId = null
+        if (operation === 'link') { list.snapshots.push({ ...structuredClone(tracklists['mix-1'].snapshots[0]), id: body.snapshotId, timing: 'Linked after recording started' }); list.activeSnapshotId = body.snapshotId }
+        list.revision++; return route.fulfill({ status: 204 })
+      }
+      return route.fulfill({ json: list })
+    }
     if (path === '/api/recording-workspace/mixes') return route.fulfill({ json: sessions.map(s => ({ session: s, rating: reviews[s.id].rating, duration: 60, missing: missing && s.id === 'mix-0' })) })
     if (path === '/api/recording-workspace/job') return route.fulfill({ json: job })
     if (path === '/api/recording-workspace/import') { job = { id: 'job', recordingId: 'imported', kind: 'import', state: 'Running', progress: .2, error: null }; return route.fulfill({ json: job }) }
@@ -56,8 +84,110 @@ async function setup(page: Page, missing = false) {
   })
   await page.goto('/'); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your mixes', exact: true })).toBeVisible()
-  return { reviews, startLive: () => { live = true }, failReview: () => { failReview = true } }
+  return { reviews, tracklists, startLive: () => { live = true; sessions[0].state = 'Recording' }, failReview: () => { failReview = true }, failTracklist: (value: boolean) => { failTracklist = value } }
 }
+
+test('blueprint A B C becomes actual A X C with waveform times, without rewriting the plan', async ({ page }, info) => {
+  const fixture = await setup(page, false, true)
+  const panel = page.getByRole('region', { name: 'Recording tracklist', exact: true })
+  await panel.getByRole('button', { name: 'Copy blueprint as draft' }).click()
+  await expect(panel.getByText('Unconfirmed · Untimed', { exact: false })).toHaveCount(3)
+  await expect(panel.getByRole('button', { name: 'Copy blueprint as draft' })).toBeDisabled()
+  await panel.getByLabel('Tracklist entry 2', { exact: true }).getByRole('button', { name: 'Remove tracklist entry' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove entry', exact: true }).click()
+  await panel.getByLabel('Find library track').fill('Guest')
+  await panel.getByRole('button', { name: 'Add Guest — X' }).click()
+  await panel.getByRole('button', { name: 'Move entry 3 up' }).click()
+  await page.getByRole('button', { name: 'Play mix', exact: true }).click()
+  await page.getByRole('button', { name: 'Pause mix', exact: true }).click()
+  await page.getByRole('slider', { name: 'Mix position', exact: true }).fill('1')
+  for (const [index, time] of [0, 20, 40].entries()) {
+    await page.getByRole('slider', { name: 'Mix position', exact: true }).fill(String(time))
+    await panel.getByLabel(`Tracklist entry ${index + 1}`, { exact: true }).getByRole('button', { name: 'Set start here' }).click()
+    await expect(panel.getByLabel(`Tracklist entry ${index + 1}`, { exact: true }).getByLabel('Confirmed played')).toBeChecked()
+  }
+  expect(fixture.tracklists['mix-0'].entries.map(e => [e.title, e.startSeconds])).toEqual([['A', 0], ['X', 20], ['C', 40]])
+  expect(fixture.tracklists['mix-0'].snapshots[0].blueprint.entries.map(e => e.title)).toEqual(['A', 'B', 'C'])
+  expect(fixture.reviews['mix-0'].markers).toEqual([])
+  await page.setViewportSize({ width: 800, height: 600 }); await panel.getByRole('heading', { name: /Actual tracklist/ }).scrollIntoViewIfNeeded()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(800)
+  await page.screenshot({ path: info.outputPath('tracklist-800.png') })
+  await page.reload()
+  await expect(panel.getByLabel('Tracklist entry 2', { exact: true })).toContainText('Guest — X')
+})
+
+test('standalone manual repeated tracks, clear versus unconfirm, sort and failed save recovery', async ({ page }) => {
+  const fixture = await setup(page)
+  const panel = page.getByRole('region', { name: 'Recording tracklist', exact: true })
+  for (let n = 0; n < 2; n++) {
+    await panel.getByLabel('Manual title', { exact: true }).fill('Repeat')
+    await panel.getByRole('button', { name: 'Add manual track' }).click()
+    await expect(panel.getByLabel('Manual title', { exact: true })).toHaveValue('')
+  }
+  await panel.getByLabel('Tracklist entry 1', { exact: true }).getByLabel('Confirmed played').click()
+  await expect(panel.getByLabel('Tracklist entry 1', { exact: true })).toContainText('Played · Untimed')
+  await panel.getByLabel('Tracklist entry 1', { exact: true }).getByRole('button', { name: 'Edit start time' }).click()
+  await page.getByRole('dialog').getByRole('textbox').fill('not a time')
+  await page.getByRole('dialog').getByRole('button', { name: 'Save start' }).click()
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Enter a valid time')
+  await page.getByRole('dialog').press('Escape')
+  await expect(panel.getByLabel('Tracklist entry 1', { exact: true }).getByRole('button', { name: 'Edit start time' })).toBeFocused()
+  for (const [index, time] of ['30', '10'].entries()) {
+    await panel.getByLabel(`Tracklist entry ${index + 1}`, { exact: true }).getByRole('button', { name: 'Edit start time' }).click()
+    await page.getByRole('dialog').getByRole('textbox').fill(time)
+    await page.getByRole('dialog').getByRole('button', { name: 'Save start' }).click()
+    await expect(panel.getByLabel(`Tracklist entry ${index + 1}`, { exact: true }).getByRole('button', { name: 'Clear time' })).toBeVisible()
+  }
+  await panel.getByRole('button', { name: 'Order by start time' }).click()
+  await expect(panel.getByLabel('Tracklist entry 1', { exact: true })).toContainText('0:00:10.00')
+  await panel.getByLabel('Tracklist entry 1', { exact: true }).getByRole('button', { name: 'Clear time' }).click()
+  await expect(panel.getByLabel('Tracklist entry 1', { exact: true })).toContainText('Played · Untimed')
+  await panel.getByLabel('Tracklist entry 2', { exact: true }).getByLabel('Confirmed played').click()
+  await expect(panel.getByLabel('Tracklist entry 2', { exact: true })).toContainText('Unconfirmed · Untimed')
+  fixture.failTracklist(true)
+  await panel.getByLabel('Manual title', { exact: true }).fill('Keep this draft')
+  await panel.getByRole('button', { name: 'Add manual track' }).click()
+  await expect(panel.getByRole('alert')).toContainText('Tracklist changed')
+  await expect(panel.getByLabel('Manual title', { exact: true })).toHaveValue('Keep this draft')
+  expect(fixture.tracklists['mix-0'].entries).toHaveLength(2)
+  fixture.failTracklist(false)
+  await panel.getByRole('button', { name: 'Refresh tracklist' }).click()
+  await panel.getByRole('button', { name: 'Add manual track' }).click()
+  await expect(panel.getByLabel('Tracklist entry 3', { exact: true })).toContainText('Keep this draft')
+})
+
+test('recording and Mix Plan navigation preserves snapshots; recording setup is explicit', async ({ page }) => {
+  const fixture = await setup(page, false, true)
+  const panel = page.getByRole('region', { name: 'Recording tracklist', exact: true })
+  await panel.getByText('Saved blueprint · Original plan', { exact: true }).click()
+  await panel.getByRole('button', { name: 'Open current Mix Plan' }).click()
+  await expect(page.getByRole('button', { name: 'Record this plan' })).toBeVisible()
+  await page.getByText('Recordings with snapshots of this plan (1)', { exact: true }).click()
+  await page.getByRole('button', { name: 'Alpha practice · Ready', exact: true }).click()
+  await expect(panel).toBeVisible()
+  await panel.getByText('Saved blueprint · Original plan', { exact: true }).click()
+  await panel.getByRole('button', { name: 'Unlink blueprint' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Unlink', exact: true }).click()
+  await expect(panel.getByText('Saved blueprint · No active plan', { exact: true })).toBeVisible()
+  expect(fixture.tracklists['mix-0'].snapshots).toHaveLength(1)
+  await panel.getByText(/Earlier snapshot · Original plan/).click()
+  await panel.getByRole('button', { name: 'Open current Mix Plan' }).click()
+  await page.getByRole('button', { name: 'Record this plan' }).click()
+  await expect(page.getByLabel('Blueprint (optional)')).toHaveValue('plan')
+  await expect(page.getByRole('heading', { name: 'Record a mix', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stop and save mix' })).toBeDisabled()
+})
+
+test('live entry marking is explicit and does not turn review markers into tracks', async ({ page }) => {
+  const fixture = await setup(page, false, true)
+  const panel = page.getByRole('region', { name: 'Recording tracklist', exact: true })
+  await panel.getByRole('button', { name: 'Copy blueprint as draft' }).click()
+  fixture.startLive()
+  await panel.getByLabel('Tracklist entry 2', { exact: true }).getByRole('button', { name: 'Track started (live)' }).click()
+  await expect(panel.getByLabel('Tracklist entry 2', { exact: true })).toContainText('Played · 0:00:15.00')
+  expect(fixture.tracklists['mix-0'].entries.filter(e => e.played)).toHaveLength(1)
+  expect(fixture.reviews['mix-0'].markers).toHaveLength(0)
+})
 
 test('history searches and sorts; ratings survive selection and reload', async ({ page }) => {
   const fixture = await setup(page)

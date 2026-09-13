@@ -6,6 +6,8 @@ import { usePlayer } from '../../state/player'
 import { RecordingInputPage } from './RecordingInputPage'
 import { RecordingWaveform, type Peaks } from './RecordingWaveform'
 import { useRecorderStatus, type Session } from './useRecorderStatus'
+import { RecordingTracklistPanel } from './RecordingTracklistPanel'
+import { useRecordingNavigation, useRecordingTracklist } from './useRecordingTracklist'
 
 interface Mix { session: Session; rating: number | null; duration: number; missing: boolean }
 interface Job { id: string; recordingId: string; kind: string; state: string; progress: number; error: string | null }
@@ -20,7 +22,9 @@ export function RecordingsWorkspace() {
   const qc = useQueryClient(); const recorder = useRecorderStatus()
   const mixes = useQuery({ queryKey: mixesKey, queryFn: () => apiGet<Mix[]>('/api/recording-workspace/mixes'), refetchInterval: 2000 })
   const job = useQuery({ queryKey: ['recording-workspace-job'], queryFn: async () => (await apiGet<Job | null>('/api/recording-workspace/job')) ?? null, refetchInterval: 1000 })
-  const [selected, setSelected] = useState<string | null>(null)
+  const selected = useRecordingNavigation(s => s.selected)
+  const setSelected = useRecordingNavigation(s => s.select)
+  const setupRequested = useRecordingNavigation(s => s.setupRequested)
   const [search, setSearch] = useState(''); const [sort, setSort] = useState('date')
   const [height, setHeight] = useState(190); const drag = useRef<{ y: number; height: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -69,7 +73,7 @@ export function RecordingsWorkspace() {
         onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}
         onKeyDown={e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); setHeight(Math.max(90, Math.min(450, height + (e.key === 'ArrowDown' ? 20 : -20)))) } }}><span className="h-0.5 w-16 bg-[var(--color-muted)]" /></div>
       {active && <MixPlayback key={active.session.id} mix={active} processing={!!busy} job={job.data ?? null} />}
-      <details open={!mixes.data?.length || recorder.data?.busy ? true : undefined} className="border-t border-[var(--color-border)] pt-3">
+      <details open={!mixes.data?.length || recorder.data?.busy || setupRequested ? true : undefined} onToggle={e => { if (!e.currentTarget.open) useRecordingNavigation.getState().closeSetupIntent() }} className="border-t border-[var(--color-border)] pt-3">
         <summary className="cursor-pointer py-2 text-sm font-medium">Recording setup and file management</summary>
         {busy && job.data?.kind === 'import' && <p className="text-sm text-amber-300">Finish or cancel importing before starting a recording.</p>}
         <RecordingInputPage />
@@ -85,6 +89,7 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
   const [loopStart, setLoopStart] = useState(0); const [loopEnd, setLoopEnd] = useState(mix.duration); const [loop, setLoop] = useState(false)
   const [label, setLabel] = useState(''); const [error, setError] = useState<string | null>(null)
   const review = useQuery({ queryKey: ['recording-review', id], queryFn: () => apiGet<Review>(`/api/recording-workspace/${id}/review`) })
+  const tracklist = useRecordingTracklist(id)
   const peaks = useQuery({ queryKey: ['recording-peaks', id], queryFn: async () => (await apiGet<Peaks | null>(`/api/recording-workspace/${id}/peaks`)) ?? null, enabled: mix.session.state === 'Ready' && !mix.missing,
     refetchInterval: processing ? 1000 : false })
   useEffect(() => { if (job?.recordingId === id && job.state === 'Ready') void qc.invalidateQueries({ queryKey: ['recording-peaks', id] }) }, [job?.recordingId, job?.state, id, qc])
@@ -111,7 +116,7 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
       onPlay={() => { usePlayer.getState()._commands?.pause(); document.querySelectorAll('audio').forEach(a => { if (a !== audio.current) a.pause() }); setPlaying(true) }}
       onPause={() => setPlaying(false)} onEnded={() => { if (loop && !disabled) { seek(loopStart); void audio.current?.play().catch(() => setError('Could not restart the loop.')) } else setPlaying(false) }}
       onError={() => setError('Audio unavailable. Reconnect its drive or relink the original master under file management.')} />
-    {peaks.data ? <><RecordingWaveform peaks={peaks.data} position={position} start={start} span={span} seek={seek} markers={review.data?.markers ?? []} />
+    {peaks.data ? <><RecordingWaveform peaks={peaks.data} position={position} start={start} span={span} seek={seek} markers={[...(review.data?.markers ?? []), ...(tracklist.data?.entries ?? []).filter(e => e.played && e.startSeconds != null).map(e => ({ seconds: e.startSeconds! }))]} />
       <div className="flex justify-between text-xs tabular-nums text-[var(--color-muted)]"><span>{clock(start)}</span><span>{clock(Math.min(mix.duration, start + span))}</span></div></> : <div className="flex min-h-40 items-center justify-center border-y border-[var(--color-border)] p-4 text-sm text-[var(--color-muted)]">
       {mix.missing ? 'Master file is missing. Reconnect its drive or use Relink missing master below.' : mix.session.state !== 'Ready' ? `Recording is ${mix.session.state.toLowerCase()}. Playback becomes available after saving.` : 'Prepare the waveform to see the shape of your mix. Playback works while analysis is pending.'}</div>}
     {(error || save.error || peaks.error || review.error) && <p role="alert" className="text-sm text-red-400">{error ?? save.error?.message ?? peaks.error?.message ?? review.error?.message} {save.isError && <button className="underline" onClick={() => void review.refetch()}>Refresh review</button>}</p>}
@@ -139,10 +144,10 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
         <div className="flex flex-wrap items-center gap-3 text-sm"><label>Satisfaction <select className={field} value={review.data?.rating ?? ''} disabled={!review.data || save.isPending} onChange={e => { if (review.data) save.mutate({ ...review.data, rating: e.target.value ? +e.target.value : null }) }}><option value="">Unrated</option>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} / 5</option>)}</select></label>
         <label>Marker pre-roll <select className={field} value={preRoll} onChange={e => setPreRoll(+e.target.value)}>{[0, 3, 5, 10].map(n => <option key={n} value={n}>{n}s</option>)}</select></label>{save.isPending && <span role="status">Saving review…</span>}{save.isSuccess && <span role="status">Review saved</span>}</div>
         <div className="flex flex-wrap gap-2"><label className="flex min-w-0 flex-1 items-center gap-2 text-sm">Marker label<input className={`${field} w-full`} maxLength={200} value={label} onChange={e => setLabel(e.target.value)} /></label><button className={button} disabled={!review.data || save.isPending || (mix.session.state !== 'Ready' && !live)} onClick={mark}>Mark this moment{live ? ' (live)' : ''}</button></div>
-        {review.data?.markers.length === 0 && <p className="text-xs text-[var(--color-muted)]">Mark a transition or moment to revisit. Detailed comments and Mix Plan tracklists arrive in the next phases.</p>}
+        {review.data?.markers.length === 0 && <p className="text-xs text-[var(--color-muted)]">Mark a transition or moment to revisit. Review markers are separate from track starts. Detailed comments arrive in the next phase.</p>}
         {review.data?.markers.map(marker => <div key={marker.id} className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] py-2 text-sm"><button className="min-w-0 break-words py-2 text-left hover:underline" onClick={() => seek(marker.seconds - preRoll)}>{clock(marker.seconds)} · {marker.label}</button><button className={button} disabled={save.isPending} aria-label={`Remove marker ${marker.label}`} onClick={() => save.mutate({ ...review.data!, markers: review.data!.markers.filter(m => m.id !== marker.id) })}>Remove</button></div>)}
       </div>
     </details>
-    <details><summary className="cursor-pointer py-2 text-sm font-medium">Tracklist</summary><p className="text-sm text-[var(--color-muted)]">Mix Plan linking and performed tracklists are Phase 26d. No track timings have been inferred from this audio.</p></details>
+    <RecordingTracklistPanel id={id} position={position} seek={seek} live={!!live && recorder.data?.session?.state === 'Recording'} canSetStart={!disabled} />
   </section>
 }

@@ -7,7 +7,7 @@ namespace Wisp.Api.Recordings;
 
 public static class RecordingEndpoints
 {
-    public sealed record StartRequest(Guid RequestId, string Title, string Folder, string EndpointId, Guid? PreviousTakeId);
+    public sealed record StartRequest(Guid RequestId, string Title, string Folder, string EndpointId, Guid? PreviousTakeId, Guid? PlanId = null);
     public sealed record DeleteRequest(bool DeleteAudio, bool Confirmed);
     public sealed record RelinkRequest(string Path);
 
@@ -20,7 +20,7 @@ public static class RecordingEndpoints
             .Where(r => !r.Hidden && r.State != "Deleted").OrderByDescending(r => r.StartedAt).ToArrayAsync()));
         routes.MapPost("/start", (StartRequest request, MixRecorder recorder, WispSettingsStore settings) => Guard(async () =>
         {
-            var session = await recorder.Start(request.RequestId, request.Title, request.Folder, request.EndpointId, request.PreviousTakeId);
+            var session = await recorder.Start(request.RequestId, request.Title, request.Folder, request.EndpointId, request.PreviousTakeId, request.PlanId);
             // Capture is already visible in status if remembering the preference fails.
             try { settings.Update(s => s with { RecordingFolder = request.Folder, RecordingInputEndpointId = request.EndpointId }); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

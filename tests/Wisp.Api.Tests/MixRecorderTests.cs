@@ -16,7 +16,7 @@ using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Api.Tests;
 
-public sealed class MixRecorderTests : IAsyncLifetime
+public sealed partial class MixRecorderTests : IAsyncLifetime
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "wisp-mix-recorder-" + Guid.NewGuid().ToString("N"));
     private readonly Devices devices = new();
@@ -38,7 +38,7 @@ public sealed class MixRecorderTests : IAsyncLifetime
         builder.Services.AddSingleton(new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance, () => Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG")));
         builder.Services.AddSingleton(sp => new RecordingWorkspace(sp.GetRequiredService<IServiceScopeFactory>(), lease, disk,
             sp.GetRequiredService<Mp3Transcoder>(), Path.Combine(root, "peaks-cache"), NullLogger<RecordingWorkspace>.Instance));
-        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace();
+        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace(); app.MapRecordingTracklists();
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
@@ -47,8 +47,8 @@ public sealed class MixRecorderTests : IAsyncLifetime
         recorder = app.Services.GetRequiredService<MixRecorder>();
         await recorder.StartAsync(CancellationToken.None); await app.StartAsync();
     }
-    private Task<HttpResponseMessage> Start(Guid id, Guid? previous = null) => Client.PostAsJsonAsync("/api/recordings/start",
-        new { requestId = id, title = "Practice", folder = root, endpointId = "stereo", previousTakeId = previous });
+    private Task<HttpResponseMessage> Start(Guid id, Guid? previous = null, Guid? planId = null) => Client.PostAsJsonAsync("/api/recordings/start",
+        new { requestId = id, title = "Practice", folder = root, endpointId = "stereo", previousTakeId = previous, planId });
     private static async Task Until(Func<bool> test)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -394,9 +394,12 @@ public sealed class MixRecorderTests : IAsyncLifetime
     private sealed class SaveFault : SaveChangesInterceptor
     {
         public bool FailReady;
+        public bool FailNextSessionSave;
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
             InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
+            if (FailNextSessionSave && eventData.Context!.ChangeTracker.Entries<RecordingSession>().Any())
+            { FailNextSessionSave = false; throw new IOException("simulated registration failure"); }
             if (FailReady && eventData.Context!.ChangeTracker.Entries<RecordingSession>().Any(e => e.Entity.State == "Ready"))
                 throw new IOException("simulated database commit failure");
             return ValueTask.FromResult(result);

@@ -202,6 +202,7 @@ public class Program
             app.MapRecordingInputs();
             app.MapRecordings();
             app.MapRecordingWorkspace();
+            app.MapRecordingTracklists();
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();

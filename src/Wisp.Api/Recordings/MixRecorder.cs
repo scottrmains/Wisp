@@ -49,7 +49,7 @@ public sealed class MixRecorder(IServiceScopeFactory scopes, IRecordingInputDevi
         }
     }
 
-    public async Task<RecordingSession> Start(Guid id, string title, string root, string endpointId, Guid? previousTakeId)
+    public async Task<RecordingSession> Start(Guid id, string title, string root, string endpointId, Guid? previousTakeId, Guid? planId = null)
     {
         await operations.WaitAsync();
         IDisposable? lease = null;
@@ -61,7 +61,9 @@ public sealed class MixRecorder(IServiceScopeFactory scopes, IRecordingInputDevi
             var existing = await db.RecordingSessions.FindAsync(id);
             if (existing != null)
             {
+                var originalPlanId = await db.RecordingPlanSnapshots.Where(s => s.RecordingId == id && s.Timing == "At recording start").Select(s => (Guid?)s.SourcePlanId).FirstOrDefaultAsync();
                 if (existing.EndpointId != endpointId || existing.Title != title.Trim() || existing.PreviousTakeId != previousTakeId ||
+                    originalPlanId != planId ||
                     !string.Equals(existing.DirectoryPath, Path.Combine(Path.GetFullPath(root), RecordingDiskStore.FolderName, id.ToString("D")), StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("This request ID belongs to another recording.");
                 return existing;
@@ -74,11 +76,19 @@ public sealed class MixRecorder(IServiceScopeFactory scopes, IRecordingInputDevi
             var device = devices.List().FirstOrDefault(d => d.Id == endpointId && d.CanTest)
                 ?? throw new InvalidOperationException("Choose an available stereo input. WISP will not switch inputs automatically.");
             lease = captureLease.Acquire();
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            var snapshot = planId.HasValue ? await RecordingBlueprints.Capture(db, id, planId.Value, Guid.NewGuid(), "At recording start") : null;
             var directory = disk.NewDirectory(root, id);
             var session = new RecordingSession { Id = id, Title = title.Trim(), DirectoryPath = directory,
                 EndpointId = endpointId, DeviceName = device.Name, SampleRate = device.SampleRate,
                 StartedAt = DateTime.UtcNow, PreviousTakeId = previousTakeId };
-            db.RecordingSessions.Add(session); await db.SaveChangesAsync(); // Register recovery location before audio starts.
+            db.RecordingSessions.Add(session);
+            if (snapshot != null)
+            {
+                db.RecordingPlanSnapshots.Add(snapshot);
+                db.RecordingTracklists.Add(new() { Id = id, ActiveSnapshotId = snapshot.Id });
+            }
+            await db.SaveChangesAsync(); await transaction.CommitAsync(); // Register session and blueprint atomically before capture.
             disk.WriteManifest(directory, Checkpoint(session, 0, "Preparing", null));
             lock (gate)
             {

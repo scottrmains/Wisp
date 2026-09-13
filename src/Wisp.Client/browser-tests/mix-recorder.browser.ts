@@ -22,6 +22,7 @@ async function setup(page: Page, interrupted = false, repeatCloseOnCancel = fals
   })
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
+    if (path === '/api/mix-plans') return route.fulfill({ json: [{ id: 'plan-1', name: 'Practice blueprint', trackCount: 3 }] })
     if (path === '/api/recording-input/devices') return route.fulfill({ json: { selectedEndpointId: 'input-1', devices: [
       { id: 'input-1', name: 'Input 1 (Xone:24C)', mixFormat: 'Float 44100 Hz stereo', channels: 2, sampleRate: 44100, canTest: true },
     ] } })
@@ -50,7 +51,9 @@ async function setup(page: Page, interrupted = false, repeatCloseOnCancel = fals
 
 test('full recording survives navigation/reload and input tests stay disabled until stopped', async ({ page }, info) => {
   const fixture = await setup(page)
+  await page.getByLabel('Blueprint (optional)').selectOption('plan-1')
   await page.getByRole('button', { name: 'Start mix recording', exact: true }).click()
+  expect(fixture.starts[0].planId).toBe('plan-1')
   await expect(page.getByRole('button', { name: 'Record 30-second test', exact: true })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Stop test', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Library', exact: true }).click()
@@ -74,6 +77,7 @@ test('recover interrupted take, then explicitly start a separate linked take', a
   await page.getByRole('button', { name: 'New linked take', exact: true }).click()
   await page.getByRole('button', { name: 'Start mix recording', exact: true }).click()
   expect(fixture.starts[0].previousTakeId).toBe('11111111-1111-1111-1111-111111111111')
+  expect(fixture.starts[0].planId).toBeNull()
   expect(fixture.starts[0].requestId).not.toBe(fixture.starts[0].previousTakeId)
 })
 
