@@ -146,7 +146,7 @@ public class RecordingDiskStore
         for (var current = new DirectoryInfo(Path.GetFullPath(path)); current != null; current = current.Parent)
             if (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("Use a direct recording folder, not a symbolic link or junction.");
-        foreach (var name in new[] { "master.wav", "master.wav.partial", "session.json", "session.json.tmp" })
+        foreach (var name in new[] { "master.wav", "master.wav.partial", "session.json", "session.json.tmp", "original.wav", "original.mp3", "original.flac", "original.aiff", "original.aif" })
         {
             var file = new FileInfo(Path.Combine(path, name));
             if (file.Exists && (file.Attributes & FileAttributes.ReparsePoint) != 0)

@@ -70,7 +70,7 @@ public static class RecordingEndpoints
                 if (Directory.Exists(directory))
                 {
                     disk.Read(directory, id, session.SampleRate);
-                    foreach (var name in new[] { "master.wav", "master.wav.partial" }) File.Delete(Path.Combine(directory, name));
+                    foreach (var name in new[] { "master.wav", "master.wav.partial", "original.wav", "original.mp3", "original.flac", "original.aiff", "original.aif" }) File.Delete(Path.Combine(directory, name));
                 }
                 session.State = "Deleted";
             }

@@ -4,7 +4,8 @@ Date: 2026-09-13
 
 **Status: Phase 26a short capture on Xone:24C Input 1 confirmed working by the
 user. Phase 26b implemented for review with synthetic/fault-injection evidence;
-long hardware recording remains unverified. Phases 26c–26g remain planned.**
+long hardware recording remains unverified. Phase 26c workspace is implemented
+for review with the RF64 playback limit below. Phases 26d–26g remain planned.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -206,25 +207,48 @@ it does not close the multi-hour, native-close, sleep or unplug acceptance check
 
 **Depends on:** 26b; UX prototype can precede engine completion.
 
-- [ ] Sidebar route; resizable mix list, prominent waveform/player and collapsible
+- [x] Sidebar route; resizable mix list, prominent waveform/player and collapsible
   Tracklist / Review notes panel. Reuse WISP styles, not a separate DAW theme.
-- [ ] Input test/selector, levels, clipping indicators, timer, Record/Stop and
+- [x] Input test/selector, levels, clipping indicators, timer, Record/Stop and
   **Mark this moment**. Save immediately on stop; naming/rating is not a save gate.
-- [ ] Persistent cross-page recording indicator and reconnectable status after
+- [x] Persistent cross-page recording indicator and reconnectable status after
   frontend reload. Keyboard actions must not fire while typing comments.
-- [ ] History search/sort by date/title/duration/rating; clear empty, recording,
+- [x] History search/sort by date/title/duration/rating; clear empty, recording,
   finalising, missing-file, recovery and failed-export states.
-- [ ] Stream seekable audio through validated recording IDs/range requests. Build
+- [x] Stream seekable audio through validated recording IDs/range requests. Build
   multi-resolution waveform peaks in the background with cancellation and caching;
   do not decode an hours-long recording into browser memory.
-- [ ] Playback, seek, zoom, volume, section loop and configurable note pre-roll.
+- [x] Playback, seek, zoom, volume, section loop and configurable note pre-roll.
   Coordinate with WISP's existing player: avoid competing playback and accidental
   feedback into the recording input; show explicit warnings for risky routing.
-- [ ] Import supported local mixes with progress, duplicate-file handling and
+- [x] Import supported local mixes with progress, duplicate-file handling and
   source preservation. Peaks can be pending without preventing basic playback.
 
 **Exit gate:** browser tests cover navigation, reload, accessible controls and
 keyboard operation; inspect at 800x600 and larger sizes with long track/note text.
+
+### Phase 26c delivery notes (2026-09-13)
+
+- Search/sort, resizable history, streamed playback, waveform zoom/window, volume,
+  looping and pre-roll are delivered. Recording setup and review sections collapse.
+  The tracklist section is an honest Phase 26d placeholder; failed-export UI depends
+  on Phase 26f. Basic ratings/labelled point markers were brought forward to make
+  rating sort and Mark this moment useful now; detailed comments remain Phase 26e.
+- Waveforms are generated on explicit request with cancellable background progress,
+  bounded buffers/buckets and multiresolution extrema cached in the isolated profile.
+  Long mixes are not decoded into browser memory. Current UI preferences/playhead
+  reset on navigation; recording, review metadata and generated peaks persist.
+- Source imports keep an exact managed copy and the external original untouched;
+  decoder-validated 44.1 kHz stereo float masters are derivatives, not improvements
+  in fidelity. Duplicate checks are byte-based, not acoustic fingerprinting.
+  Interrupted imports retain files and require an explicit new attempt.
+- **Retained limitation:** RF64 >4 GiB masters have waveform/marker support but use
+  external audio playback until a compatible derived-file playback path is delivered
+  with Phase 26f. Browser loops are review conveniences, not sample-accurate DAW edits.
+- Verification: 395 tests pass (94 core / 66 infrastructure / 134 API / 47 client /
+  54 browser), with real FFmpeg WAV/MP3/FLAC/AIFF import and browser range playback.
+  No live-profile migration, existing audio modification or new hardware capture
+  was performed. See implementation status for specific safety evidence and limits.
 
 ## Phase 26d — Plan snapshots and performed tracklists
 
