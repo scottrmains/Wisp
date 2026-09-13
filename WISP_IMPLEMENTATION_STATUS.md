@@ -2,6 +2,50 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Phase 26e — detailed feedback and revised Mix Plans
+
+- **Implemented for review:** Feedback & next attempt groups 1–5 satisfaction,
+  overall notes, review status and timestamped comments. Point/range comments support
+  categories, optional occurrence/transition associations, edit/remove and revisit/
+  resolved states. Click times to seek with bounded pre-roll or loop a comment range.
+  Quick bookmarks remain separate. No global track rating or recommendation changes.
+- **Draft safety:** explicit Save feedback commits rating, status, notes and comments
+  atomically, with optimistic checks against both feedback and quick-marker/rating
+  revisions. Local unfinished drafts and errors survive navigation/reload, including
+  saves that fail while away. Discarding a draft requires confirmation. Browser
+  storage failure produces an explicit session-only warning; save to WISP before
+  clearing browser storage or closing. Drafts are not part of the database backup.
+- **Timing/history:** new live comments use captured-frame time at save, not UI time.
+  If recording stops before saving a live comment, its text is retained and the user
+  explicitly chooses a playback time. Deleted tracklist associations retain their
+  copied label and timestamps. Capture finalisation cannot overwrite review edits.
+- **New plan from a take:** choose saved blueprint or confirmed actual order, name
+  the new plan, select saved feedback, and preview before creating. Draft actual
+  entries require explicit exclusion; manual/deleted references require library
+  matching or omission. Repeats stay separate. Valid same-track source cues/anchors
+  survive; recording timestamps never become song cues. Changed next-track pairs
+  do not inherit inappropriate old transition notes. Unavailable audio is warned.
+- Creation is atomic and idempotent, with durable recording/parent-plan lineage and
+  revalidation of preview content. Stale library/feedback/tracklist data cannot
+  silently change a previewed plan. Original plans, takes, annotations and snapshots
+  are never rewritten; deleting a plan preserves lineage. Downgrade guards protect
+  nonempty feedback/history tables. Revision choices/previews reset on navigation.
+- **Verification:** 446 tests (111 core / 66 infrastructure / 153 API / 53 client /
+  63 browser), including the linked-plan/two-take loop, selected feedback, repeated/
+  missing references, invalid ranges, stale saves, atomic failures and persisted
+  drafts. Existing drag, playlist, loudness and recording-close regressions remain
+  passing. Client build/browser-test typecheck pass; lint has zero errors and 13
+  existing warnings. Existing NuGet vulnerability warnings remain. Isolated profiles
+  and generated audio only; no live library/database/D:/Mixes edits or installers.
+- **Next:** Phase 26f export/file lifecycle. The existing >4 GiB browser playback
+  limitation remains; hardware long-session/unplug acceptance is still outstanding.
+- **Owner's UI feedback is an explicit Phase 26g requirement:** the current recording
+  page is not intuitive or visually organised enough. Redesign it into distinct
+  functional areas for capture, mix history, playback/review and plan/tracklist work.
+  This is a structural UX pass, not just colours or spacing; it remains deferred
+  until functionality is complete. New review controls use the current design
+  system and are grouped, but are not claimed as the final recording UI.
+
 ## 2026-09-13: Phase 26d — saved blueprints and actual recording tracklists
 
 - **Implemented for review:** optional Mix Plan selection before recording and

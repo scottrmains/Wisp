@@ -38,7 +38,7 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
         builder.Services.AddSingleton(new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance, () => Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG")));
         builder.Services.AddSingleton(sp => new RecordingWorkspace(sp.GetRequiredService<IServiceScopeFactory>(), lease, disk,
             sp.GetRequiredService<Mp3Transcoder>(), Path.Combine(root, "peaks-cache"), NullLogger<RecordingWorkspace>.Instance));
-        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace(); app.MapRecordingTracklists();
+        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace(); app.MapRecordingTracklists(); app.MapRecordingFeedback();
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
@@ -395,9 +395,12 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
     {
         public bool FailReady;
         public bool FailNextSessionSave;
+        public bool FailPlanRevision;
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
             InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
+            if (FailPlanRevision && eventData.Context!.ChangeTracker.Entries<RecordingPlanRevision>().Any())
+                throw new DbUpdateException("simulated revision commit failure");
             if (FailNextSessionSave && eventData.Context!.ChangeTracker.Entries<RecordingSession>().Any())
             { FailNextSessionSave = false; throw new IOException("simulated registration failure"); }
             if (FailReady && eventData.Context!.ChangeTracker.Entries<RecordingSession>().Any(e => e.Entity.State == "Ready"))

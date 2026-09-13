@@ -29,7 +29,7 @@ public sealed partial class MixRecorderTests
         var plan = new MixPlan { Id = Guid.NewGuid(), Name = "Blueprint", Notes = "Warm-up", UpdatedAt = DateTime.UtcNow };
         foreach (var name in new[] { "A", "B", "C" })
         {
-            var track = new Track { Id = Guid.NewGuid(), FilePath = Path.Combine(root, name + ".wav"), FileName = name + ".wav", FileHash = name, Artist = "Artist", Title = name, Bpm = 128, MusicalKey = "8A" };
+            var track = new Track { Id = Guid.NewGuid(), FilePath = Path.Combine(root, name + ".wav"), FileName = name + ".wav", FileHash = name, Artist = "Artist", Title = name, Bpm = 128, MusicalKey = "8A", Duration = TimeSpan.FromMinutes(5) };
             db.Tracks.Add(track);
             plan.Tracks.Add(new MixPlanTrack { Id = Guid.NewGuid(), TrackId = track.Id, Track = track, Order = plan.Tracks.Count, CueInSeconds = 12.5, TransitionNotes = "Blend", IsAnchor = true });
         }
@@ -190,7 +190,7 @@ public sealed partial class MixRecorderTests
         var copied = await List(id); Assert.Equal(4, copied.Entries.Select(e => e.Id).Distinct().Count());
         Assert.Equal(copied.Entries[0].TrackId, copied.Entries[3].TrackId); Assert.NotEqual(copied.Entries[0].BlueprintEntryId, copied.Entries[3].BlueprintEntryId);
         using var checkScope = app.Services.CreateScope(); var check = checkScope.ServiceProvider.GetRequiredService<WispDbContext>();
-        var previous = check.Database.GetMigrations().Reverse().Skip(1).First();
+        var previous = check.Database.GetMigrations().TakeWhile(m => !m.EndsWith("_AddRecordingTracklists")).Last();
         await Assert.ThrowsAnyAsync<Exception>(() => check.GetService<IMigrator>().MigrateAsync(previous));
         Assert.Single(await check.RecordingPlanSnapshots.ToArrayAsync()); Assert.Single(await check.RecordingTracklists.ToArrayAsync());
     }

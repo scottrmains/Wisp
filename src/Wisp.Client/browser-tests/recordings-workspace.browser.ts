@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import type { Tracklist } from '../src/features/recordings/useRecordingTracklist'
+import type { Feedback, RevisionRequest } from '../src/features/recordings/useRecordingFeedback'
 
 function wav() {
   const bytes = 8000 * 2 * 60; const data = Buffer.alloc(44 + bytes)
@@ -16,6 +17,10 @@ async function setup(page: Page, missing = false, linked = false) {
   }
   let job: { id: string; recordingId: string; kind: string; state: string; progress: number; error: string | null } | null = null
   let live = false, failReview = false, failTracklist = false
+  let feedbackError = false, revisionError = false
+  let feedbackGate: Promise<void> | null = null; let releaseFeedback = () => {}
+  const feedbacks: Record<string, Feedback> = Object.fromEntries(sessions.map(s => [s.id, { revision: 0, notes: '', status: 'Practice', rating: reviews[s.id].rating, ratingRevision: 0, annotations: [], detachedAnnotationIds: [] }]))
+  const revisionRequests: RevisionRequest[] = []
   const plans = [{ id: 'plan', name: 'Original plan', notes: 'Warm-up', tracks: [], trackCount: 3 }]
   const tracklists: Record<string, Tracklist> = Object.fromEntries(sessions.map(s => [s.id, {
     revision: 0, activeSnapshotId: linked ? 'snapshot' : null, entries: [], timesDisagree: false, missingTrackIds: [],
@@ -34,8 +39,35 @@ async function setup(page: Page, missing = false, linked = false) {
   })
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
+    if (path.startsWith('/api/recording-feedback/mix-')) {
+      const [, , , id, operation] = path.split('/'); const feedback = feedbacks[id]
+      if (operation === 'revisions') return route.fulfill({ json: revisionRequests.map(r => ({ id: r.requestId, planName: r.name, exists: true })) })
+      if (operation === 'preview' || operation === 'revise') {
+        const body = route.request().postDataJSON() as RevisionRequest
+        if (operation === 'revise') {
+          if (revisionError) return route.fulfill({ status: 409, json: { message: 'The preview changed. Preview again.' } })
+          revisionRequests.push(body); plans.push({ id: body.requestId, name: body.name, notes: 'Selected feedback', tracks: [], trackCount: body.entries.length }); return route.fulfill({ json: { planId: body.requestId, exists: true } })
+        }
+        const list = tracklists[id]; const source = body.source === 'actual' ? list.entries.filter(e => e.played) : list.snapshots[0].blueprint.entries
+        const problems: string[] = []
+        if (body.source === 'actual' && list.entries.some(e => !e.played) && !body.excludeDrafts) problems.push('Acknowledge excluding unconfirmed draft entries.')
+        if (body.entries.some(e => !e.omit && !e.trackId)) problems.push('Match or explicitly omit missing library references.')
+        return route.fulfill({ json: { token: 'preview-token', tracks: body.entries.filter(e => !e.omit && e.trackId).map(e => ({ sourceEntryId: e.sourceEntryId, trackId: e.trackId, artist: 'Artist', title: e.trackId === 'X' ? 'Matched X' : source.find(s => s.id === e.sourceEntryId)!.title, cueInSeconds: null, cueOutSeconds: null, isAnchor: false, transitionNotes: null })), notes: `${body.includeOverallNotes ? feedback.notes : ''}\n${feedback.annotations.filter(a => body.annotationIds.includes(a.id)).map(a => a.text).join('\n')}`, problems, warnings: [], excludedDrafts: list.entries.filter(e => !e.played).length } })
+      }
+      if (route.request().method() === 'POST') {
+        if (feedbackGate) await feedbackGate
+        if (feedbackError) return route.fulfill({ status: 409, json: { message: 'Saved feedback changed. Your draft has not been applied.' } })
+        const body = route.request().postDataJSON() as Feedback & { liveAnnotationId?: string }
+        feedbacks[id] = { ...body, revision: feedback.revision + 1, ratingRevision: feedback.ratingRevision + 1, detachedAnnotationIds: [] }
+        if (body.liveAnnotationId) feedbacks[id].annotations = body.annotations.map(a => a.id === body.liveAnnotationId ? { ...a, seconds: 15, endSeconds: null } : a)
+        reviews[id].rating = body.rating
+        return route.fulfill({ status: 204 })
+      }
+      return route.fulfill({ json: feedback })
+    }
     if (path === '/api/mix-plans') return route.fulfill({ json: linked ? plans : [] })
-    if (path === '/api/mix-plans/plan') return route.fulfill({ json: plans[0] })
+    if (path.startsWith('/api/mix-plans/')) return route.fulfill({ json: plans.find(p => p.id === path.split('/')[3]) ?? plans[0] })
+    if (path.startsWith('/api/recording-feedback/plans/')) return route.fulfill({ status: 204 })
     if (path === '/api/recording-tracklists/library') return route.fulfill({ json: [{ id: 'X', artist: 'Guest', title: 'X' }] })
     if (path === '/api/recording-tracklists/plans/plan/recordings') return route.fulfill({ json: [sessions[0]] })
     if (path.startsWith('/api/recording-tracklists/mix-')) {
@@ -84,8 +116,123 @@ async function setup(page: Page, missing = false, linked = false) {
   })
   await page.goto('/'); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your mixes', exact: true })).toBeVisible()
-  return { reviews, tracklists, startLive: () => { live = true; sessions[0].state = 'Recording' }, failReview: () => { failReview = true }, failTracklist: (value: boolean) => { failTracklist = value } }
+  return { reviews, tracklists, feedbacks, revisionRequests, startLive: () => { live = true; sessions[0].state = 'Recording' }, failReview: () => { failReview = true }, failTracklist: (value: boolean) => { failTracklist = value },
+    stopLive: () => { live = false; sessions[0].state = 'Ready' }, failFeedback: (value: boolean) => { feedbackError = value }, failRevision: (value: boolean) => { revisionError = value },
+    holdFeedback: () => { feedbackGate = new Promise<void>(resolve => { releaseFeedback = resolve }) }, releaseFeedback: () => { releaseFeedback(); feedbackGate = null } }
 }
+
+test('detailed feedback saves rating, range, category and status; seek, loop, edit and resolve', async ({ page }, info) => {
+  const fixture = await setup(page)
+  await page.getByRole('button', { name: 'Play mix', exact: true }).click(); await page.getByRole('button', { name: 'Pause mix', exact: true }).click()
+  await page.getByRole('slider', { name: 'Mix position', exact: true }).fill('10')
+  const panel = page.getByRole('region', { name: 'Detailed mix review' })
+  await panel.getByText('Feedback & next attempt · 0 comments', { exact: true }).click()
+  await panel.getByLabel('Satisfaction').selectOption('4'); await panel.getByLabel('Review status').selectOption('Needs review')
+  await panel.getByRole('textbox', { name: 'Overall notes', exact: true }).fill('Work on the middle section')
+  await panel.getByRole('button', { name: 'Add comment here' }).click()
+  await panel.getByRole('textbox', { name: 'Comment', exact: true }).fill('Bring the bass in later')
+  await panel.getByLabel('Comment end (optional)').fill('20'); await panel.getByRole('combobox', { name: 'Category', exact: true }).selectOption('Phrasing')
+  await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await expect(panel.getByText('Feedback saved', { exact: true })).toBeVisible()
+  expect(fixture.feedbacks['mix-0'].annotations[0]).toMatchObject({ seconds: 10, endSeconds: 20, category: 'Phrasing', text: 'Bring the bass in later' })
+  const note = panel.getByRole('article', { name: 'Comment: Bring the bass in later' })
+  await note.getByRole('button', { name: '0:00:10.00 – 0:00:20.00', exact: true }).click()
+  await expect(page.getByRole('slider', { name: 'Mix position', exact: true })).toHaveValue('7')
+  await note.getByRole('button', { name: 'Loop comment range' }).click()
+  await page.getByText('Section loop', { exact: true }).click(); await expect(page.getByLabel('Loop section')).toBeChecked()
+  await page.getByRole('slider', { name: 'Mix position', exact: true }).fill('21'); await expect(page.getByRole('slider', { name: 'Mix position', exact: true })).toHaveValue('10')
+  await note.getByRole('button', { name: 'Edit comment' }).click(); await panel.getByRole('textbox', { name: 'Comment', exact: true }).fill('Bass timing improved')
+  await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await panel.getByRole('button', { name: 'Mark resolved', exact: true }).click(); await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await panel.getByLabel('Show comments').selectOption('revisit'); await expect(panel.getByText('No comments in this view.')).toBeVisible()
+  await panel.getByLabel('Show comments').selectOption('resolved'); await expect(panel.getByRole('article')).toContainText('Bass timing improved')
+  await page.setViewportSize({ width: 800, height: 600 }); await panel.getByRole('textbox', { name: 'Overall notes', exact: true }).scrollIntoViewIfNeeded()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(800)
+  await page.screenshot({ path: info.outputPath('feedback-800.png') })
+  await panel.getByRole('button', { name: 'Remove comment (draft)' }).click(); await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await expect(panel.getByRole('article')).toHaveCount(0)
+})
+
+test('unfinished feedback survives navigation and reload; save failure while away remains visible', async ({ page }) => {
+  const fixture = await setup(page)
+  const panel = page.getByRole('region', { name: 'Detailed mix review' })
+  await panel.getByText('Feedback & next attempt · 0 comments', { exact: true }).click()
+  await panel.getByRole('textbox', { name: 'Overall notes', exact: true }).fill('Keep this overall draft'); await panel.getByRole('button', { name: 'Add comment here' }).click()
+  await panel.getByRole('textbox', { name: 'Comment', exact: true }).fill('Unfinished transition thought')
+  await page.getByRole('button', { name: 'Library', exact: true }).click(); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
+  await expect(panel.getByRole('textbox', { name: 'Comment', exact: true })).toHaveValue('Unfinished transition thought')
+  await page.reload(); await expect(panel.getByRole('textbox', { name: 'Overall notes', exact: true })).toHaveValue('Keep this overall draft')
+  fixture.failFeedback(true); fixture.holdFeedback()
+  await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await page.getByRole('button', { name: 'Library', exact: true }).click(); fixture.releaseFeedback()
+  await page.getByRole('button', { name: 'Recordings', exact: true }).click()
+  await expect(panel.getByRole('alert')).toContainText('Saved feedback changed')
+  await expect(panel.getByRole('textbox', { name: 'Comment', exact: true })).toHaveValue('Unfinished transition thought')
+  fixture.failFeedback(false); await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await expect(panel.getByText('Feedback saved', { exact: true })).toBeVisible()
+  expect(fixture.feedbacks['mix-0'].annotations).toHaveLength(1)
+})
+
+test('revision preview explicitly resolves drafts and manual tracks, carries selected feedback, then creates a separate plan', async ({ page }) => {
+  const fixture = await setup(page, false, true)
+  fixture.tracklists['mix-0'].entries = [
+    { id: 'played-A', trackId: 'A', artist: 'Artist', title: 'A', played: true, startSeconds: 10, blueprintEntryId: 'blueprint-A' },
+    { id: 'manual-X', trackId: null, artist: 'Unknown', title: 'Unreleased', played: true, startSeconds: null, blueprintEntryId: null },
+    { id: 'draft-B', trackId: 'B', artist: 'Artist', title: 'B', played: false, startSeconds: null, blueprintEntryId: 'blueprint-B' },
+  ]
+  fixture.feedbacks['mix-0'].notes = 'Try another opening'
+  fixture.feedbacks['mix-0'].annotations = [{ id: 'comment-1', seconds: 10, endSeconds: null, text: 'Keep this transition', category: 'Keep this', resolved: false, occurrenceId: 'played-A', toOccurrenceId: null, associationLabel: 'Artist — A' }]
+  await page.reload()
+  const panel = page.getByRole('region', { name: 'Detailed mix review' })
+  await panel.getByText('Feedback & next attempt · 1 comment', { exact: true }).click(); await panel.getByText('Create a revised Mix Plan', { exact: true }).click()
+  await panel.getByLabel('New plan name').fill('Practice v2')
+  await panel.getByRole('button', { name: 'Preview revised plan' }).click()
+  await expect(panel.getByRole('region', { name: 'Revised plan preview' })).toContainText('Acknowledge excluding unconfirmed')
+  await expect(panel.getByRole('button', { name: 'Create new Mix Plan' })).toBeDisabled()
+  await panel.getByLabel(/Exclude 1 unconfirmed draft/).click()
+  await panel.getByLabel('Revision source entry 2', { exact: true }).getByRole('button', { name: 'Match library track' }).click()
+  await panel.getByLabel('Search library match').fill('Guest'); await panel.getByRole('button', { name: 'Use Guest — X' }).click()
+  await panel.getByLabel('Include saved overall notes').check(); await panel.getByRole('checkbox', { name: /0:00:10.00 · Keep this transition/ }).check()
+  await panel.getByRole('button', { name: 'Preview revised plan' }).click()
+  await expect(panel.getByRole('region', { name: 'Revised plan preview' })).toContainText('Matched X')
+  await panel.getByText('Notes that will be copied', { exact: true }).click(); await expect(panel.getByRole('region', { name: 'Revised plan preview' })).toContainText('Try another opening')
+  fixture.failRevision(true); await panel.getByRole('button', { name: 'Create new Mix Plan' }).click(); await expect(panel.getByRole('alert')).toContainText('preview changed')
+  fixture.failRevision(false); await panel.getByRole('button', { name: 'Preview revised plan' }).click(); await panel.getByRole('button', { name: 'Create new Mix Plan' }).click()
+  await expect(panel.getByRole('button', { name: 'Open revised plan' })).toBeVisible()
+  expect(fixture.revisionRequests[0]).toMatchObject({ source: 'actual', name: 'Practice v2', excludeDrafts: true, annotationIds: ['comment-1'], includeOverallNotes: true })
+  expect(fixture.revisionRequests[0].entries).toEqual([{ sourceEntryId: 'played-A', trackId: 'A', omit: false }, { sourceEntryId: 'manual-X', trackId: 'X', omit: false }])
+  expect(fixture.tracklists['mix-0'].entries).toHaveLength(3); expect(fixture.tracklists['mix-0'].snapshots[0].planName).toBe('Original plan')
+  await panel.getByRole('button', { name: 'Open revised plan' }).click(); await page.getByRole('button', { name: 'Record this plan' }).click()
+  await expect(page.getByLabel('Blueprint (optional)')).toHaveValue(fixture.revisionRequests[0].requestId)
+})
+
+test('live feedback uses server time; invalid ranges stay editable and drafts block revision', async ({ page }) => {
+  const fixture = await setup(page, false, true)
+  const panel = page.getByRole('region', { name: 'Detailed mix review' })
+  await panel.getByText('Feedback & next attempt · 0 comments', { exact: true }).click()
+  await panel.getByRole('button', { name: 'Add comment here' }).click(); await panel.getByRole('textbox', { name: 'Comment', exact: true }).fill('Invalid range draft')
+  await panel.getByLabel('Comment start', { exact: true }).fill('20'); await panel.getByLabel('Comment end (optional)').fill('10')
+  await panel.getByRole('button', { name: 'Save feedback', exact: true }).click(); await expect(panel.getByRole('alert')).toContainText('valid point or range')
+  await panel.getByText('Create a revised Mix Plan', { exact: true }).click(); await expect(panel.getByRole('button', { name: 'Preview revised plan' })).toBeDisabled()
+  await panel.getByRole('button', { name: 'Discard draft / reload saved' }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Discard draft', exact: true }).click()
+  fixture.startLive(); await panel.getByRole('button', { name: 'Add comment (live)' }).click()
+  await panel.getByRole('textbox', { name: 'Comment', exact: true }).fill('Listen back to this'); await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await expect(panel.getByRole('article')).toContainText('0:00:15.00'); expect(fixture.feedbacks['mix-0'].annotations[0].endSeconds).toBeNull()
+  await panel.getByRole('button', { name: 'Add comment (live)' }).click(); await panel.getByRole('textbox', { name: 'Comment', exact: true }).fill('Saved after stopping')
+  fixture.stopLive(); await panel.getByRole('button', { name: 'Set comment time from playhead' }).click()
+  await panel.getByLabel('Comment start', { exact: true }).fill('5'); await panel.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await expect(panel.getByRole('article', { name: 'Comment: Saved after stopping' })).toContainText('0:00:05.00')
+})
+
+test('local storage failure warns instead of losing an in-session feedback draft', async ({ page }) => {
+  await setup(page)
+  await page.evaluate(() => { const original = Storage.prototype.setItem; Storage.prototype.setItem = function (key, value) { if (key === 'wisp.recordingFeedbackDrafts') throw new DOMException('Full', 'QuotaExceededError'); original.call(this, key, value) } })
+  const panel = page.getByRole('region', { name: 'Detailed mix review' })
+  await panel.getByText('Feedback & next attempt · 0 comments', { exact: true }).click(); await panel.getByRole('textbox', { name: 'Overall notes', exact: true }).fill('Session draft is safe')
+  await expect(page.getByRole('alert')).toContainText('storage is unavailable or full')
+  await expect(panel.getByRole('textbox', { name: 'Overall notes', exact: true })).toHaveValue('Session draft is safe')
+  await panel.getByRole('button', { name: 'Save feedback', exact: true }).click(); await expect(panel.getByText('Feedback saved', { exact: true })).toBeVisible()
+})
 
 test('blueprint A B C becomes actual A X C with waveform times, without rewriting the plan', async ({ page }, info) => {
   const fixture = await setup(page, false, true)
@@ -191,13 +338,16 @@ test('live entry marking is explicit and does not turn review markers into track
 
 test('history searches and sorts; ratings survive selection and reload', async ({ page }) => {
   const fixture = await setup(page)
+  await page.getByText('Feedback & next attempt · 0 comments', { exact: true }).click()
   await page.getByLabel('Satisfaction').selectOption('5')
-  await expect(page.getByText('Review saved', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Save feedback', exact: true }).click()
+  await expect(page.getByText('Feedback saved', { exact: true })).toBeVisible()
   await page.getByRole('combobox', { name: 'Sort', exact: true }).selectOption('rating')
   await expect(page.getByRole('region', { name: 'Mix history' }).getByRole('button').first()).toContainText('Alpha practice')
   await page.getByLabel('Find a mix').fill('Beta')
   await expect(page.getByRole('region', { name: 'Mix history' }).getByRole('button')).toHaveCount(1)
   await page.reload(); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
+  await page.getByText('Feedback & next attempt · 0 comments', { exact: true }).click()
   await expect(page.getByLabel('Satisfaction')).toHaveValue('5')
   expect(fixture.reviews['mix-0'].rating).toBe(5)
 })
