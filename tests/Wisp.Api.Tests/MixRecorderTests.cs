@@ -35,7 +35,10 @@ public sealed class MixRecorderTests : IAsyncLifetime
         builder.Services.AddSingleton<IRecordingInputDevices>(devices); builder.Services.AddSingleton<RecordingDiskStore>(disk);
         builder.Services.AddSingleton(lease); builder.Services.AddSingleton<MixRecorder>();
         builder.Services.AddSingleton(new WispSettingsStore(Path.Combine(root, "settings.json")));
-        app = builder.Build(); app.MapRecordings();
+        builder.Services.AddSingleton(new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance, () => Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG")));
+        builder.Services.AddSingleton(sp => new RecordingWorkspace(sp.GetRequiredService<IServiceScopeFactory>(), lease, disk,
+            sp.GetRequiredService<Mp3Transcoder>(), Path.Combine(root, "peaks-cache"), NullLogger<RecordingWorkspace>.Instance));
+        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace();
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
@@ -247,9 +250,104 @@ public sealed class MixRecorderTests : IAsyncLifetime
         Assert.Equal(1, devices.OpenCount);
     }
 
+    [Fact]
+    public async Task Workspace_waveform_is_cached_without_modifying_the_master()
+    {
+        var session = await Record(); var path = Path.Combine(session.DirectoryPath, "master.wav"); var hash = await MixRecorder.Hash(path);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.GetAsync("/api/recording-workspace/job")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.GetAsync($"/api/recording-workspace/{session.Id}/peaks")).StatusCode);
+        var workspace = app.Services.GetRequiredService<RecordingWorkspace>(); workspace.StartPeaks(session.Id);
+        await Until(() => workspace.Status?.State != "Running"); Assert.Equal("Ready", workspace.Status!.State);
+        var peaks = await workspace.Peaks(session.Id); Assert.NotNull(peaks); Assert.Equal(1.2, peaks.Duration, 3);
+        Assert.All(peaks.Levels[0].Min, n => Assert.Equal(-.5f, n)); Assert.All(peaks.Levels[0].Max, n => Assert.Equal(.25f, n));
+        Assert.Equal(hash, await MixRecorder.Hash(path));
+        File.Move(path, path + ".moved"); Assert.Null(await workspace.Peaks(session.Id));
+        var mixes = await Client.GetStringAsync("/api/recording-workspace/mixes"); Assert.Contains("\"missing\":true", mixes);
+    }
+
+    [Fact]
+    public async Task Workspace_review_validates_timestamps_and_rejects_stale_edits()
+    {
+        var s = await Record(); var url = $"/api/recording-workspace/{s.Id}/review";
+        var marker = new RecordingMarker(Guid.NewGuid(), .5, "Transition");
+        (await Client.PostAsJsonAsync(url, new WorkspaceEndpoints.ReviewRequest(0, 4, [marker]))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await Client.PostAsJsonAsync(url, new WorkspaceEndpoints.ReviewRequest(0, 1, []))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Client.PostAsJsonAsync(url, new WorkspaceEndpoints.ReviewRequest(1, 4, [marker with { Seconds = 2 }]))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Client.PostAsJsonAsync(url, new WorkspaceEndpoints.ReviewRequest(1, 6, []))).StatusCode);
+        Assert.Contains("Transition", await Client.GetStringAsync(url));
+        (await Client.PostAsJsonAsync(url, new WorkspaceEndpoints.ReviewRequest(1, null, []))).EnsureSuccessStatusCode();
+        Assert.Contains("\"rating\":null", await Client.GetStringAsync(url));
+    }
+
+    [Theory]
+    [InlineData("wav")]
+    [InlineData("mp3")]
+    [InlineData("flac")]
+    [InlineData("aiff")]
+    public async Task Import_keeps_exact_source_copy_and_rejects_duplicates_without_library_entries(string format)
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG"))) return;
+        var source = Path.Combine(root, "existing-mix.wav");
+        using (var wav = new WaveFileWriter(source, WaveFormat.CreateIeeeFloatWaveFormat(8000, 2)))
+            for (int n = 0; n < 8000; n++) { wav.WriteSample(.1f); wav.WriteSample(-.1f); }
+        if (format != "wav")
+        {
+            var converted = Path.Combine(root, "source." + format);
+            var start = new System.Diagnostics.ProcessStartInfo(Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG")!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+            foreach (var arg in new[] { "-v", "error", "-nostdin", "-i", source, converted }) start.ArgumentList.Add(arg);
+            using var process = System.Diagnostics.Process.Start(start)!; var error = await process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync();
+            Assert.True(process.ExitCode == 0, error); source = converted;
+        }
+        var hash = await MixRecorder.Hash(source);
+        var workspace = app.Services.GetRequiredService<RecordingWorkspace>(); var id = Guid.NewGuid();
+        workspace.Import(id, source, root); await Until(() => workspace.Status?.State != "Running"); Assert.Equal("Ready", workspace.Status!.State);
+        var imported = await workspace.Require(id);
+        Assert.Equal(hash, await MixRecorder.Hash(source)); Assert.Equal(hash, await MixRecorder.Hash(Path.Combine(imported.DirectoryPath, "original." + format)));
+        RecordingDiskStore.Validate(Path.Combine(imported.DirectoryPath, "master.wav"), imported.SampleRate, imported.AudioBytes);
+        workspace.Import(Guid.NewGuid(), source, root); await Until(() => workspace.Status?.State != "Running");
+        Assert.Equal("Failed", workspace.Status!.State); Assert.Contains("already", workspace.Status.Error);
+        (await Client.PostAsJsonAsync($"/api/recordings/{id}/remove", new { deleteAudio = true, confirmed = true })).EnsureSuccessStatusCode();
+        Assert.False(File.Exists(Path.Combine(imported.DirectoryPath, "original." + format))); Assert.Equal(hash, await MixRecorder.Hash(source));
+        using var scope = app.Services.CreateScope(); Assert.Empty(await scope.ServiceProvider.GetRequiredService<WispDbContext>().Tracks.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task Corrupt_import_fails_without_erasing_source_or_claiming_ready_audio()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG"))) return;
+        var source = Path.Combine(root, "broken.wav"); await File.WriteAllTextAsync(source, "not audio");
+        var workspace = app.Services.GetRequiredService<RecordingWorkspace>(); var id = Guid.NewGuid();
+        workspace.Import(id, source, root); await Until(() => workspace.Status?.State != "Running");
+        Assert.Equal("Failed", workspace.Status!.State); Assert.Equal("Failed", (await workspace.Require(id)).State);
+        Assert.Equal("not audio", await File.ReadAllTextAsync(source));
+    }
+
+    [Fact]
+    public async Task Cancelled_import_preserves_source_and_releases_capture_lease()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG"))) return;
+        var source = Path.Combine(root, "cancel.wav"); await File.WriteAllBytesAsync(source, new byte[65536]); var hash = await MixRecorder.Hash(source);
+        var workspace = app.Services.GetRequiredService<RecordingWorkspace>(); var job = workspace.Import(Guid.NewGuid(), source, root);
+        workspace.Cancel(job.Id); await Until(() => workspace.Status?.State != "Running"); Assert.Equal("Cancelled", workspace.Status!.State);
+        Assert.Equal(hash, await MixRecorder.Hash(source)); using var acquired = lease.Acquire();
+    }
+
+    [Fact]
+    public async Task Live_markers_use_capture_frames_and_survive_finalisation()
+    {
+        var id = Guid.NewGuid(); (await Start(id)).EnsureSuccessStatusCode(); await Until(() => devices.Last?.Started == true);
+        devices.Last!.Emit(); devices.Last.Emit();
+        (await Client.PostAsJsonAsync($"/api/recording-workspace/{id}/review", new WorkspaceEndpoints.ReviewRequest(0, 5,
+            [new RecordingMarker(Guid.NewGuid(), 0, "Live transition")]))).EnsureSuccessStatusCode();
+        recorder.Stop(id); await Until(() => !recorder.Status.Busy);
+        using var scope = app.Services.CreateScope(); var review = await scope.ServiceProvider.GetRequiredService<WispDbContext>().RecordingReviews.FindAsync(id);
+        Assert.Equal(5, review!.Rating); Assert.Equal(.2, System.Text.Json.JsonSerializer.Deserialize<RecordingMarker[]>(review.MarkersJson)![0].Seconds, 3);
+    }
+
     public async Task DisposeAsync()
     {
-        disk.Release.Set(); await recorder.StopAsync(CancellationToken.None); await app.DisposeAsync();
+        disk.Release.Set(); await app.Services.GetRequiredService<RecordingWorkspace>().StopAsync(CancellationToken.None);
+        await recorder.StopAsync(CancellationToken.None); await app.DisposeAsync();
         if (Directory.Exists(root)) Directory.Delete(root, true);
     }
 

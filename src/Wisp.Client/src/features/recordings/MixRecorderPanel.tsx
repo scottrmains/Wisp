@@ -17,6 +17,14 @@ export function MixRecordingIndicator() {
   const handlingClose = useRef(false)
   const setPage = useCurrentPage(s => s.setPage)
   useEffect(() => {
+    if (!status.data?.busy) return
+    const pause = () => { document.querySelectorAll('audio').forEach(a => a.pause()); usePlayer.getState()._commands?.pause() }
+    pause()
+    document.addEventListener('play', pause, true)
+    const unsubscribe = usePlayer.subscribe(state => { if (state.isPlaying || state.pendingPlay) pause() })
+    return () => { document.removeEventListener('play', pause, true); unsubscribe() }
+  }, [status.data?.busy])
+  useEffect(() => {
     if (!status.data?.closeRequested || handlingClose.current) return
     handlingClose.current = true
     void (async () => {
@@ -75,7 +83,7 @@ export function MixRecorderPanel({ endpointId, inputTestBusy }: { endpointId: st
   }
   const remove = async (session: Session, deleteAudio: boolean) => {
     if (await confirmDialog({ title: deleteAudio ? 'Permanently delete managed audio?' : 'Remove this entry?',
-      message: deleteAudio ? 'The managed master will be permanently deleted. A separately relinked file is never deleted. This cannot be undone.' : 'The audio files stay on disk. This entry will be hidden.', danger: deleteAudio,
+      message: deleteAudio ? 'The managed master and any managed import source copy will be permanently deleted. Your original imported file and any separately relinked file are never deleted. This cannot be undone.' : 'The audio files stay on disk. This entry will be hidden.', danger: deleteAudio,
       confirmLabel: deleteAudio ? 'Delete managed audio' : 'Remove entry' }))
       action.mutate({ id: session.id, operation: 'remove', body: { deleteAudio, confirmed: true } })
   }
@@ -113,7 +121,7 @@ export function MixRecorderPanel({ endpointId, inputTestBusy }: { endpointId: st
     {error && <p role="alert" className="text-sm text-red-400">{error.message}</p>}
     <details open={sessions.data?.some(s => s.state === 'Recoverable') ? true : undefined}>
       <summary className="cursor-pointer py-2 text-sm font-medium">Saved takes and recovery</summary>
-      <p className="mb-3 text-xs text-[var(--color-muted)]">This is a basic session list. Waveforms, ratings and plan-linked review arrive in later phases.</p>
+      <p className="mb-3 text-xs text-[var(--color-muted)]">Recovery and file management. Use the workspace above for waveform playback, ratings and markers.</p>
       {sessions.data?.map(s => <div key={s.id} className="space-y-2 border-t border-[var(--color-border)] py-3">
         <p className="break-words text-sm font-medium">{s.title} · {s.state}</p>
         <p className="break-all text-xs text-[var(--color-muted)]">{s.relinkedPath ?? s.directoryPath}</p>

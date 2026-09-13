@@ -10,7 +10,7 @@ import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 import { DialogHost } from './components/DialogHost'
-import { RecordingInputIndicator, RecordingInputPage } from './features/recordings/RecordingInputPage'
+import { RecordingInputIndicator } from './features/recordings/RecordingInputPage'
 import { MixRecordingIndicator } from './features/recordings/MixRecorderPanel'
 
 // These feature areas are not needed for first paint of the library workspace.
@@ -20,6 +20,7 @@ const MixPlansPage = lazy(() => import('./features/mixchain/MixPlansPage').then(
 const DiscoverPage = lazy(() => import('./features/discover/DiscoverPage').then((m) => ({ default: m.DiscoverPage })))
 const WantedPage = lazy(() => import('./features/wanted/WantedPage').then((m) => ({ default: m.WantedPage })))
 const SettingsPanel = lazy(() => import('./features/settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel })))
+const RecordingsWorkspace = lazy(() => import('./features/recordings/RecordingsWorkspace').then(m => ({ default: m.RecordingsWorkspace })))
 
 /// App-level shell. Layout is:
 ///
@@ -104,7 +105,7 @@ function App() {
           {page === 'discover' && <DiscoverPage />}
           {page === 'wanted' && <WantedPage />}
           {page === 'crate-digger' && <CrateDiggerPage />}
-          {page === 'recordings' && <RecordingInputPage />}
+          {page === 'recordings' && <RecordingsWorkspace />}
           </Suspense>
         </main>
 

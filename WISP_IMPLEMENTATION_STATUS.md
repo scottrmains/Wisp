@@ -2,6 +2,71 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Clarified Mix Plan linking before Phase 26d
+
+- **Agreed design, not implemented:** a Mix Plan is an optional blueprint saved as
+  an immutable snapshot; each recording has an independent editable actual tracklist.
+  Recording remains hands-off and a spontaneous mix never requires a plan.
+- Explicitly copying planned tracks creates unconfirmed, untimed draft occurrences.
+  Users can remove skipped tracks, reorder, add library/manual-text tracks and assign
+  entrance times at the waveform with Set start here. Repeated tracks have separate
+  occurrence IDs; confirmation and timestamp presence are independent states.
+- Times are recording-relative entrances, allow overlapping transitions and are
+  never inferred from track length or song cues. Plan comparison, text exports and
+  creation of a revised plan must distinguish confirmed performance from draft plans.
+- Added acceptance cases and revision/export rules to the tracked recordings plan.
+  This is documentation only; Phase 26d linking/tracklists remain unimplemented.
+
+## 2026-09-13: Phase 26c — recordings workspace and playback
+
+- **Implemented for review:** a lazy-loaded Recordings workspace with searchable
+  history, date/title/duration/rating sorting, keyboard/pointer-resizable history,
+  waveform-led playback and collapsible recording setup/file management. Reuses
+  WISP's palette, typography and modal behavior; inspected at 800x600 and 1440x1000.
+- **Playback:** seekable range-served audio, 10-second jumps, volume, waveform
+  zoom/window navigation, section looping and configurable marker pre-roll. The
+  player pauses on navigation/selection; playback position and view preferences
+  are currently session-local. Capture continues independently. The global capture
+  indicator now suppresses browser/mini-player playback while recording to avoid
+  feedback; there is still no software monitoring.
+- **Waveforms:** explicitly start Prepare waveform; a cancellable backend job reads
+  the owned float master in 64 KiB buffers, producing up to 200,000 fine extrema
+  buckets plus coarser levels. No whole-file browser decode. Results cache under the
+  profile, keyed by recording/hash with length/mtime invalidation; missing masters
+  do not return cached waveforms. Failed/cancelled jobs can be restarted.
+- **Review foundations brought forward:** optional 1–5 rating (distinct unrated)
+  and up to 500 labelled point markers. New live markers use server captured-frame
+  time; playback markers use recording-relative seconds. RecordingReviews is a
+  separate table with optimistic revision checks, so capture finalisation cannot
+  overwrite edits. Failed saves remain visible and preserve the current label draft.
+  Full point/range comments, categories, review status and plan revision workflows
+  remain Phase 26e; the Tracklist panel explicitly identifies Phase 26d as pending.
+- **Import:** WAV/MP3/FLAC/AIFF via native file selection, chosen managed destination,
+  background progress and cancellation. Retains both the untouched external source
+  and an exact managed source copy, then fully decodes to a 44.1 kHz stereo float
+  playback master. This can resample/downmix; it does not improve original quality.
+  Exact source/master hashes prevent duplicate imports of visible Ready entries.
+  Capture/import share a lease; aborted imports retain partial files and are marked
+  Failed, never silently promoted as complete recordings. Restart explains interrupted
+  imports; retry explicitly starts a new import. File deletion confirmations now
+  include managed source copies but never external originals or relinked files.
+- **Verification:** 395 tests (94 core, 66 infrastructure, 134 API, 47 client unit,
+  54 browser), including real FFmpeg import of all four formats, duplicate/corrupt/
+  cancelled import, source preservation, cached peaks/extrema, stale-review rejection,
+  live-frame markers and real browser range playback/looping. Existing drag,
+  playlist, loudness and close-dialog suites remain passing. Client build passes;
+  lint has zero errors / 13 existing warnings. Existing NuGet vulnerability warnings
+  remain. Isolated test profiles only; no live database/music edits or installer build.
+- **Known limits:** >4 GiB RF64 masters still need external audio playback, although
+  backend waveforms and review markers work. Browser section loops use media events,
+  not sample-accurate DAW looping. Import progress is approximate; cancel/failure
+  intentionally retains managed partials for manual inspection, not automatic cleanup.
+  Phase 26f will add export/compatible derived-file lifecycle. Real Xone long-session,
+  sleep/unplug and actual native close acceptance remain outstanding from Phase 26b.
+- **Try next:** select the existing mix in Recordings, Prepare waveform, play/seek,
+  mark a transition, click it to revisit with pre-roll, and rate the take. Phase 26d
+  will link these takes to immutable Mix Plan snapshots and performed tracklists.
+
 ## 2026-09-13: Phase 26b hardware check and repeat-close fix
 
 - User reports both decks recorded correctly in a roughly ten-minute mix on

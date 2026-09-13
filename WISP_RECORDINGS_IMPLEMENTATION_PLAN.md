@@ -4,7 +4,8 @@ Date: 2026-09-13
 
 **Status: Phase 26a short capture on Xone:24C Input 1 confirmed working by the
 user. Phase 26b implemented for review with synthetic/fault-injection evidence;
-long hardware recording remains unverified. Phases 26c–26g remain planned.**
+long hardware recording remains unverified. Phase 26c workspace is implemented
+for review with the RF64 playback limit below. Phases 26d–26g remain planned.**
 This is Phase 26 of the local main implementation plan (that legacy file is
 Git-ignored; this tracked document is the authoritative plan for this feature).
 Each phase below is a bounded
@@ -206,35 +207,120 @@ it does not close the multi-hour, native-close, sleep or unplug acceptance check
 
 **Depends on:** 26b; UX prototype can precede engine completion.
 
-- [ ] Sidebar route; resizable mix list, prominent waveform/player and collapsible
+- [x] Sidebar route; resizable mix list, prominent waveform/player and collapsible
   Tracklist / Review notes panel. Reuse WISP styles, not a separate DAW theme.
-- [ ] Input test/selector, levels, clipping indicators, timer, Record/Stop and
+- [x] Input test/selector, levels, clipping indicators, timer, Record/Stop and
   **Mark this moment**. Save immediately on stop; naming/rating is not a save gate.
-- [ ] Persistent cross-page recording indicator and reconnectable status after
+- [x] Persistent cross-page recording indicator and reconnectable status after
   frontend reload. Keyboard actions must not fire while typing comments.
-- [ ] History search/sort by date/title/duration/rating; clear empty, recording,
+- [x] History search/sort by date/title/duration/rating; clear empty, recording,
   finalising, missing-file, recovery and failed-export states.
-- [ ] Stream seekable audio through validated recording IDs/range requests. Build
+- [x] Stream seekable audio through validated recording IDs/range requests. Build
   multi-resolution waveform peaks in the background with cancellation and caching;
   do not decode an hours-long recording into browser memory.
-- [ ] Playback, seek, zoom, volume, section loop and configurable note pre-roll.
+- [x] Playback, seek, zoom, volume, section loop and configurable note pre-roll.
   Coordinate with WISP's existing player: avoid competing playback and accidental
   feedback into the recording input; show explicit warnings for risky routing.
-- [ ] Import supported local mixes with progress, duplicate-file handling and
+- [x] Import supported local mixes with progress, duplicate-file handling and
   source preservation. Peaks can be pending without preventing basic playback.
 
 **Exit gate:** browser tests cover navigation, reload, accessible controls and
 keyboard operation; inspect at 800x600 and larger sizes with long track/note text.
 
+### Phase 26c delivery notes (2026-09-13)
+
+- Search/sort, resizable history, streamed playback, waveform zoom/window, volume,
+  looping and pre-roll are delivered. Recording setup and review sections collapse.
+  The tracklist section is an honest Phase 26d placeholder; failed-export UI depends
+  on Phase 26f. Basic ratings/labelled point markers were brought forward to make
+  rating sort and Mark this moment useful now; detailed comments remain Phase 26e.
+- Waveforms are generated on explicit request with cancellable background progress,
+  bounded buffers/buckets and multiresolution extrema cached in the isolated profile.
+  Long mixes are not decoded into browser memory. Current UI preferences/playhead
+  reset on navigation; recording, review metadata and generated peaks persist.
+- Source imports keep an exact managed copy and the external original untouched;
+  decoder-validated 44.1 kHz stereo float masters are derivatives, not improvements
+  in fidelity. Duplicate checks are byte-based, not acoustic fingerprinting.
+  Interrupted imports retain files and require an explicit new attempt.
+- **Retained limitation:** RF64 >4 GiB masters have waveform/marker support but use
+  external audio playback until a compatible derived-file playback path is delivered
+  with Phase 26f. Browser loops are review conveniences, not sample-accurate DAW edits.
+- Verification: 395 tests pass (94 core / 66 infrastructure / 134 API / 47 client /
+  54 browser), with real FFmpeg WAV/MP3/FLAC/AIFF import and browser range playback.
+  No live-profile migration, existing audio modification or new hardware capture
+  was performed. See implementation status for specific safety evidence and limits.
+
 ## Phase 26d — Plan snapshots and performed tracklists
 
 **Depends on:** 26b persistence and 26c entry points.
+
+### Agreed behavior: blueprint versus actual tracklist
+
+The Mix Plan is optional preparation, not a contract or an automatic record of
+what played. Each recording can contain two distinct views:
+
+- **Planned set:** an immutable snapshot of the chosen plan at recording start.
+  Later plan edits do not rewrite this take's blueprint. Linking a plan after
+  recording explicitly snapshots its current state; it is not labelled as the
+  plan known to have existed at capture time.
+- **Actual tracklist:** editable occurrences of tracks the user says were played,
+  with optional recording-relative entrance timestamps. A spontaneous/imported
+  recording supports this tracklist without linking any Mix Plan.
+
+#### Before and during recording
+
+- Choosing a plan is optional. Never require a tracklist, rating or confirmation
+  checklist to start recording or safely save its audio.
+- Recording must remain hands-off: no requirement to keep clicking Next track.
+  Optional live **Track started** actions use captured-frame time and a selected
+  track occurrence. A generic **Mark this moment** remains a review marker unless
+  explicitly assigned as a track entrance; it is not evidence of track identity.
+- No automatic recognition of CDJ playback, songs or transition timings is implied.
+
+#### Building the actual tracklist afterwards
+
+- Start empty, or explicitly **Copy planned tracks as a starting point**. Copying
+  creates draft occurrences marked **Unconfirmed** and **Untimed**, not assertions
+  that those tracks were played. Keep those two states separate: a played track
+  can be confirmed while its entrance time remains unknown.
+- Reorder, remove skipped tracks and add unplanned tracks without modifying the
+  blueprint or live Mix Plan. Select a library track or enter artist/title manually
+  when it is not in the library. Keep copied display text readable if the library
+  track is later removed. Every occurrence has its own identity, including repeats.
+- Seek within the recorded waveform and choose **Set start here** for an occurrence.
+  This explicit assignment confirms that occurrence as played and stores its entrance
+  in recording-relative seconds. Allow later correction or clearing of the timestamp;
+  clearing it does not automatically mark the occurrence unplayed.
+- Starts describe when a track becomes audible in the mix, not when it was loaded
+  onto a deck. Do not require end timestamps or non-overlapping regions: DJ transitions
+  overlap. Equal starts are permitted; timestamps must be finite and within duration.
+- Tracklist order is user-editable. If assigned times disagree with that order,
+  flag the discrepancy and offer explicit chronological ordering; never silently
+  rewrite order or timestamps. Do not estimate starts from song durations, track cue
+  positions, the planned sequence or the previous track's end.
+- Display **Unconfirmed**, **Played · untimed** and confirmed timestamped entries
+  distinctly. Draft planned entries must not appear as a verified performed set in
+  comparison, exports or a revised plan without explicit confirmation.
+
+#### Learning from a take
+
+The blueprint remains visible for comparison, while timestamped feedback describes
+the actual performance. Example: plan A → B → C; performed A at 00:00, X at 04:32,
+C at 09:18. B was skipped and X was an improvisation, not an application error.
+Phase 26e's **Create revised Mix Plan** previews a new plan from the chosen blueprint
+or confirmed actual entries. It preserves the original plan, recording, snapshot
+and feedback; unlinked/manual entries require explicit library matching or omission,
+never invented library identities. Recorded-mix timestamps never become song cues.
+
+### Implementation and acceptance checklist
 
 - [ ] **Record this plan** atomically captures plan order/notes/display metadata
   at session creation. Standalone/imported recordings can link later with clear
   wording that this snapshots the plan now, not its unknown historical state.
 - [ ] Preserve immutable planned snapshot plus editable performed tracklist;
   skip/reorder/add tracks without mutating that snapshot or the live plan.
+- [ ] Implement optional draft copying, independent played-confirmation/timestamp
+  states, manual-text tracks and distinct repeat-occurrence identities as above.
 - [ ] Mark track entrances live or after recording; show untimed entries as
   untimed. Link waveform markers to individual occurrences. Do not manufacture
   timestamps from track lengths or cue positions.
@@ -242,6 +328,11 @@ keyboard operation; inspect at 800x600 and larger sizes with long track/note tex
   Deleting/relinking a plan must not silently discard the original snapshot.
 - [ ] Test repeated tracks, missing/deleted source entities, plan edits during
   recording, post-import linkage and recording deletion without plan deletion.
+- [ ] End-to-end test A → B → C planned versus A → X → C performed: optional
+  draft copy, B removed, X added, starts assigned at the waveform, no mutation to
+  the plan/snapshot, and no requirement to interact during capture.
+- [ ] Test a plan-free mix, confirmed-but-untimed tracks, unconfirmed draft exclusion,
+  equal/out-of-order starts and correction/clearing of times without invented values.
 
 **Exit gate:** edit the live plan after Take 1; Take 1 remains historically intact,
 while Take 2 snapshots the edited order. Deviations can be recorded independently.
@@ -262,6 +353,10 @@ while Take 2 snapshots the edited order. Deviations can be recorded independentl
 - [ ] **Revise plan from this mix** previews a new named plan, chosen planned or
   performed order and selected feedback. Preserve valid anchors/cues where relevant;
   keep recording timestamps labelled as review context, never as track cue values.
+- [ ] When revising from the actual tracklist, use confirmed played occurrences;
+  explicitly resolve manual/missing library references and remaining draft entries.
+  Neither skipping a planned track nor improvising an extra track is a negative
+  rating or an automatic recommendation change.
 - [ ] Create revision with lineage to recording/parent plan; retain previous plan
   and take. No automatic destructive updates to the original plan. Multiple takes
   remain browsable so the user can compare ratings and revisit feedback.
@@ -277,7 +372,8 @@ Take 2 in browser/API tests without changing Take 1 or losing selected feedback.
   using verified FFmpeg capabilities; title/date and optional textual tracklist.
   Keep annotations in WISP; don't promise players will read timestamp comments.
 - [ ] Optional timestamped text tracklist uses only confirmed entrance markers;
-  untimed entries are labelled, never given invented times.
+  unconfirmed draft occurrences are excluded. Confirmed played-but-untimed entries
+  may appear only in a clearly labelled untimed section, never with invented times.
 - [ ] Export jobs show progress/cancellation/errors; retries cannot overwrite
   originals or existing exports without explicit choice. Encode once from master,
   validate decode/duration/codec/bitrate and atomically publish the finished file.

@@ -16,6 +16,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
 {
     public DbSet<Track> Tracks => Set<Track>();
     public DbSet<Wisp.Core.Recordings.RecordingSession> RecordingSessions => Set<Wisp.Core.Recordings.RecordingSession>();
+    public DbSet<Wisp.Core.Recordings.RecordingReview> RecordingReviews => Set<Wisp.Core.Recordings.RecordingReview>();
     public DbSet<ScanJob> ScanJobs => Set<ScanJob>();
     public DbSet<MixPlan> MixPlans => Set<MixPlan>();
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
@@ -39,6 +40,8 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
         recording.HasKey(r => r.Id);
         recording.Property(r => r.Title).HasMaxLength(200);
         recording.HasIndex(r => r.StartedAt);
+        b.Entity<Wisp.Core.Recordings.RecordingReview>().HasKey(r => r.Id);
+        b.Entity<Wisp.Core.Recordings.RecordingReview>().Property(r => r.Revision).IsConcurrencyToken();
         var track = b.Entity<Track>();
         track.HasKey(t => t.Id);
         track.Property(t => t.FilePath).IsRequired();
