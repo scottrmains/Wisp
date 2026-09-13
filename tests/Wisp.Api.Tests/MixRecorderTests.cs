@@ -23,6 +23,7 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
     private readonly FaultDisk disk = new();
     private readonly CaptureLease lease = new();
     private readonly SaveFault saveFault = new();
+    private ExportEncoder exportEncoder = null!;
     private WebApplication app = null!;
     private MixRecorder recorder = null!;
     private HttpClient Client => app.GetTestClient();
@@ -38,7 +39,8 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
         builder.Services.AddSingleton(new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance, () => Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG")));
         builder.Services.AddSingleton(sp => new RecordingWorkspace(sp.GetRequiredService<IServiceScopeFactory>(), lease, disk,
             sp.GetRequiredService<Mp3Transcoder>(), Path.Combine(root, "peaks-cache"), NullLogger<RecordingWorkspace>.Instance));
-        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace(); app.MapRecordingTracklists(); app.MapRecordingFeedback();
+        builder.Services.AddSingleton<MixExportEncoder>(sp => exportEncoder = new ExportEncoder(sp.GetRequiredService<Mp3Transcoder>())); builder.Services.AddSingleton<RecordingExports>();
+        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace(); app.MapRecordingTracklists(); app.MapRecordingFeedback(); app.MapRecordingExports();
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
@@ -346,6 +348,7 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        await app.Services.GetRequiredService<RecordingExports>().StopAsync(CancellationToken.None);
         disk.Release.Set(); await app.Services.GetRequiredService<RecordingWorkspace>().StopAsync(CancellationToken.None);
         await recorder.StopAsync(CancellationToken.None); await app.DisposeAsync();
         if (Directory.Exists(root)) Directory.Delete(root, true);
@@ -396,9 +399,12 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
         public bool FailReady;
         public bool FailNextSessionSave;
         public bool FailPlanRevision;
+        public bool FailExportReady;
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
             InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
+            if (FailExportReady && eventData.Context!.ChangeTracker.Entries<RecordingExport>().Any(e => e.Entity.State == "Ready"))
+                throw new DbUpdateException("simulated export completion failure");
             if (FailPlanRevision && eventData.Context!.ChangeTracker.Entries<RecordingPlanRevision>().Any())
                 throw new DbUpdateException("simulated revision commit failure");
             if (FailNextSessionSave && eventData.Context!.ChangeTracker.Entries<RecordingSession>().Any())

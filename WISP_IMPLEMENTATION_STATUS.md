@@ -2,6 +2,58 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Phase 26f — finished-mix exports and large-master playback
+
+- **Implemented:** Recordings → choose a mix → Export finished mix. Choose a
+  destination, MP3 320 kbps CBR / 24-bit PCM WAV / exact original master, and
+  optionally include the saved actual tracklist. This exports the complete recorded
+  mix, not individual songs or a rekordbox/CDJ USB database.
+- Every export has a unique folder beneath `WISP Mix Exports`, with audio and a
+  title/date/hash manifest. MP3/WAV carry title/date tags; original-master copies
+  are byte-identical. No automatic normalisation or destructive processing. WAV
+  converts float to 24-bit PCM at the master sample rate; standard WAV's 4 GiB
+  ceiling is enforced. Larger exact masters retain RF64, or use MP3 for compatibility.
+- Tracklists are immutable copies of the saved actual list at a checked revision:
+  confirmed entrance times sorted chronologically, repeated/equal-time occurrences
+  retained, played-but-untimed entries separately labelled, drafts excluded.
+  No invented timestamps, blueprint substitution, private comments or ratings.
+- Durable job IDs/history, progress, cancel, errors and no-overwrite retries.
+  Capture/input tests and mix import/export are mutually exclusive. Source format,
+  length and SHA-256 are checked under a read lock. Encoded output is verified as
+  stereo / required bitrate or PCM subtype and fully decoded to count frames and
+  confirm duration before publishing; all audio/log buffers are bounded.
+- Preflight estimates the new copy plus reserve alongside the existing master;
+  monitor free space during processing. Flush/hash output and atomically publish
+  its directory on the same volume. Cancel removes only recognised owned temporary
+  files; unexpected files/links are retained. Restart marks unfinished jobs
+  Interrupted. Completed packages after a DB commit failure remain at the reported
+  path; create a fresh export after restart to register another copy, never overwrite.
+- Verified MP3 exports now enable playback of >4 GiB RF64 takes in WISP. Normal
+  mixes can select original or export playback. Playback never starts an export,
+  and capture still pauses/blocks it. Missing/changed exports are not treated as
+  valid playback copies. Scanner/Git exclusions keep generated mixes out of library/code.
+- **Verification:** 468 tests (115 core / 70 infrastructure / 164 API / 53 client /
+  66 browser). Full FFmpeg encode/decode of 3-minute and approximately 46.6-minute
+  sparse >4 GiB fixtures; 320 kbps checked in every MP3 frame; 24-bit WAV subtype/
+  frame length, metadata, source/review preservation, request retries, real-process
+  cancel, disk/encoder/DB failure, owned cleanup/restart, range playback, stale
+  tracklists and rollback guard. Browser flows cover options, progress/navigation,
+  failed retries/reload and large-master derivative playback. Client build/typecheck
+  pass; lint zero errors with 13 existing warnings. Prior drag/playlist/loudness/
+  recording regressions remain passing. Existing NuGet vulnerability warnings remain.
+- **Evidence boundary:** isolated profiles/generated audio only; no live library,
+  database or `D:/Mixes` modifications, new hardware capture, CDJ claim or installer.
+  Browser API responses are mocked with actual browser audio playback; the large
+  encoder fixture is synthetic silence. Listen to a real exported mix independently
+  before relying on it for sharing. Back up audio folders AND WISP's database to
+  retain reviews, tracklists and plan history; save local browser drafts first.
+- **Next: Phase 26g.** The owner-requested visual/structural recording-page redesign
+  is still required. This phase used the frontend-design skill for grouped export
+  options, visible job states and responsive controls within the current UI; it
+  does not claim that the existing recording-page layout is now final or approved.
+  Multi-hour Xone capture, native-close, unplug/sleep and real-mix listening acceptance
+  remain outstanding.
+
 ## 2026-09-13: Phase 26e — detailed feedback and revised Mix Plans
 
 - **Implemented for review:** Feedback & next attempt groups 1–5 satisfaction,

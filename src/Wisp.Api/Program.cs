@@ -93,6 +93,9 @@ public class Program
                 sp.GetRequiredService<Wisp.Infrastructure.Audio.RecordingDiskStore>(), sp.GetRequiredService<Wisp.Infrastructure.Audio.Mp3Transcoder>(),
                 Path.Combine(WispPaths.AppDataDir, "recording-waveforms"), sp.GetRequiredService<ILogger<RecordingWorkspace>>()));
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RecordingWorkspace>());
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.MixExportEncoder>();
+            builder.Services.AddSingleton<RecordingExports>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<RecordingExports>());
             builder.Services.AddSingleton<Wisp.Infrastructure.Audio.IRecordingInputDevices, Wisp.Infrastructure.Audio.RecordingInputDevices>();
             builder.Services.AddSingleton(sp => new RecordingInputTest(
                 sp.GetRequiredService<Wisp.Infrastructure.Audio.IRecordingInputDevices>(),
@@ -204,6 +207,7 @@ public class Program
             app.MapRecordingWorkspace();
             app.MapRecordingTracklists();
             app.MapRecordingFeedback();
+            app.MapRecordingExports();
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();

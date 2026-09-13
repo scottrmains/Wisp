@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import type { Tracklist } from '../src/features/recordings/useRecordingTracklist'
 import type { Feedback, RevisionRequest } from '../src/features/recordings/useRecordingFeedback'
+import type { MixExport } from '../src/features/recordings/useMixExports'
 
 function wav() {
   const bytes = 8000 * 2 * 60; const data = Buffer.alloc(44 + bytes)
@@ -18,6 +19,10 @@ async function setup(page: Page, missing = false, linked = false) {
   let job: { id: string; recordingId: string; kind: string; state: string; progress: number; error: string | null } | null = null
   let live = false, failReview = false, failTracklist = false
   let feedbackError = false, revisionError = false
+  const exports: MixExport[] = []
+  const exportRequests: { requestId: string; folder: string; format: string; includeTracklist: boolean; tracklistRevision: number }[] = []
+  let exportJob: { id: string; recordingId: string; state: string; progress: number; error: string | null } | null = null
+  let failExportStart = false
   let feedbackGate: Promise<void> | null = null; let releaseFeedback = () => {}
   const feedbacks: Record<string, Feedback> = Object.fromEntries(sessions.map(s => [s.id, { revision: 0, notes: '', status: 'Practice', rating: reviews[s.id].rating, ratingRevision: 0, annotations: [], detachedAnnotationIds: [] }]))
   const revisionRequests: RevisionRequest[] = []
@@ -39,6 +44,22 @@ async function setup(page: Page, missing = false, linked = false) {
   })
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
+    if (path === '/api/recording-exports/job') return route.fulfill({ json: exportJob })
+    if (path.startsWith('/api/recording-exports/job/') && path.endsWith('/cancel')) {
+      if (exportJob) { exportJob.state = 'Cancelled'; exports.find(e => e.id === exportJob!.id)!.state = 'Cancelled' }
+      return route.fulfill({ status: 204 })
+    }
+    if (path.startsWith('/api/recording-exports/mix-')) {
+      const id = path.split('/')[3]
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON(); exportRequests.push(body)
+        if (failExportStart) return route.fulfill({ status: 409, json: { message: 'The actual tracklist changed. Refresh it before exporting.' } })
+        exportJob = { id: body.requestId, recordingId: id, state: 'Running', progress: .3, error: null }
+        exports.push({ ...exportJob, title: 'Mix', format: body.format, directoryPath: `D:/Mixes/WISP Mix Exports/${body.requestId}`, createdAt: '2026-09-13T15:00:00Z', outputBytes: 100000, hasTracklist: body.includeTracklist, available: false })
+        return route.fulfill({ json: exportJob })
+      }
+      return route.fulfill({ json: exports.filter(e => e.recordingId === id) })
+    }
     if (path.startsWith('/api/recording-feedback/mix-')) {
       const [, , , id, operation] = path.split('/'); const feedback = feedbacks[id]
       if (operation === 'revisions') return route.fulfill({ json: revisionRequests.map(r => ({ id: r.requestId, planName: r.name, exists: true })) })
@@ -100,7 +121,7 @@ async function setup(page: Page, missing = false, linked = false) {
       }
       return route.fulfill({ json: reviews[id] })
     }
-    if (path.endsWith('/audio')) {
+    if (path.endsWith('/audio') || path.startsWith('/api/recording-exports/audio/')) {
       const range = route.request().headers()['range']?.match(/bytes=(\d+)-(\d*)/)
       const start = range ? +range[1] : 0; const end = range?.[2] ? Math.min(+range[2], data.length - 1) : data.length - 1
       return route.fulfill({ status: range ? 206 : 200, contentType: 'audio/wav', body: data.subarray(start, end + 1),
@@ -116,10 +137,76 @@ async function setup(page: Page, missing = false, linked = false) {
   })
   await page.goto('/'); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your mixes', exact: true })).toBeVisible()
-  return { reviews, tracklists, feedbacks, revisionRequests, startLive: () => { live = true; sessions[0].state = 'Recording' }, failReview: () => { failReview = true }, failTracklist: (value: boolean) => { failTracklist = value },
+  return { reviews, tracklists, feedbacks, revisionRequests, exports, exportRequests, failExportStart: (value: boolean) => { failExportStart = value },
+    largeMaster: () => { sessions[0].audioBytes = 4294967296 }, completeExport: (error: string | null = null) => { if (exportJob) { exportJob.state = error ? 'Failed' : 'Ready'; exportJob.error = error; const row = exports.find(e => e.id === exportJob!.id)!; row.state = exportJob.state; row.error = error; row.available = !error } },
+    startLive: () => { live = true; sessions[0].state = 'Recording' }, failReview: () => { failReview = true }, failTracklist: (value: boolean) => { failTracklist = value },
     stopLive: () => { live = false; sessions[0].state = 'Ready' }, failFeedback: (value: boolean) => { feedbackError = value }, failRevision: (value: boolean) => { revisionError = value },
     holdFeedback: () => { feedbackGate = new Promise<void>(resolve => { releaseFeedback = resolve }) }, releaseFeedback: () => { releaseFeedback(); feedbackGate = null } }
 }
+
+test('mix export offers explicit formats, snapshot tracklist, progress, navigation and cancellation', async ({ page }, info) => {
+  const fixture = await setup(page)
+  fixture.tracklists['mix-0'].revision = 3
+  fixture.tracklists['mix-0'].entries = [
+    { id: 'a', trackId: 'a', artist: 'A', title: 'Timed', played: true, startSeconds: 0, blueprintEntryId: null },
+    { id: 'b', trackId: null, artist: 'B', title: 'Untimed', played: true, startSeconds: null, blueprintEntryId: null },
+    { id: 'c', trackId: null, artist: 'C', title: 'Draft', played: false, startSeconds: null, blueprintEntryId: null },
+  ]
+  await page.reload(); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
+  await page.getByText('Export finished mix', { exact: true }).click()
+  const panel = page.locator('details').filter({ has: page.locator('summary', { hasText: /^Export finished mix$/ }) })
+  await expect(panel.getByRole('button', { name: 'Create export' })).toBeDisabled()
+  await panel.getByRole('button', { name: 'Choose export folder' }).click()
+  await panel.getByRole('checkbox', { name: 'Include saved actual tracklist' }).check()
+  await expect(panel).toContainText('1 timed · 1 clearly labelled untimed · 1 drafts excluded')
+  await panel.getByRole('combobox', { name: 'Audio format' }).selectOption('wav')
+  await panel.getByRole('button', { name: 'Create export' }).click()
+  expect(fixture.exportRequests[0]).toMatchObject({ folder: 'D:/Mixes', format: 'wav', includeTracklist: true, tracklistRevision: 3 })
+  await expect(page.getByRole('progressbar', { name: 'Mix export progress' })).toBeVisible()
+  await page.getByRole('button', { name: /Beta session/ }).click()
+  await expect(page.getByRole('button', { name: 'Cancel export' })).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel export' }).click()
+  await expect(page.getByText('Mix export · Cancelled', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Alpha practice/ }).click()
+  await page.getByText('Export finished mix', { exact: true }).click()
+  await expect(panel.getByText('WAV · 24-bit PCM · Cancelled · Tracklist included')).toBeVisible()
+  await page.setViewportSize({ width: 800, height: 600 }); await panel.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: info.outputPath('export-panel-800.png') })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('export start errors retain options and retry identity, and job failure survives reload', async ({ page }) => {
+  const fixture = await setup(page); fixture.failExportStart(true)
+  await page.getByText('Export finished mix', { exact: true }).click()
+  await page.getByRole('button', { name: 'Choose export folder' }).click()
+  await page.getByRole('button', { name: 'Create export' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'actual tracklist changed' })).toBeVisible()
+  fixture.failExportStart(false); await page.getByRole('button', { name: 'Create export' }).click()
+  expect(fixture.exportRequests[0].requestId).toBe(fixture.exportRequests[1].requestId)
+  fixture.completeExport('FFmpeg unavailable. Check its path in Settings.')
+  await page.reload(); await page.getByRole('button', { name: 'Recordings', exact: true }).click()
+  await expect(page.getByText('Mix export · Failed', { exact: true })).toBeVisible()
+  await page.getByText('Export finished mix', { exact: true }).click()
+  await expect(page.getByLabel('Export history')).toContainText('FFmpeg unavailable')
+  await expect(page.getByRole('button', { name: 'Play mix', exact: true })).toBeEnabled()
+})
+
+test('large RF64 playback uses verified export, preserves review times and still blocks during capture', async ({ page }) => {
+  const fixture = await setup(page); fixture.largeMaster()
+  await expect(page.getByText(/This RF64 master is too large/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Play mix', exact: true })).toBeDisabled()
+  await page.getByText('Export finished mix', { exact: true }).click()
+  await page.getByRole('button', { name: 'Choose export folder' }).click(); await page.getByRole('button', { name: 'Create export' }).click()
+  fixture.completeExport()
+  await expect(page.getByRole('button', { name: 'Play mix', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Play mix', exact: true }).click()
+  const audio = page.getByRole('region', { name: 'Mix playback', exact: true }).locator('audio')
+  await expect(audio).toHaveAttribute('src', `/api/recording-exports/audio/${fixture.exportRequests[0].requestId}`)
+  await page.getByRole('slider', { name: 'Mix position', exact: true }).fill('20')
+  await expect.poll(() => audio.evaluate((e: HTMLAudioElement) => e.currentTime)).toBeGreaterThanOrEqual(19.9)
+  fixture.startLive(); await expect.poll(() => audio.evaluate((e: HTMLAudioElement) => e.paused)).toBe(true)
+  await expect(page.getByRole('button', { name: 'Create export' })).toBeDisabled()
+})
 
 test('detailed feedback saves rating, range, category and status; seek, loop, edit and resolve', async ({ page }, info) => {
   const fixture = await setup(page)
