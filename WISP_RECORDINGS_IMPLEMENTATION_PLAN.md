@@ -508,15 +508,17 @@ Encoding reference: [FFmpeg libmp3lame options](https://ffmpeg.org/ffmpeg-codecs
 
 **Depends on:** 26a–26f. No claim of readiness before these checks pass.
 
-- [ ] Recording workspace UI/UX restructuring requested by the owner: a more
-  visual experience with distinct functional areas for recording, past mixes,
-  playback/feedback and tracklist/plan refinement. Review the layout with the owner;
-  current functionality-first controls are not the accepted final design.
+- [x] Recording workspace UI/UX restructuring (2026-09-13): owner approved the
+  clickable Mixes library / recording desk / individual review concept, now
+  implemented with Review / Tracklist / Exports navigation, persistent player,
+  star ratings and timestamped notes, compact occurrence editors, contextual file
+  management and responsive layouts. Backend/draft/history guarantees preserved.
+  Final hands-on owner acceptance of the implemented UI is still welcome.
 
-- [ ] Run core, infrastructure and API tests; client unit/browser tests, lint and
+- [x] Run core, infrastructure and API tests; client unit/browser tests, lint and
   client build. Protect both internal playlist dragging and external file dragging,
   existing playback, scanning, cues, plans and loudness/version behaviour.
-- [ ] All automated DB/audio tests use isolated profiles and generated fixtures.
+- [x] All automated DB/audio tests use isolated profiles and generated fixtures.
   Simulate invalid/busy devices, overrun, duplicate commands, disk failures,
   interrupted writes, restart, stale edits, missing sources and cancelled exports.
 - [ ] Xone:24C hardware acceptance: verify input as in 26a, then record a minimum

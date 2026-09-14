@@ -64,6 +64,9 @@ public sealed partial class MixRecorderTests
         Assert.Equal("Revised", (await List(second)).Snapshots[0].PlanName);
         Assert.Equal(new[] { "B", "C", "Changed A" }, (await List(second)).Snapshots[0].Blueprint.Entries.Select(e => e.Title));
         Assert.NotEqual(initial.ActiveSnapshotId, (await List(second)).ActiveSnapshotId);
+        using var summaries = JsonDocument.Parse(await Client.GetStringAsync("/api/recording-workspace/mixes"));
+        var firstSummary = summaries.RootElement.EnumerateArray().Single(m => m.GetProperty("session").GetProperty("id").GetGuid() == id);
+        Assert.Equal("Blueprint", firstSummary.GetProperty("plannedSet").GetString()); // Historical snapshot, not renamed live plan.
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CircleDot, FolderOpen, Square } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '../../api/client'
 import { mixPlans } from '../../api/mixPlans'
@@ -8,144 +9,355 @@ import { alertDialog, confirmDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
 import { useCurrentPage } from '../../state/currentPage'
 
-import { useRecorderStatus, statusKey, type Session, type Status } from './useRecorderStatus'
-const sessionsKey = ['recording-sessions']
-const button = 'min-h-11 rounded border border-[var(--color-border)] px-3 py-2 text-sm hover:bg-[var(--color-surface)] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
-const input = 'min-h-11 min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm'
-const duration = (seconds: number) => `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(Math.floor(seconds) % 60).padStart(2, '0')}`
+import { useRecorderStatus, statusKey, type Status } from './useRecorderStatus'
+const duration = (seconds: number) =>
+  `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(Math.floor(seconds) % 60).padStart(2, '0')}`
 
 export function MixRecordingIndicator() {
   const status = useRecorderStatus()
   const handlingClose = useRef(false)
-  const setPage = useCurrentPage(s => s.setPage)
+  const setPage = useCurrentPage((s) => s.setPage)
   useEffect(() => {
     if (!status.data?.busy) return
-    const pause = () => { document.querySelectorAll('audio').forEach(a => a.pause()); usePlayer.getState()._commands?.pause() }
+    const pause = () => {
+      document.querySelectorAll('audio').forEach((a) => a.pause())
+      usePlayer.getState()._commands?.pause()
+    }
     pause()
     document.addEventListener('play', pause, true)
-    const unsubscribe = usePlayer.subscribe(state => { if (state.isPlaying || state.pendingPlay) pause() })
-    return () => { document.removeEventListener('play', pause, true); unsubscribe() }
+    const unsubscribe = usePlayer.subscribe((state) => {
+      if (state.isPlaying || state.pendingPlay) pause()
+    })
+    return () => {
+      document.removeEventListener('play', pause, true)
+      unsubscribe()
+    }
   }, [status.data?.busy])
   useEffect(() => {
     if (!status.data?.closeRequested || handlingClose.current) return
     handlingClose.current = true
     void (async () => {
       try {
-        const confirmed = await confirmDialog({ title: 'Recording is still active',
+        const confirmed = await confirmDialog({
+          title: 'Recording is still active',
           message: 'Keep WISP open to continue, or stop and finish saving before closing.',
-          confirmLabel: 'Stop and save', cancelLabel: 'Keep recording' })
-        if (!confirmed) { await apiPost('/api/recordings/keep-recording'); return }
+          confirmLabel: 'Stop and save',
+          cancelLabel: 'Keep recording',
+        })
+        if (!confirmed) {
+          await apiPost('/api/recordings/keep-recording')
+          return
+        }
         const current = await apiGet<Status>('/api/recordings/status')
-        if (current.busy && current.session) await apiPost(`/api/recordings/${current.session.id}/stop`)
+        if (current.busy && current.session)
+          await apiPost(`/api/recordings/${current.session.id}/stop`)
         setPage('recordings')
         // Large-file hashing can take time. Keep the window open throughout.
         let state = await apiGet<Status>('/api/recordings/status')
         while (state.busy) {
-          await new Promise(resolve => setTimeout(resolve, 500))
+          await new Promise((resolve) => setTimeout(resolve, 500))
           state = await apiGet<Status>('/api/recordings/status')
         }
-        if (state.session?.state !== 'Ready') throw new Error('The recording needs recovery. WISP has stayed open; check the recovery controls.')
+        if (state.session?.state !== 'Ready')
+          throw new Error(
+            'The recording needs recovery. WISP has stayed open; check the recovery controls.',
+          )
         await invoke('closeAfterRecording')
       } catch (e) {
         await apiPost('/api/recordings/keep-recording').catch(() => {})
-        await alertDialog({ title: 'WISP stayed open', message: e instanceof Error ? e.message : 'Check the recording before closing.', tone: 'error' })
-      } finally { handlingClose.current = false }
+        await alertDialog({
+          title: 'WISP stayed open',
+          message: e instanceof Error ? e.message : 'Check the recording before closing.',
+          tone: 'error',
+        })
+      } finally {
+        handlingClose.current = false
+      }
     })()
     // A second native close can arrive between polls, leaving the boolean true
     // in both snapshots. Recheck every successful poll, not only boolean edges.
   }, [status.data?.closeRequested, status.dataUpdatedAt, setPage])
   if (!status.data?.busy) return null
-  return <button className="shrink-0 border-b border-[var(--color-border)] px-4 py-2 text-left text-sm text-red-400"
-    onClick={() => setPage('recordings')}>● Mix recording · {duration(status.data.seconds)} · {status.data.session?.state} · View / stop</button>
+  return (
+    <button
+      className="shrink-0 border-b border-[var(--color-border)] px-4 py-2 text-left text-sm text-red-400"
+      onClick={() => {
+        useRecordingNavigation.getState().record()
+        setPage('recordings')
+      }}
+    >
+      ● Mix recording · {duration(status.data.seconds)} · {status.data.session?.state} · View / stop
+    </button>
+  )
 }
 
-export function MixRecorderPanel({ endpointId, inputTestBusy }: { endpointId: string; inputTestBusy: boolean }) {
+export function MixRecorderPanel({
+  endpointId,
+  inputTestBusy,
+}: {
+  endpointId: string
+  inputTestBusy: boolean
+}) {
   const qc = useQueryClient()
   const status = useRecorderStatus()
   const plans = useQuery({ queryKey: ['mixPlans'], queryFn: mixPlans.list })
-  const planId = useRecordingNavigation(s => s.blueprintPlanId)
-  const settings = useQuery({ queryKey: ['recording-settings'], queryFn: () => apiGet<{ folder: string | null }>('/api/recordings/settings') })
-  const sessions = useQuery({ queryKey: sessionsKey, queryFn: () => apiGet<Session[]>('/api/recordings/'), refetchInterval: 2000 })
-  const [title, setTitle] = useState('Practice mix')
+  const planId = useRecordingNavigation((s) => s.blueprintPlanId)
+  const previous = useRecordingNavigation((s) => s.previousTake)
+  const settings = useQuery({
+    queryKey: ['recording-settings'],
+    queryFn: () => apiGet<{ folder: string | null }>('/api/recordings/settings'),
+  })
+  const [title, setTitle] = useState(() =>
+    previous ? `${previous.title.slice(0, 180)} — next take` : 'Practice mix',
+  )
   const [folder, setFolder] = useState<string | null>(null)
-  const [previous, setPrevious] = useState<string | null>(null)
   const request = useRef<string | null>(null)
-  useEffect(() => { request.current = null }, [planId])
+  const stopping = useRef(false)
+  useEffect(() => {
+    request.current = null
+  }, [planId])
   const destination = folder ?? settings.data?.folder ?? ''
   const busy = status.data?.busy ?? false
-  const refresh = () => { void qc.invalidateQueries({ queryKey: statusKey }); void qc.invalidateQueries({ queryKey: sessionsKey }) }
-  const start = useMutation({ mutationFn: async () => {
-    usePlayer.getState()._commands?.pause()
-    document.querySelectorAll('audio').forEach(a => a.pause())
-    request.current ??= crypto.randomUUID()
-    const id = request.current
-    await apiPost('/api/recordings/start', { requestId: id, title, folder: destination, endpointId, previousTakeId: previous, planId })
-    useRecordingNavigation.getState().select(id)
-  }, onSuccess: () => { request.current = null; refresh(); void qc.invalidateQueries({ queryKey: ['recording-workspace-mixes'] }); void qc.invalidateQueries({ queryKey: ['plan-recordings'] }) } })
-  const action = useMutation({ mutationFn: async ({ id, operation, body }: { id: string; operation: string; body?: unknown }) =>
-    apiPost(`/api/recordings/${id}/${operation}`, body), onSuccess: refresh })
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: statusKey })
+    void qc.invalidateQueries({ queryKey: ['recording-workspace-mixes'] })
+  }
+  const start = useMutation({
+    mutationFn: async () => {
+      usePlayer.getState()._commands?.pause()
+      document.querySelectorAll('audio').forEach((a) => a.pause())
+      request.current ??= crypto.randomUUID()
+      const id = request.current
+      await apiPost('/api/recordings/start', {
+        requestId: id,
+        title,
+        folder: destination,
+        endpointId,
+        previousTakeId: previous?.id ?? null,
+        planId,
+      })
+      useRecordingNavigation.setState({ selected: id })
+    },
+    onSuccess: () => {
+      request.current = null
+      refresh()
+      void qc.invalidateQueries({ queryKey: ['plan-recordings'] })
+    },
+  })
+  const stop = useMutation({
+    mutationFn: () => apiPost(`/api/recordings/${status.data!.session!.id}/stop`),
+    onSuccess: () => {
+      stopping.current = true
+      refresh()
+    },
+  })
+  useEffect(() => {
+    if (stopping.current && status.data?.session && !status.data.busy) {
+      stopping.current = false
+      useRecordingNavigation.getState().select(status.data.session.id)
+    }
+  }, [status.data])
   const pick = async () => {
-    try { const result = await bridge.pickFolder(destination); if (result.path) { setFolder(result.path); request.current = null } }
-    catch (e) { await alertDialog({ title: 'Folder selection failed', message: String(e), tone: 'error' }) }
+    try {
+      const result = await bridge.pickFolder(destination)
+      if (result.path) {
+        setFolder(result.path)
+        request.current = null
+      }
+    } catch (e) {
+      await alertDialog({ title: 'Folder selection failed', message: String(e), tone: 'error' })
+    }
   }
-  const remove = async (session: Session, deleteAudio: boolean) => {
-    if (await confirmDialog({ title: deleteAudio ? 'Permanently delete managed audio?' : 'Remove this entry?',
-      message: deleteAudio ? 'The managed master and any managed import source copy will be permanently deleted. Your original imported file and any separately relinked file are never deleted. This cannot be undone.' : 'The audio files stay on disk. This entry will be hidden.', danger: deleteAudio,
-      confirmLabel: deleteAudio ? 'Delete managed audio' : 'Remove entry' }))
-      action.mutate({ id: session.id, operation: 'remove', body: { deleteAudio, confirmed: true } })
-  }
-  const relink = async (session: Session) => {
-    try { const result = await bridge.pickAudioFile(); if (result.path) action.mutate({ id: session.id, operation: 'relink', body: { path: result.path } }) }
-    catch (e) { await alertDialog({ title: 'Relink failed', message: String(e), tone: 'error' }) }
-  }
-  const error = start.error ?? action.error ?? status.error ?? sessions.error
-  return <section aria-label="Full-length mix recording" className="space-y-4 border-y border-[var(--color-border)] py-5">
-    <div><h2 className="text-xl font-semibold">Record a mix</h2>
-      <p className="mt-1 text-sm text-[var(--color-muted)]">Lossless stereo master, saved directly to disk. No 30-second limit, live monitoring or automatic gain changes.</p></div>
-    <div className="grid gap-3 sm:grid-cols-2">
-      <label className="flex flex-col gap-1 text-sm">Mix title<input className={input} value={title} maxLength={200} disabled={busy}
-        onChange={e => { setTitle(e.target.value); request.current = null }} /></label>
-      <label className="flex flex-col gap-1 text-sm">Recordings folder<input className={input} value={destination} disabled={busy}
-        onChange={e => { setFolder(e.target.value); request.current = null }} /></label>
-    </div>
-    <div className="flex flex-wrap gap-2">
-      <label className="flex min-w-0 items-center gap-2 text-sm">Blueprint (optional)<select className={input} value={planId ?? ''} disabled={busy || start.isPending} onChange={e => useRecordingNavigation.getState().chooseBlueprint(e.target.value || null)}><option value="">No Mix Plan</option>{planId && !plans.data?.some(p => p.id === planId) && <option value={planId}>Selected plan unavailable</option>}{plans.data?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-      <button className={button} disabled={busy || !bridgeAvailable()} onClick={() => void pick()}>Choose recordings folder</button>
-      <button className={`${button} bg-[var(--color-accent)] text-[var(--color-bg)]`} disabled={busy || inputTestBusy || start.isPending || !endpointId || !title.trim() || !destination || !status.data || status.isError}
-        onClick={() => start.mutate()}>{start.isPending ? 'Starting…' : 'Start mix recording'}</button>
-      <button className={button} disabled={!busy || action.isPending} onClick={() => action.mutate({ id: status.data!.session!.id, operation: 'stop' })}>Stop and save mix</button>
-    </div>
-    {previous && <p className="text-sm">This will be a new take linked to the previous recording. <button className="underline" disabled={busy} onClick={() => setPrevious(null)}>Clear link</button></p>}
-    <p className="text-xs text-[var(--color-muted)]">A linked plan is snapshotted when you start. It is only a blueprint, not proof of what you played. Each new take gets its own snapshot; previous takes are never changed.</p>
-    {plans.error && <p role="alert" className="text-sm text-red-400">Mix Plans could not load. You can record without a plan or retry loading the page.</p>}
-    <p className="text-xs text-[var(--color-muted)]">Saved under WISP Recordings in your chosen folder, excluded from the track library. Uses the input selected above. Keep the computer awake. Files over 4 GB use RF64; use an RF64-capable player such as Audacity for those masters. MP3 export comes later.</p>
-    {status.data?.session && <div className="space-y-2" aria-label="Mix recording status">
-      <p role="status">{status.data.session.state} · {status.data.session.deviceName}</p>
-      <p className="text-3xl tabular-nums">{duration(status.data.seconds)}</p>
-      <p className="text-xs text-[var(--color-muted)]">Checkpointed: {duration(status.data.savedSeconds)}{status.data.remainingSeconds != null ? ` · Estimated space remaining: ${duration(status.data.remainingSeconds)}` : ''}</p>
-      {busy && <div className="grid gap-2 sm:grid-cols-2">{(['leftPeak', 'rightPeak'] as const).map((key, index) => <label key={key} className="flex items-center gap-2 text-sm">
-        {index === 0 ? 'L' : 'R'}<meter className="h-5 flex-1" aria-label={`Mix ${index === 0 ? 'left' : 'right'} input`} min={0} max={1} value={Math.min(1, status.data![key])} /></label>)}</div>}
-      {status.data.clipped && <p className="text-sm text-red-400">Clipping detected. Lower the level feeding the input; recorded clipping cannot be repaired here.</p>}
-      {status.data.session.issue && <p className="text-sm text-amber-300">{status.data.session.issue}</p>}
-    </div>}
-    {error && <p role="alert" className="text-sm text-red-400">{error.message}</p>}
-    <details open={sessions.data?.some(s => s.state === 'Recoverable') ? true : undefined}>
-      <summary className="cursor-pointer py-2 text-sm font-medium">Saved takes and recovery</summary>
-      <p className="mb-3 text-xs text-[var(--color-muted)]">Recovery and file management. Use the workspace above for waveform playback, ratings and markers.</p>
-      {sessions.data?.map(s => <div key={s.id} className="space-y-2 border-t border-[var(--color-border)] py-3">
-        <p className="break-words text-sm font-medium">{s.title} · {s.state}</p>
-        <p className="break-all text-xs text-[var(--color-muted)]">{s.relinkedPath ?? s.directoryPath}</p>
-        {s.issue && <p className="text-sm text-amber-300">{s.issue}</p>}
-        {s.state === 'Ready' && s.audioBytes < 4294967200 && !busy && <audio key={s.relinkedPath ?? s.id} controls preload="none" className="w-full" aria-label={`Play ${s.title}`}
-          src={`/api/recordings/${s.id}/audio`} onPlay={() => usePlayer.getState()._commands?.pause()} />}
-        <div className="flex flex-wrap gap-2">
-          {s.state === 'Recoverable' && <button className={button} disabled={busy || action.isPending} onClick={() => action.mutate({ id: s.id, operation: 'recover' })}>Recover saved audio</button>}
-          <button className={button} disabled={busy} onClick={() => { setPrevious(s.id); setTitle(`${s.title.slice(0, 180)} — next take`); request.current = null }}>New linked take</button>
-          {s.state === 'Ready' && <button className={button} disabled={busy || !bridgeAvailable()} onClick={() => void relink(s)}>Relink missing master</button>}
-          <button className={button} disabled={busy || action.isPending} onClick={() => void remove(s, false)}>Remove entry</button>
-          {s.state === 'Ready' && <button className={button} disabled={busy || action.isPending} onClick={() => void remove(s, true)}>Delete managed audio</button>}
+  const error = start.error ?? stop.error ?? status.error ?? settings.error
+  return (
+    <section aria-label="Full-length mix recording" className="wm-recorder">
+      {!busy ? (
+        <>
+          <div className="wm-record-fields">
+            <label>
+              Mix title
+              <input
+                className="wm-field"
+                value={title}
+                maxLength={200}
+                disabled={start.isPending}
+                onChange={(e) => {
+                  setTitle(e.target.value)
+                  request.current = null
+                }}
+              />
+            </label>
+            <label>
+              Recordings folder
+              <input
+                className="wm-field"
+                value={destination}
+                disabled={start.isPending}
+                onChange={(e) => {
+                  setFolder(e.target.value)
+                  request.current = null
+                }}
+              />
+            </label>
+            <label>
+              Planned set (optional)
+              <select
+                className="wm-field"
+                value={planId ?? ''}
+                disabled={start.isPending}
+                onChange={(e) =>
+                  useRecordingNavigation.getState().chooseBlueprint(e.target.value || null)
+                }
+              >
+                <option value="">No Mix Plan</option>
+                {planId && !plans.data?.some((p) => p.id === planId) && (
+                  <option value={planId}>Selected plan unavailable</option>
+                )}
+                {plans.data?.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="wm-button"
+              disabled={start.isPending || !bridgeAvailable()}
+              onClick={() => void pick()}
+            >
+              <FolderOpen /> Choose recordings folder
+            </button>
+          </div>
+          {previous && (
+            <p className="wm-subtitle">
+              New take linked to {previous.title}.{' '}
+              <button
+                className="underline"
+                onClick={() => useRecordingNavigation.setState({ previousTake: null })}
+              >
+                Clear link
+              </button>
+            </p>
+          )}
+          <p className="wm-subtitle">
+            Your planned set is saved as a blueprint when recording starts. Confirm what you
+            actually played afterwards.
+          </p>
+          <div className="wm-record-start">
+            <button
+              className="wm-button wm-primary"
+              disabled={
+                inputTestBusy ||
+                start.isPending ||
+                !endpointId ||
+                !title.trim() ||
+                !destination ||
+                !status.data ||
+                status.isError
+              }
+              onClick={() => start.mutate()}
+            >
+              <CircleDot /> {start.isPending ? 'Starting…' : 'Start mix recording'}
+            </button>
+            <p className="wm-subtitle">
+              Lossless stereo master. No live monitoring or automatic gain changes.
+            </p>
+          </div>
+        </>
+      ) : (
+        <div aria-label="Mix recording status" className="wm-active-capture">
+          <div className="wm-heading">
+            <div>
+              <p className="wm-eyebrow">Recording desk</p>
+              <h1>{status.data?.session?.title}</h1>
+            </div>
+            <span role="status" className="wm-capture-state">
+              <CircleDot /> {status.data?.session?.state}
+            </span>
+          </div>
+          <p className="wm-record-clock">{duration(status.data?.seconds ?? 0)}</p>
+          <p className="wm-record-caption">
+            Stereo master · {status.data?.session?.sampleRate.toLocaleString()} Hz
+          </p>
+          <div className="wm-meters">
+            <CaptureMeter label="Left" peak={status.data?.leftPeak ?? 0} />
+            <CaptureMeter label="Right" peak={status.data?.rightPeak ?? 0} />
+          </div>
+          {status.data?.clipped ? (
+            <p className="wm-warning" role="status">
+              Clipping detected. Lower the input level; recorded clipping cannot be repaired here.
+            </p>
+          ) : (
+            <p className="wm-record-caption">
+              No clipping reported · check that both channels are receiving audio
+            </p>
+          )}
+          <div className="wm-record-start">
+            <button
+              className="wm-button wm-danger"
+              disabled={stop.isPending || status.data?.session?.state === 'Finalising'}
+              onClick={() => stop.mutate()}
+            >
+              <Square />{' '}
+              {stop.isPending || status.data?.session?.state === 'Finalising'
+                ? 'Saving mix…'
+                : 'Stop and save mix'}
+            </button>
+          </div>
+          <div className="wm-record-routing">
+            <div>
+              <span className="wm-eyebrow">Input</span>
+              <p>{status.data?.session?.deviceName}</p>
+            </div>
+            <div>
+              <span className="wm-eyebrow">Recording to</span>
+              <p className="break-all">{status.data?.session?.directoryPath}</p>
+            </div>
+          </div>
+          <p className="wm-subtitle">
+            Checkpointed: {duration(status.data?.savedSeconds ?? 0)}
+            {status.data?.remainingSeconds != null
+              ? ` · Estimated space remaining: ${duration(status.data.remainingSeconds)}`
+              : ''}
+            . Keep WISP open and the computer awake.
+          </p>
         </div>
-      </div>)}
-    </details>
-  </section>
+      )}
+      {plans.error && <p role="alert">Mix Plans could not load. You can record without a plan.</p>}
+      {status.data?.session?.issue && <p role="alert">{status.data.session.issue}</p>}
+      {error && <p role="alert">{error.message}</p>}
+      <p className="wm-subtitle">
+        Masters stay under WISP Recordings, outside the track library. After saving, export a
+        separate 320 kbps MP3 from the mix’s Exports tab. Large masters use RF64.
+      </p>
+    </section>
+  )
+}
+
+function CaptureMeter({ label, peak }: { label: string; peak: number }) {
+  const db = peak > 0 ? Math.max(-60, 20 * Math.log10(peak)) : -60
+  return (
+    <div className="wm-meter-row">
+      <span>{label === 'Left' ? 'L' : 'R'}</span>
+      <div
+        className="wm-meter-track"
+        role="meter"
+        aria-label={`Mix ${label.toLowerCase()} input`}
+        aria-valuemin={-60}
+        aria-valuemax={0}
+        aria-valuenow={Math.min(0, db)}
+        aria-valuetext={peak > 0 ? `${db.toFixed(1)} dBFS` : 'Silence'}
+      >
+        {Array.from({ length: 40 }, (_, i) => (
+          <span
+            key={i}
+            className={
+              i / 40 <= (db + 60) / 60 && peak > 0 ? (i > 35 ? 'wm-meter-hot' : 'wm-meter-lit') : ''
+            }
+          />
+        ))}
+      </div>
+      <span className="wm-time">{peak > 0 ? `${db.toFixed(1)} dBFS` : '−∞ dBFS'}</span>
+    </div>
+  )
 }

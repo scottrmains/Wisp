@@ -6,8 +6,8 @@ import { useRecordingTracklist } from './useRecordingTracklist'
 import { useMixExports, exportName } from './useMixExports'
 
 interface ExportJob { id: string; recordingId: string; state: string; progress: number; error: string | null }
-const button = 'min-h-11 rounded border border-[var(--color-border)] px-3 py-2 text-sm hover:bg-[var(--color-surface)] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
-const field = 'min-h-11 min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm'
+const button = 'wm-button'
+const field = 'wm-field'
 export function ExportActivity() {
   const [error, setError] = useState<string | null>(null)
   const job = useQuery({ queryKey: ['recording-export-job'], queryFn: async () => (await apiGet<ExportJob | null>('/api/recording-exports/job')) ?? null, refetchInterval: 1000 })
@@ -38,14 +38,16 @@ export function RecordingExportPanel({ id, ready, busy }: { id: string; ready: b
     } catch (e) { setError(e instanceof Error ? e.message : 'Export could not start.') }
     finally { starting.current = false; setPending(false) }
   }
-  return <details className="border-t border-[var(--color-border)] pt-2">
-    <summary className="cursor-pointer py-2 text-sm font-medium">Export finished mix</summary>
+  return <section aria-label="Export finished mix" className="wm-export-panel">
+    <h3>Make a listening copy</h3>
     <div className="space-y-3 py-3">
       <p className="text-sm text-[var(--color-muted)]">Create a separate audio file for listening or sharing. Your master, tracklist and review stay unchanged.</p>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-0 flex-col gap-1 text-sm">Audio format<select className={field} value={format} disabled={pending} onChange={e => setFormat(e.target.value)}><option value="mp3">MP3 · 320 kbps CBR</option><option value="wav">WAV · 24-bit PCM</option><option value="master">Original master · exact copy</option></select></label>
+      <div className="wm-export-options">
+        <fieldset className="wm-format-options"><legend>Audio format</legend>{[{ value: 'mp3', label: 'MP3 · 320 kbps CBR', help: 'A smaller copy for sharing and everyday listening.' }, { value: 'wav', label: 'WAV · 24-bit PCM', help: 'Uncompressed audio at the recording’s sample rate.' }, { value: 'master', label: 'Original master · exact copy', help: 'A byte-identical copy of your source recording.' }].map(option => <label key={option.value}><input type="radio" name={`export-format-${id}`} value={option.value} checked={format === option.value} disabled={pending} onChange={() => setFormat(option.value)} /><span>{option.label}<span className="wm-subtitle">{option.help}</span></span></label>)}</fieldset>
+        <div className="wm-export-destination">
         <label className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1 text-sm">Export destination<input className={field} value={folder} disabled={pending} placeholder="Choose a folder or enter its full path" onChange={e => setFolder(e.target.value)} /></label>
         <button className={button} disabled={pending || !bridgeAvailable()} onClick={() => { void bridge.pickFolder(folder || undefined).then(result => { if (result.path) setFolder(result.path) }).catch(e => setError(String(e))) }}>Choose export folder</button>
+        <p className="wm-subtitle">Your original recording stays untouched.</p></div>
       </div>
       <p className="text-xs text-[var(--color-muted)]">{format === 'mp3' ? 'Stereo 44.1 kHz MP3, encoded once from the master. No gain normalisation.' : format === 'wav' ? 'Stereo 24-bit integer PCM at the master’s sample rate. Converts the float master without improving source quality. Standard WAV is limited to 4 GiB.' : 'Byte-identical float WAV/RF64 master. Large RF64 files need a compatible external player; title and date are in the accompanying manifest.'} A new folder is created inside WISP Mix Exports. Existing files are never overwritten.</p>
       <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={include} disabled={pending} onChange={e => setInclude(e.target.checked)} /> Include saved actual tracklist (.txt)</label>
@@ -64,5 +66,5 @@ export function RecordingExportPanel({ id, ready, busy }: { id: string; ready: b
       </div>
       <p className="text-xs text-[var(--color-muted)]">Back up both the audio folders and WISP’s database to preserve ratings, comments and Mix Plans. Unsaved browser drafts must be saved first.</p>
     </div>
-  </details>
+  </section>
 }

@@ -6,8 +6,8 @@ import { useCurrentPage } from '../../state/currentPage'
 import { formatTrackStart, useRecordingTracklist } from './useRecordingTracklist'
 import { useFeedbackDrafts, useRecordingFeedback, type RevisionPreview, type RevisionRequest, type RevisionSelection } from './useRecordingFeedback'
 
-const button = 'min-h-11 rounded border border-[var(--color-border)] px-3 py-2 text-sm hover:bg-[var(--color-surface)] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
-const field = 'min-h-11 min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm'
+const button = 'wm-button'
+const field = 'wm-field'
 const openPlan = (id: string) => { useActivePlan.getState().setActivePlanId(id); useCurrentPage.getState().setPage('mix-plans') }
 
 export function ReviseRecordingPlan({ id, title }: { id: string; title: string }) {
@@ -50,7 +50,7 @@ export function ReviseRecordingPlan({ id, title }: { id: string; title: string }
     finally { setBusy(false) }
   }
   return <details className="border-t border-[var(--color-border)] pt-3">
-    <summary className="cursor-pointer py-3 font-medium">Create a revised Mix Plan</summary>
+    <summary className="cursor-pointer py-3 font-medium">Revise for next time · Create a revised Mix Plan</summary>
     <div className="space-y-4 pt-2">
       <p className="text-sm text-[var(--color-muted)]">Build a separate plan for your next attempt. Your original plan, take and feedback stay untouched. Only saved feedback can be selected.</p>
       {hasDraft && <p role="status" className="text-sm text-amber-300">Save or discard the feedback draft before previewing a revised plan.</p>}

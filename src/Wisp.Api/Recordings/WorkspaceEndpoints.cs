@@ -20,12 +20,32 @@ public static class WorkspaceEndpoints
             var sessions = await db.RecordingSessions.AsNoTracking().Where(s => !s.Hidden && s.State != "Deleted").OrderByDescending(s => s.StartedAt).ToArrayAsync();
             var reviews = await db.RecordingReviews.AsNoTracking().ToDictionaryAsync(r => r.Id);
             var feedback = await db.RecordingFeedback.AsNoTracking().ToDictionaryAsync(r => r.Id);
+            var planNames = await (from list in db.RecordingTracklists.AsNoTracking()
+                join snapshot in db.RecordingPlanSnapshots.AsNoTracking() on list.ActiveSnapshotId equals (Guid?)snapshot.Id
+                select new { list.Id, snapshot.PlanName }).ToDictionaryAsync(x => x.Id, x => x.PlanName);
             return Results.Ok(sessions.Select(s => new { Session = s, Rating = reviews.GetValueOrDefault(s.Id)?.Rating, ReviewStatus = feedback.GetValueOrDefault(s.Id)?.Status ?? "Practice",
+                PlannedSet = planNames.GetValueOrDefault(s.Id),
                 Duration = s.SampleRate > 0 ? s.AudioBytes / (s.SampleRate * 8d) : 0,
                 Missing = s.State == "Ready" && !File.Exists(RecordingWorkspace.AudioPath(s)) }));
         });
         api.MapGet("/{id:guid}/peaks", (Guid id, RecordingWorkspace workspace) => Guard(async () =>
             await workspace.Peaks(id) is { } peaks ? Results.Ok(peaks) : Results.NoContent()));
+        // Library previews use real cached extrema without downloading a full-resolution
+        // peaks document for every visible row. This never starts audio analysis.
+        api.MapGet("/{id:guid}/thumbnail", (Guid id, RecordingWorkspace workspace) => Guard(async () =>
+        {
+            var peaks = await workspace.Peaks(id);
+            if (peaks?.Levels.LastOrDefault() is not { } level || level.Min.Length == 0) return Results.NoContent();
+            var values = new float[32];
+            for (int i = 0; i < values.Length; i++)
+            {
+                int from = i * level.Min.Length / values.Length;
+                int to = Math.Max(from + 1, (i + 1) * level.Min.Length / values.Length);
+                for (int j = from; j < Math.Min(to, level.Min.Length); j++)
+                    values[i] = Math.Max(values[i], Math.Max(Math.Abs(level.Min[j]), Math.Abs(level.Max[j])));
+            }
+            return Results.Ok(values);
+        }));
         api.MapPost("/{id:guid}/peaks", (Guid id, RecordingWorkspace workspace) => Guard(() => Task.FromResult<IResult>(Results.Ok(workspace.StartPeaks(id)))));
         api.MapGet("/{id:guid}/review", (Guid id, RecordingWorkspace workspace, WispDbContext db) => Guard(async () =>
         {

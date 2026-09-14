@@ -44,7 +44,9 @@ async function setup(page: Page, saved: string | null = null) {
     await route.fulfill({ json: [] })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Recordings', exact: true }).click()
+  await page.getByRole('button', { name: 'Mixes', exact: true }).click()
+  await page.getByRole('button', { name: 'Record a mix', exact: true }).click()
+  await page.getByText('Test input & routing', { exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Test your recording input' })).toBeVisible()
   return { starts, reject: () => { rejectStart = true }, clip: () => { state.leftClipped = true },
     disconnect: () => { state = { ...state, state: 'Failed', message: 'The input stopped unexpectedly.', hasAudio: true } } }
@@ -65,7 +67,7 @@ test('explicit input, stereo meters, stop, float WAV playback and saved observat
   await page.getByLabel('Routing observations', { exact: true }).fill('STREAM, both decks and faders heard. Stereo verified using test source.')
   await page.getByRole('button', { name: 'Save observations' }).click()
   await expect(page.getByText(/Observations saved with this test/)).toBeVisible()
-  await page.reload()
+  await page.reload(); await page.getByText('Test input & routing', { exact: true }).click()
   await expect(page.getByLabel('Routing observations', { exact: true })).toHaveValue(/both decks/)
   await page.setViewportSize({ width: 800, height: 600 })
   await page.getByRole('heading', { name: 'Test your recording input' }).scrollIntoViewIfNeeded()

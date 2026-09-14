@@ -31,7 +31,7 @@ interface SectionDef {
 const SECTIONS: SectionDef[] = [
   { id: 'library', label: 'Library', icon: LibraryIcon },
   { id: 'mix-plans', label: 'Mix Plans', icon: SlidersVertical },
-  { id: 'recordings', label: 'Recordings', icon: CircleDot },
+  { id: 'recordings', label: 'Mixes', icon: CircleDot },
   { id: 'discover', label: 'Discover', icon: Compass },
   { id: 'wanted', label: 'Wanted', icon: Heart },
   { id: 'crate-digger', label: 'Crate Digger', icon: Pickaxe },
@@ -48,7 +48,12 @@ const WISP_DRAG_TYPE = 'application/x-wisp-track-ids'
 export function AppSidebar() {
   const page = useCurrentPage((s) => s.page)
   const setPage = useCurrentPage((s) => s.setPage)
-  const collapsed = useUiPrefs((s) => s.sidebarCollapsed)
+  const savedCollapsed = useUiPrefs((s) => s.sidebarCollapsed)
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 1000px)').matches)
+  const [expandedMixes, setExpandedMixes] = useState(false)
+  useEffect(() => { const media = window.matchMedia('(max-width: 1000px)'); const changed = () => setNarrow(media.matches); media.addEventListener('change', changed); return () => media.removeEventListener('change', changed) }, [])
+  const autoCompact = page === 'recordings' && narrow
+  const collapsed = autoCompact ? !expandedMixes : savedCollapsed
   const toggle = useUiPrefs((s) => s.toggleSidebarCollapsed)
   const activePlaylistId = useActivePlaylist((s) => s.activePlaylistId)
   const setActivePlaylistId = useActivePlaylist((s) => s.setActivePlaylistId)
@@ -121,7 +126,7 @@ export function AppSidebar() {
           </div>
         )}
         <button
-          onClick={toggle}
+          onClick={() => autoCompact ? setExpandedMixes(!expandedMixes) : toggle()}
           className={`flex items-center justify-center rounded text-[var(--color-muted)] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] ${collapsed ? '-mx-1 h-8 w-8' : 'ml-auto h-8 w-8'}`}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -235,6 +240,7 @@ function SidebarButton({
   return (
     <button
       onClick={onClick}
+      aria-label={label}
       title={collapsed ? `${label}${badge ? ` (${badge})` : ''}` : undefined}
       className={[
         'flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors',
