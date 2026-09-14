@@ -5,6 +5,7 @@ import { useCurrentPage } from '../../state/currentPage'
 import { usePlayer } from '../../state/player'
 import { MixRecorderPanel } from './MixRecorderPanel'
 import { useRecorderStatus } from './useRecorderStatus'
+import { useRecordingNavigation } from './useRecordingTracklist'
 
 interface InputDevice {
   id: string; name: string; mixFormat: string | null; sampleRate: number
@@ -32,7 +33,7 @@ export function RecordingInputIndicator() {
   const setPage = useCurrentPage(s => s.setPage)
   if (!active(test.data)) return null
   return <button className="shrink-0 border-b border-[var(--color-border)] px-4 py-2 text-left text-sm text-[var(--color-accent)]"
-    onClick={() => setPage('recordings')}>
+    onClick={() => { useRecordingNavigation.getState().record(); setPage('recordings') }}>
     ● Input test — {test.data?.state} · {Math.floor(test.data?.seconds ?? 0)} / 30s · View / stop
   </button>
 }
@@ -59,6 +60,7 @@ export function RecordingInputPage() {
   const devices = useQuery({ queryKey: ['recording-input-devices'],
     queryFn: () => apiGet<{ devices: InputDevice[]; selectedEndpointId: string | null }>('/api/recording-input/devices') })
   const [selection, setSelection] = useState<string | null>(null)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
   const requestId = useRef<string | null>(null)
   const audio = useRef<HTMLAudioElement>(null)
   const selectedId = selection ?? devices.data?.selectedEndpointId ?? ''
@@ -74,18 +76,18 @@ export function RecordingInputPage() {
     onSuccess: data => qc.setQueryData(testKey, data) })
   const error = start.error ?? stop.error ?? test.error ?? devices.error
 
-  return <div className="h-full overflow-y-auto p-4 sm:p-6">
-    <div className="mx-auto max-w-4xl space-y-6">
-      <header>
-        <p className="mb-1 text-xs uppercase tracking-wider text-[var(--color-muted)]">Recordings · Capture</p>
+  return <div className="wm-record-page">
+    <div className="space-y-6">
+      <header hidden={!!mix.data?.busy}>
+        <p className="wm-eyebrow">Recording desk</p>
         <h1 className="text-2xl font-semibold">Record your mix</h1>
-        <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
+        {!mix.data?.busy && <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
           Choose your stereo input and recording folder. Use the short input test below if you need to check your routing first.
           No live monitoring, gain processing or library import.
-        </p>
+        </p>}
       </header>
 
-      <section aria-label="Input setup" className="space-y-3">
+      <section aria-label="Input setup" className="space-y-3" hidden={!!mix.data?.busy}>
         <label htmlFor="recording-input" className="block text-sm font-medium">Stereo recording input</label>
         <div className="flex flex-wrap gap-2">
           <select id="recording-input" value={selectedId} disabled={busy || start.isPending || devices.isPending}
@@ -115,6 +117,7 @@ export function RecordingInputPage() {
 
       <MixRecorderPanel endpointId={selected?.canTest ? selectedId : ''} inputTestBusy={active(test.data)} />
 
+      <details className="wm-input-diagnostics" open={diagnosticsOpen || active(test.data)} onToggle={e => setDiagnosticsOpen(e.currentTarget.open)} hidden={!!mix.data?.busy}><summary>Test input & routing</summary>
       <section aria-label="Input test" className="space-y-4 border-y border-[var(--color-border)] py-5">
         <h2 className="text-lg font-medium">Test your recording input</h2>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -146,6 +149,7 @@ export function RecordingInputPage() {
         <p className="break-all text-xs text-[var(--color-muted)]">Saved outside your library: {test.data.audioPath}</p>
         {test.data.state === 'Ready' && <Assessment key={test.data.id} test={test.data} />}
       </section>}
+      </details>
     </div>
   </div>
 }

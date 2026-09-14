@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { apiGet } from '../../api/client'
 
 export interface PerformedEntry {
@@ -27,15 +28,24 @@ export const useRecordingTracklist = (id: string) => useQuery({
 // Navigation intent only: no automatic recording, persisted plan links or audio changes.
 export const useRecordingNavigation = create<{
   blueprintPlanId: string | null; selected: string | null; setupRequested: boolean
+  view: 'library' | 'record' | 'mix'; previousTake: { id: string; title: string } | null
+  home: () => void; record: () => void; newTake: (id: string, title: string) => void
   chooseBlueprint: (id: string | null) => void; select: (id: string) => void
   prepare: (id: string) => void; closeSetupIntent: () => void
-}>(set => ({
-  blueprintPlanId: null, selected: null, setupRequested: false,
+}>()(persist(set => ({
+  blueprintPlanId: null, selected: null, setupRequested: false, view: 'library', previousTake: null,
+  home: () => set({ view: 'library', setupRequested: false }),
+  record: () => set({ view: 'record', setupRequested: true }),
+  newTake: (id, title) => set({ previousTake: { id, title }, view: 'record', setupRequested: true }),
   chooseBlueprint: blueprintPlanId => set({ blueprintPlanId }),
-  select: selected => set({ selected }),
-  prepare: blueprintPlanId => set({ blueprintPlanId, setupRequested: true }),
+  select: selected => set({ selected, view: 'mix', setupRequested: false }),
+  prepare: blueprintPlanId => set({ blueprintPlanId, previousTake: null, view: 'record', setupRequested: true }),
   closeSetupIntent: () => set({ setupRequested: false }),
-}))
+}), { name: 'wisp.mixesNavigation', storage: createJSONStorage(() => ({
+  getItem: key => { try { return sessionStorage.getItem(key) } catch { return null } },
+  setItem: (key, value) => { try { sessionStorage.setItem(key, value) } catch { /* Navigation still works in memory; no review data is stored here. */ } },
+  removeItem: key => { try { sessionStorage.removeItem(key) } catch { /* Optional navigation preference only. */ } },
+})), partialize: state => ({ view: state.view, selected: state.selected }) }))
 
 export function formatTrackStart(seconds: number): string {
   const centiseconds = Math.round(seconds * 100)

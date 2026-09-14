@@ -2,6 +2,56 @@
 
 Last reviewed: 2026-09-13
 
+## 2026-09-13: Phase 26g UI — approved Mixes redesign
+
+- **Implemented:** the owner-approved recording-desk/listening-notebook concept.
+  The sidebar now says **Mixes**. Its library has real cached waveform thumbnails,
+  search, review/attention filters, date/title/duration/rating sorts, saved planned-set
+  names, ratings and recording/file status. Record and import are explicit actions.
+  Selecting a row opens a separate mix workspace rather than expanding one long page.
+- **Recording desk:** separate setup and active-capture views; prominent server-clock
+  duration, stereo dBFS meters, clipping warning and Stop and save. Input diagnostics
+  are behind Test input & routing and remain open after results/errors. The global
+  capture indicator returns to the recorder after navigation/reload. Successful stop
+  opens the saved take; capture, checkpoints, close protection and recovery use the
+  existing backend. No fabricated live waveform or software monitoring.
+- **Individual mix:** persistent, height-adjustable waveform/transport; distinct
+  Review / Tracklist / Exports areas preserve the same audio element and in-progress
+  forms while switching. Comment ranges, comment/bookmark/track-start icons and a
+  separate playhead layer replace indistinguishable ticks. The peaks canvas no longer
+  redraws or recreates its resize observer for each playback update.
+- **Review:** star satisfaction controls (including Unrated), status, listening notes,
+  composer and personal reflection. Explicit Save feedback and Save comment & feedback
+  commit all review edits atomically. Unsaved/draft/saving/error states remain visible;
+  existing local draft persistence, conflict checks and discard confirmation remain.
+  Quick bookmarks still save separately and are not actual track entrances or song cues.
+- **Tracklist and plans:** compact occurrence rows, per-row timing/order editor,
+  direct Go to start, library/manual additions, historical blueprint comparison/linking
+  and Revise for next time. Original plan snapshots and actual played entries remain
+  separate; no automatic track recognition, guessed timestamps or rewritten history.
+- **Exports and files:** dedicated format choices (320 kbps MP3 / 24-bit WAV / exact
+  master), destination and export history. Existing verified jobs, cancellation,
+  immutable tracklist copies and RF64-derived playback are preserved. Details & files
+  contains show-folder, recover, relink, new linked take and separately confirmed
+  remove-entry/delete-managed-audio actions. No duplicate saved-takes audio players.
+- **Shell/responsiveness:** unrelated global Mix Plan/scan controls and the duplicate
+  track player are hidden in Mixes; the shared track audio engine stays mounted.
+  Narrow Mixes windows compact the sidebar (expand remains available), and review
+  columns/controls reflow. Library/mix navigation resets scroll and survives reload
+  within the window; restoring navigation never starts a recording or export.
+- **Verification:** 469 tests: 115 core / 70 infrastructure / 164 API / 53 client /
+  67 browser. Client typecheck/build and lint pass (13 pre-existing lint warnings).
+  Browser tests cover the redesigned navigation, retained playback/composer across
+  tabs, sticky player at 800×600, ratings/drafts, recovery, input-test results, exports,
+  tracklist/revision workflows and existing drag/playlist/loudness regressions. API
+  checks cover 32-bin cache-only thumbnails, missing sources, unchanged master bytes
+  and historical planned-set names. Desktop/small-window screenshots reviewed using
+  isolated mocked browser APIs, not the owner's recordings.
+- **Evidence boundary:** no live database/music/`D:/Mixes` writes, new Xone capture,
+  installer build or CDJ compatibility claim. Existing NuGet advisory warnings remain.
+  Long-session Xone/unplug/sleep/native-close and independent exported-mix listening
+  acceptance are still open; this implements the UI part, not all Phase 26g gates.
+
 ## 2026-09-13: Phase 26f — finished-mix exports and large-master playback
 
 - **Implemented:** Recordings → choose a mix → Export finished mix. Choose a

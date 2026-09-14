@@ -70,7 +70,7 @@ function App() {
   // commands published into usePlayer). Unmounting it kills the deck, which is
   // why playback fired off the workspace was silent until the user navigated to
   // a page where MiniPlayer remounted.
-  const showMiniPlayer = !libraryWorkspaceActive
+  const showMiniPlayer = !libraryWorkspaceActive && page !== 'recordings'
 
   return (
     <div className="flex h-full"
