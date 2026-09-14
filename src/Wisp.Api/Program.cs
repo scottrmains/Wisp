@@ -16,6 +16,7 @@ using Wisp.Api.Recordings;
 using Wisp.Api.Soulseek;
 using Wisp.Api.Transcoder;
 using Wisp.Api.Wanted;
+using Wisp.Api.Usb;
 using Wisp.Infrastructure;
 using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Soulseek;
@@ -31,6 +32,17 @@ public class Program
     public static int Main(string[] args)
     {
         // Read-only support command: no profile creation, DB, host or capture.
+        if (args.SequenceEqual(new[] { "--list-cdj-usbs" }))
+        {
+            try
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+                    new Wisp.Infrastructure.Usb.WindowsUsbExportDevices().ListAsync(CancellationToken.None).GetAwaiter().GetResult(),
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                return 0;
+            }
+            catch (Exception ex) { Console.Error.WriteLine($"Cannot list USB devices: {ex.Message}"); return 1; }
+        }
         if (args.SequenceEqual(new[] { "--list-recording-inputs" }))
         {
             try
@@ -218,6 +230,7 @@ public class Program
             app.MapBlendRatings();
             app.MapTags();
             app.MapPlaylists();
+            app.MapCdjUsbDevices();
             app.MapWanted();
             app.MapDiscover();
             app.MapTranscoder();

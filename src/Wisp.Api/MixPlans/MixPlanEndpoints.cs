@@ -123,13 +123,15 @@ public static class MixPlanEndpoints
     }
 
     private static async Task<IResult> CdjExportPreflight(
-        Guid id, CdjExportPreflightRequest body, WispDbContext db, CancellationToken ct)
+        Guid id, CdjExportPreflightRequest body, WispDbContext db, PioneerUsbExportService deviceExport, CancellationToken ct)
     {
         if (!DirectCdjExportEnabled) return DirectCdjExportUnavailable();
         if (string.IsNullOrWhiteSpace(body.TargetFolder))
             return Results.BadRequest(new { code = "target_required", message = "Select the root folder of the USB drive." });
         if (!Directory.Exists(body.TargetFolder))
             return Results.BadRequest(new { code = "target_missing", message = $"USB target does not exist: {body.TargetFolder}" });
+        try { await deviceExport.ValidateUsbTargetAsync(body.TargetFolder, body.UsbDeviceId, ct); }
+        catch (UsbExportTargetException ex) { return Results.BadRequest(new { code = "usb_target_incompatible", message = ex.Message }); }
         var plan = await LoadPlan(db, id, ct);
         if (plan is null) return Results.NotFound();
         var tracks = plan.Tracks.Select(t => t.Track).Where(t => t is not null).Cast<Track>().DistinctBy(t => t.Id).ToList();
@@ -158,6 +160,8 @@ public static class MixPlanEndpoints
         CancellationToken ct)
     {
         if (!DirectCdjExportEnabled) return DirectCdjExportUnavailable();
+        if (string.IsNullOrWhiteSpace(body.UsbDeviceId))
+            return Results.BadRequest(new { code = "usb_selection_required", message = "Select a connected USB from the export device list." });
         if (string.IsNullOrWhiteSpace(body.TargetFolder))
             return Results.BadRequest(new { code = "target_required", message = "Select the root folder of the USB drive." });
         var plan = await LoadPlan(db, id, ct);
@@ -183,7 +187,11 @@ public static class MixPlanEndpoints
         {
             return Results.Ok(await deviceExport.ExportAsync(
                 body.TargetFolder, plan.Name, selectedTracks, playlists, deviceCues,
-                body.ConfirmReplaceExistingPioneerLibrary, ct));
+                body.ConfirmReplaceExistingPioneerLibrary, ct, body.UsbDeviceId));
+        }
+        catch (UsbExportTargetException ex)
+        {
+            return Results.BadRequest(new { code = "usb_target_incompatible", message = ex.Message });
         }
         catch (PioneerLibraryExistsException ex)
         {
@@ -192,6 +200,10 @@ public static class MixPlanEndpoints
         catch (UnsupportedPioneerFormatException ex)
         {
             return Results.BadRequest(new { code = "unsupported_format", message = ex.Message });
+        }
+        catch (PioneerWaveformException ex)
+        {
+            return Results.BadRequest(new { code = "cdj_waveform_failed", message = ex.Message });
         }
         catch (PioneerTemplateRequiredException ex)
         {
@@ -598,6 +610,6 @@ public static class MixPlanEndpoints
 }
 
 public sealed record SyncToUsbRequest(string TargetFolder);
-public sealed record CdjExportPreflightRequest(string TargetFolder);
-public sealed record ExportToCdjRequest(string TargetFolder, bool ConfirmReplaceExistingPioneerLibrary = false);
+public sealed record CdjExportPreflightRequest(string TargetFolder, string? UsbDeviceId = null);
+public sealed record ExportToCdjRequest(string TargetFolder, bool ConfirmReplaceExistingPioneerLibrary = false, string? UsbDeviceId = null);
 public sealed record CdjExportPreflightDto(int TrackCount, int DeviceCueCount, long RequiredBytes, long AvailableBytes, bool NeedsPioneerReplacement, IReadOnlyList<string> MissingFiles, IReadOnlyList<string> UnsupportedFiles);

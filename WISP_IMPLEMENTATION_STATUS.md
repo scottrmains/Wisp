@@ -1,6 +1,290 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-13
+Last reviewed: 2026-09-14
+
+## 2026-09-14: Consolidated pending CDJ work after the Mixes redesign merge
+
+- Consolidated PRs #29 (cue encoding/USB selection), #30 (waveforms/path lookup)
+  and #31 (milestone cleanup/Devices roadmap) into #31, updated against `develop`
+  after the owner merged #28. Preserved both sets of implementation history in
+  the status-file conflict; the merged Mixes UI and all CDJ changes remain intact.
+- No new feature, USB mutation or hardware compatibility claim. Devices browsing
+  and ordering remain planned; catalogue pruning still needs the recorded
+  evidence gates. Superseded PRs are closed without merging their branches.
+- **Combined verification:** 115 Core, 128 Infrastructure, 166 API, 53 client
+  unit and 74 browser tests passed; client build and lint passed (13 existing
+  warnings). Existing NuGet advisories remain. No installer generated.
+
+## 2026-09-13: CDJ milestone cleanup, recovery snapshot and Devices roadmap
+
+- **Safe closeout, not full Phase 25 completion:** preserve the owner's accepted
+  CDJ-900 playback/overview/Memory Cue baseline. Reference-only catalogue entries
+  still remain; template-independent export, catalogue pruning and broader
+  hardware/format coverage are not implemented by this cleanup.
+- **Export UI:** replace stale test-only/pending-hardware messages with accurate
+  CDJ-900 scope, safe-eject/cue-recall instructions and remaining limitations.
+  Replacement explicitly means the whole Pioneer library, not incremental sync,
+  with the previous PIONEER and WISP audio backed up first.
+- **Missed entry point fixed:** the header's Mix Plan dropdown now uses the shared
+  USB picker/export component, including physical-device identity and replacement
+  review. Removed its obsolete folder-picker API wrappers. A browser regression
+  test exercises that exact entry point and rejects any folder-picker request.
+- **Dead code removed:** the disabled catalogue-only switch and unused
+  `ClearCatalogueRows` deletion prototype. This does not change the active
+  database append/analysis encoder or remove any reference tracks from a USB.
+  Do not resurrect the unverified deletion algorithm as a compatibility fix.
+- **Recovery evidence:** with owner authorization, copied the current spare F:
+  contents to `E:\Wisp USB Backups\2026-09-13-working-cdj900-76F3C2B2` outside Git.
+  All 53 files (345,357,611 bytes), including existing backups and player files,
+  were length/SHA-256 verified, then the source inventory/hashes rechecked.
+  Only Windows System Volume Information was excluded. This is a file snapshot,
+  not a sector image; the single-partition MBR/FAT32 USB was not changed.
+  One spare USB suffices for sequential samples; other prepared USBs stay untouched.
+- **Next evidence gate:** capture a native rekordbox before/after device-track
+  deletion on that same spare, preserving both states before implementing pruning.
+  The working WISP snapshot is a recovery baseline, not that deletion fixture.
+- **Planned, not built:** [Devices workspace phases](WISP_USB_WORKSPACE_PLAN.md):
+  actual device-library browsing first, then USB-local draft ordering with explicit
+  reviewed Save to USB; later incremental playlist management and cue/history
+  import. Browsing/playing/dragging does not auto-sync. Reordering must preserve
+  audio paths and byte-identical analysis to protect the accepted hardware baseline.
+- **Verification:** 115 Core, 128 Infrastructure and 166 API tests passed using
+  an isolated build output; client build, 53 unit tests, 73 browser tests and lint
+  passed (13 existing warnings). No installer, production-data mutation or new
+  hardware test performed.
+
+## 2026-09-13: CDJ-900 hardware acceptance — waveform and Memory Cues working
+
+- **Owner-confirmed result after `5f05fb1`:** following the analysis-path repair
+  and re-export in the ongoing F:/Smoke Test Mix/CDJ-900 test, the owner reports
+  that both the waveform and Memory Cues are working. Together with the earlier
+  playlist/playback confirmation, this verifies direct Wisp export with overview
+  waveform display and Memory Cue recall in this tested CDJ-900 workflow.
+- **Scope:** this is user-reported physical hardware evidence, not just a binary
+  parser/test pass. The report does not individually certify all 11 timestamps,
+  loops, every supported audio format, large libraries or the CDJ-850. Those
+  cases need separate acceptance tests; do not label export universally flawless.
+- **Key repair:** player-derived audio-path hashing places Wisp's analysis where
+  the CDJ looks for it. A PDB link alone was insufficient. Preserve this lookup
+  behavior and its regression tests in future exporter changes.
+- **Remaining work:** remove retained reference catalogue entries/template
+  dependency, handle analysis hash collisions beyond safe rejection, and address
+  VBR seek indexes/beat grids/detailed waveforms as separately scoped features.
+  No additional code, USB changes or formatting were needed to record this result.
+
+This successful hardware report supersedes the pending waveform/Memory Cue
+acceptance statements in the historical entries below for this CDJ-900 test.
+
+## 2026-09-13: CDJ analysis lookup path repair — hardware retest pending
+
+- **Hardware result:** the owner re-exported with waveform support and still
+  saw no waveform. F:'s version-3 receipt confirms the new exporter was used;
+  all seven DAT files contain the generated previews. Software validation was
+  insufficient: a self-consistent PDB link does not establish player discovery.
+- **Concrete path mismatch:** for Blue Monday, Wisp wrote analysis under
+  `P001/00000001`, while the CDJ created its own file under `P050/00018218`.
+  The published rekordbox audio-path hash reproduces the latter exactly. It
+  also reproduces all three saved rekordbox reference directories and the
+  previously observed CDJ-created directories for the other two loaded tracks.
+  This establishes an incorrect lookup location; it does not prove there are
+  no other analysis-acceptance requirements on CDJ-850/900.
+- **Fixed:** derive `PIONEER/USBANLZ/Pxxx/yyyyyyyy/ANLZ0000.DAT` from the exact
+  USB-relative audio path using UTF-16 code units and uint32 wraparound, instead
+  of sequential DeviceSQL IDs. PDB links, DAT placement and receipt paths use
+  the same result. Waveform-bearing export validation now also requires this
+  player-derived location. Waveform payloads, cue encoding, audio, catalogue
+  allocation and USB layout are unchanged in this follow-up.
+- **Collision safety:** detect duplicate analysis paths before copying tracks
+  and before sidecar writes. The 200003-bucket hash can collide; until shared
+  bucket allocation is hardware-verified, stop with an actionable error rather
+  than overwrite another selected track's waveform/cues.
+- **Verified:** 115 Core, 128 Infrastructure and 166 API tests. Added published
+  path vectors, UTF-16/overflow coverage, a genuine hash-collision case, rejection
+  of the former self-consistent ID-based folder and opt-in comparison against
+  private rekordbox/player-created folders. Reanalyzed all seven actual export
+  tracks into an isolated template-based test database at the corrected paths,
+  validating their previews and all 11 cue timestamps. USB and production data
+  were read-only. Client code is unchanged from the preceding 72-browser /
+  53-unit-test pass; no installer generated. One published example disagrees
+  with that source's own algorithm and is not used as a trusted test oracle;
+  the actual local rekordbox/CDJ evidence matches.
+- **Next:** rebuild/restart the updated debug app and export the same playlist
+  to F: again, accepting the existing-library backup/replacement. No formatting
+  is needed. Safely eject, load from the WISP playlist and check the overview.
+  This lookup repair could also affect cue discovery, but Memory Cue recall
+  remains unconfirmed. Missing VBR/beat-grid/detailed-waveform support and the
+  retained reference catalogue remain separate limitations.
+
+Algorithm source (reported hardware work used CDJ-3000, so checked locally
+against the owner's older-player files rather than assuming compatibility):
+[fourfour — ANLZ path hash](https://github.com/morizkraemer/fourfour/blob/master/pioneer-usb-writer/reference-code/PIONEER.md#1-anlz-path-hash-algorithm).
+
+## 2026-09-13: CDJ overview waveform export — software verified, player test pending
+
+- **New hardware evidence:** after the MBR/single-FAT32 preparation, the owner
+  reports that the CDJ-900 recognizes the USB and plays tracks loaded directly
+  from the WISP playlist. This establishes basic playback for that test, not
+  complete compatibility. The owner is unsure about Memory Cue recall and will
+  retest it; it is **unconfirmed**, not a confirmed failure or success.
+- **Waveform diagnosis:** the seven-track version-2 export had no `PWAV` or
+  `PWV2` sections. Its 11 cue timestamps remained intact. Additional apparently
+  player-created `ANLZ0001.DAT` files existed for three tracks; their existence
+  does not establish why the player did or did not use Wisp's cue data.
+- **Implemented:** decode each staged audio copy through the configured/bundled
+  FFmpeg and write 400-column `PWAV` and 100-column `PWV2` overview previews in
+  its `ANLZ0000.DAT`. Set the database analysis date and validate its analysis
+  and audio path links. Original audio, cue timestamps, playlist allocation and
+  physical USB layout are unchanged. This adds overview waveforms, not detailed
+  scrolling/RGB waveforms, beat grids or MP3 variable-bitrate seek indexes.
+- **Signal handling:** stream 44.1 kHz stereo PCM into bounded 10 ms energy
+  summaries, using actual decoded length rather than cached track duration.
+  Separate channel energy avoids anti-phase cancellation. Preserve silence and
+  the final partial window; fixed square-root RMS display scaling does not
+  normalize the music or alter playback gain. PWAV uses neutral whiteness;
+  Wisp is not reproducing rekordbox's proprietary spectral/color analysis.
+  Tiny-preview low-nibble range follows the privately preserved reference.
+- **Safety:** complete analysis and validation before replacing the existing
+  library. Decode failure/cancellation leaves existing USB files intact; hidden
+  FFmpeg children are terminated on failure/cancellation. Ten-minute analysis
+  timeout per track, six-hour decoded duration cap, bounded stderr. Application
+  exports cannot silently skip an unavailable analyzer. Both export endpoints
+  return actionable waveform errors through Wisp's existing dialogs.
+- **Validation/receipt:** reject missing/duplicate/malformed preview sections,
+  incorrect counts/header constants, tiny heights outside the profile range,
+  payload mismatches and wrong database links/dates. Version-3 receipts retain
+  every cue timestamp and add preview sizes and decoded sample-frame count.
+  Dialogs now explain waveform analysis and the pending physical test.
+- **Verified locally:** 115 Core, 117 Infrastructure and 166 API tests pass;
+  client build, 53 unit tests, all 72 browser tests and zero-error lint pass
+  (13 existing warnings).
+  Real FFmpeg integration ran, including anti-phase WAV, corruption handling,
+  all seven tracks from the owner's F: receipt, and an isolated template-based
+  database containing their waveforms and all 11 cues. Preview headers match
+  the three private rekordbox reference DAT files. No USB files or production
+  library data were modified by these tests. Existing SQLite/OpenAPI package
+  advisory warnings remain unrelated. No installer was generated.
+- **Next:** rebuild/restart Wisp, re-export `Smoke Test Mix` to the existing F:
+  USB, confirm the backup/replacement dialog and safely eject. Load the WISP
+  playlist on CDJ-900 and check the overview waveform. No reformat is required.
+  Waveform display and Memory Cue recall still require physical verification;
+  retained reference catalogue entries remain a known limitation.
+
+Format sources: [Crate Digger ANLZ schema](https://github.com/Deep-Symmetry/crate-digger/blob/main/src/main/kaitai/rekordbox_anlz.ksy)
+and [Beat Link preview decoder](https://github.com/Deep-Symmetry/beat-link/blob/main/src/main/java/org/deepsymmetry/beatlink/data/WaveformPreview.java).
+
+## 2026-09-13: connected USB selector and CDJ-900 NO USB diagnosis
+
+- **Hardware report:** the owner exported `Smoke Test Mix` from the corrected
+  debug build; the original CDJ-900 displayed **NO USB**. This is not a successful
+  player acceptance result for the cue repair.
+- **Read-only finding:** Windows reports a single approximately 32 GB Generic
+  Flash Disk using **GPT**, with its main FAT32 volume at F: and a 512 KiB
+  `UEFI_NTFS` boot partition at H:. These are partitions of the SAME physical
+  USB, not two separate sticks. Formatting F: alone retained the GPT layout and
+  second partition. AlphaTheta explicitly lists GUID partition maps as unsupported
+  on CDJ-900. The earlier instructions to format FAT32 alone were incomplete.
+- **Export inspection:** version-2 receipt identifies seven copied tracks,
+  three playlists and 11 Memory Cues. All seven audio paths exist. Independent
+  read-only decoding of their DAT files found the corrected 56-byte record
+  boundaries and all cue timestamps matching the receipt. This does not prove
+  playback or cue recall on the player.
+- **Implemented:** Export to CDJ USB opens a Wisp-styled USB selector with a
+  labelled dropdown, refresh/automatic recheck, volume label/letter, device model,
+  capacity/free space, filesystem, partition style/count and preparation warning.
+  One entry per physical USB (largest mounted volume); internal/system disks and
+  unmounted disks are not offered. USB-attached SSDs are detected by bus type,
+  not just Windows' Removable classification. No folder browser in this flow.
+- **Implemented safeguards:** block GPT/unknown layouts, multiple partitions,
+  unsupported filesystems, system/internal/read-only/unready disks. HTTP export
+  requires the selected device identity; the backend validates it at preflight,
+  before copying and again after staging/before replacing the library. A changed
+  selection is rejected rather than silently following a reused drive letter.
+  Existing non-root infrastructure folder fixtures remain isolated test exports;
+  the application API cannot use this as a folder-picker bypass.
+- **Read-only discovery:** bounded, hidden Windows Storage inventory subprocess
+  runs a fixed Get-Disk/Get-Partition/Get-Volume script with no interpolated user
+  arguments. Detection errors block export and offer refresh. The support CLI
+  `--list-cdj-usbs` runs without starting Wisp, creating a profile or opening its
+  database. Tested against the owner's USB: F:, GPT, two partitions, blocked.
+- **Verified:** 381 backend tests (115 Core / 100 Infrastructure / 166 API),
+  53 client unit tests, 72 browser tests, client build and zero-error lint pass.
+  Browser checks include GPT blocking, missing/swapped USBs, refresh/error
+  recovery, confirmation/cancel and no folder-picker call. Visual inspection at
+  1400px and 800px; selector is lazy-loaded. No local installer generated.
+- **USB preparation completed after separate owner approval:** backed up all 29
+  non-system files from both F: and H: (115,197,663 bytes), verifying each copy's
+  length and SHA-256 before erasure. Only Windows-managed `System Volume
+  Information` was excluded. The private backup and verification manifest are at
+  `E:\Wisp USB Backups\2026-09-13-before-mbr-76F3C2B2`, outside Git. Recreated only
+  the identity-checked USB as **MBR with one FAT32 partition**, 32 KiB clusters,
+  labelled `WISP USB` at F:. The former H: boot partition is removed; its files
+  remain in the backup. No internal disks were changed. Windows retained GPT
+  after clearing and temporarily held F:'s old mapping; guarded preparation
+  stopped at each unexpected state before completing the verified layout.
+- **Post-preparation verification:** Windows reports one MBR/FAT32 partition;
+  Wisp's read-only `--list-cdj-usbs` reports `CanExport: true` and no compatibility
+  problem. The volume contains only Windows filesystem metadata: old exports
+  were not restored. The separate local Pioneer reference remains available.
+- **Next hardware test:** freshly export `Smoke Test Mix` from Wisp to F:, safely
+  eject, then test the WISP-prefixed playlist and Memory Cues using the player's
+  CUE/LOOP CALL controls. Layout acceptance by Wisp is not hardware acceptance;
+  CDJ-900 playback and Memory Cue recall still need physical proof. Catalogue
+  cleanup and Pioneer waveform support remain unresolved.
+
+Source: [AlphaTheta — CDJ-900 USB device not recognized](https://support.alphatheta.com/en-US/articles/19545774076185?product=4416496076569).
+
+## 2026-09-13: CDJ Memory Cue encoding repair — hardware test pending
+
+- **Fixed:** classic `PCPT` entries now occupy exactly 56 bytes. The old writer
+  declared 56 but emitted 60, writing cue type as uint32 rather than one byte
+  plus the three-byte `00 03 e8` field. This shifted cue/loop timestamps and
+  broke the next record boundary. Corrected the `0x00010000` marker and matched
+  the reference PMAI header and empty cue-list sentinel as well.
+- **Verified locally:** literal format-oracle tests and independent field-offset
+  decoding cover zero/multiple cues, time zero, milliseconds, loops and malformed
+  records. Opt-in comparison with the privately preserved September rekordbox
+  reference matched all six classic Memory Cue records across three DAT files
+  (normalizing only creation-order versus timestamp-order link fields).
+  The reference currently has two stored points per track, including a near-start
+  point; no USB/hardware acceptance is inferred from this comparison.
+- **Fixed validation:** before installation and again afterwards, decode every
+  cue's signature, length, type, flags, ordering and timestamps. Check audio-path
+  tag, section boundaries and unique cue lists. The former count-only validator
+  accepted malformed records. Regression tests explicitly recreate that bug.
+- **Diagnostic reference:** the exporter can read an explicitly preserved
+  `<WISP_DATA_DIR>/pioneer-reference/export.pdb` (normally under
+  `%LOCALAPPDATA%/Wisp`) before searching separate connected USBs. An explicit
+  `WISP_PIONEER_TEMPLATE` override takes priority and fails if missing/invalid.
+  The target itself cannot be its own reference. Reference selection happens
+  before copying music; no reference is automatically learned from Wisp output.
+- **Local test preparation:** the owner's F: export.pdb and USBANLZ directory
+  were copied privately to that reference folder, outside Git. Database SHA-256
+  matched before/after copy. This is NOT an audio/full-USB backup. F: was not
+  written or formatted. Formatting the test USB no longer removes the only
+  available database template on this PC.
+- **Export UX:** prevent repeat clicks, show errors in Wisp dialogs, and state
+  the retained-catalogue limitation in both fresh and replacement confirmation.
+  Version-2 export receipts record each cue/loop timestamp in milliseconds.
+- **Verification:** 26 targeted Pioneer tests pass with the private PDB and DAT
+  reference enabled. Full backend suite: 369 passing tests. Client unit tests:
+  53 passing; browser suite: 69 passing, including fresh/replacement/cancel/error
+  CDJ export flows. Client production build and lint (zero errors) pass. Existing
+  SQLite/OpenAPI dependency advisory warnings remain unrelated to this change.
+- **Not shipped as full compatibility:** no new hardware result yet. Template
+  tracks remain visible; clean independent catalogue generation, Pioneer
+  waveforms/beatgrids and VBR seek analysis remain unresolved. Synthetic loop
+  tests are not hardware proof. This repair does not change the catalogue
+  allocator that previously permitted three-track playback on CDJ-850.
+- **Next test:** run the updated build, format the intended test USB as FAT32
+  only after retaining any wanted files, save two clearly separated Wisp **CDJ
+  Memory** cues per track, explicitly export a small playlist, safely eject, and
+  open the playlist prefixed `WISP` on each player. Check audio and use
+  **CUE/LOOP CALL**, not just the large transport CUE button, to verify both saved
+  times. Record CDJ-850 and original CDJ-900 results separately. Extra template
+  tracks and no waveform are expected in this isolated cue test.
+
+Format reference: [Crate Digger's independent ANLZ schema](https://github.com/Deep-Symmetry/crate-digger/blob/main/src/main/kaitai/rekordbox_anlz.ksy).
+This entry supersedes older claims below that cue counts alone validate export.
 
 ## 2026-09-13: Phase 26g UI — approved Mixes redesign
 

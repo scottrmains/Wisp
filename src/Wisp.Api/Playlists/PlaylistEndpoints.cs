@@ -113,13 +113,15 @@ public static class PlaylistEndpoints
     }
 
     private static async Task<IResult> CdjExportPreflight(
-        Guid id, CdjExportPreflightRequest body, WispDbContext db, CancellationToken ct)
+        Guid id, CdjExportPreflightRequest body, WispDbContext db, PioneerUsbExportService deviceExport, CancellationToken ct)
     {
         if (!DirectCdjExportEnabled) return DirectCdjExportUnavailable();
         if (string.IsNullOrWhiteSpace(body.TargetFolder))
             return Results.BadRequest(new { code = "target_required", message = "Select the root folder of the USB drive." });
         if (!Directory.Exists(body.TargetFolder))
             return Results.BadRequest(new { code = "target_missing", message = $"USB target does not exist: {body.TargetFolder}" });
+        try { await deviceExport.ValidateUsbTargetAsync(body.TargetFolder, body.UsbDeviceId, ct); }
+        catch (UsbExportTargetException ex) { return Results.BadRequest(new { code = "usb_target_incompatible", message = ex.Message }); }
 
         var playlist = await LoadPlaylist(db, id, ct);
         if (playlist is null) return Results.NotFound();
@@ -144,6 +146,8 @@ public static class PlaylistEndpoints
         CancellationToken ct)
     {
         if (!DirectCdjExportEnabled) return DirectCdjExportUnavailable();
+        if (string.IsNullOrWhiteSpace(body.UsbDeviceId))
+            return Results.BadRequest(new { code = "usb_selection_required", message = "Select a connected USB from the export device list." });
         if (string.IsNullOrWhiteSpace(body.TargetFolder))
             return Results.BadRequest(new { code = "target_required", message = "Select the root folder of the USB drive." });
         var playlist = await LoadPlaylist(db, id, ct);
@@ -171,7 +175,11 @@ public static class PlaylistEndpoints
         {
             return Results.Ok(await deviceExport.ExportAsync(
                 body.TargetFolder, playlist.Name, selectedTracks, exportPlaylists, deviceCues,
-                body.ConfirmReplaceExistingPioneerLibrary, ct));
+                body.ConfirmReplaceExistingPioneerLibrary, ct, body.UsbDeviceId));
+        }
+        catch (UsbExportTargetException ex)
+        {
+            return Results.BadRequest(new { code = "usb_target_incompatible", message = ex.Message });
         }
         catch (PioneerLibraryExistsException ex)
         {
@@ -180,6 +188,10 @@ public static class PlaylistEndpoints
         catch (UnsupportedPioneerFormatException ex)
         {
             return Results.BadRequest(new { code = "unsupported_format", message = ex.Message });
+        }
+        catch (PioneerWaveformException ex)
+        {
+            return Results.BadRequest(new { code = "cdj_waveform_failed", message = ex.Message });
         }
         catch (PioneerTemplateRequiredException ex)
         {

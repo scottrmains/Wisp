@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Text;
+using Wisp.Core.Cues;
 
 namespace Wisp.Infrastructure.Usb;
 
@@ -19,6 +21,7 @@ public static class PioneerDeviceLibraryValidator
         bool allowAdditionalRows = false,
         bool validateFreshPageLayout = true)
     {
+        PioneerAnalysisPath.RequireDistinct(tracks);
         var bytes = File.ReadAllBytes(pdbPath);
         if (bytes.Length < PageSize || ReadLe32(bytes, 4) != PageSize)
             throw new InvalidOperationException("Generated Pioneer database has an invalid page header.");
@@ -58,9 +61,27 @@ public static class PioneerDeviceLibraryValidator
         foreach (var track in tracks)
         {
             if (string.IsNullOrWhiteSpace(track.AnalysisPath)) continue;
+            // Waveform-bearing exports must be discoverable by the player itself,
+            // not just via a self-consistent (but ignored) PDB analyze_path string.
+            if (track.Waveform is not null && track.AnalysisPath != PioneerAnalysisPath.ForAudio(track.ContentPath))
+                throw new InvalidOperationException("Pioneer analysis is not at the audio-path-derived player lookup location.");
+            var row = ReadRows(bytes, 0).Single(r => ReadLe32(bytes, r + 0x48) == track.DeviceId);
+            if (ReadTrackString(bytes, row, 14) != track.AnalysisPath || ReadTrackString(bytes, row, 20) != track.ContentPath)
+                throw new InvalidOperationException("Pioneer database does not link to the exported audio and analysis files.");
+            if (track.Waveform is { } waveform && ReadTrackString(bytes, row, 15) != waveform.AnalyzedAt.UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture))
+                throw new InvalidOperationException("Pioneer database is missing the waveform analysis date.");
             var analysis = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(pdbPath))!)!, track.AnalysisPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-            ValidateAnalysis(analysis, track.DeviceCues.Count);
+            ValidateAnalysis(analysis, track.ContentPath, track.DeviceCues, track.Waveform);
         }
+    }
+
+    private static string ReadTrackString(byte[] bytes, int row, int index)
+    {
+        var start = row + BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(row + 0x5e + index * 2, 2));
+        var kind = bytes[start];
+        if ((kind & 1) != 0) return Encoding.ASCII.GetString(bytes, start + 1, (kind >> 1) - 1);
+        var length = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(start + 1, 2)) - 4;
+        return (kind == 0x90 ? Encoding.Unicode : Encoding.ASCII).GetString(bytes, start + 4, length);
     }
 
     /// <summary>
@@ -164,7 +185,12 @@ public static class PioneerDeviceLibraryValidator
         }
     }
 
-    private static void ValidateAnalysis(string analysisPath, int expectedMemoryCues)
+    /// <summary>
+    /// Decode the actual classic cue records, not just PCOB's advertised count.
+    /// This intentionally does not share serialization helpers with the writer.
+    /// </summary>
+    public static void ValidateAnalysis(string analysisPath, string contentPath, IReadOnlyList<DeviceCue> expectedCues,
+        PioneerWaveform? expectedWaveform = null)
     {
         if (!File.Exists(analysisPath)) throw new InvalidOperationException($"Missing Pioneer analysis sidecar '{analysisPath}'.");
         var bytes = File.ReadAllBytes(analysisPath);
@@ -173,16 +199,95 @@ public static class PioneerDeviceLibraryValidator
         if (ReadBe32(bytes, 8) != bytes.Length) throw new InvalidOperationException("Generated Pioneer analysis file length does not match its header.");
 
         var position = ReadBe32(bytes, 4);
-        var count = -1;
-        while (position + 24 <= bytes.Length)
+        if (position < 28 || position > bytes.Length) throw new InvalidOperationException("Invalid Pioneer analysis header length.");
+        var foundPath = false;
+        var foundMemory = false;
+        var foundHot = false;
+        var foundPreview = false;
+        var foundTiny = false;
+        var expected = expectedCues.OrderBy(c => c.StartSeconds).ToList();
+        foreach (var cue in expected)
         {
+            _ = ExpectedMilliseconds(cue.StartSeconds);
+            if (!Enum.IsDefined(cue.Kind) || (cue.Kind == DeviceCueKind.Loop &&
+                (cue.EndSeconds is not { } end || !double.IsFinite(end) || end <= cue.StartSeconds)))
+                throw new InvalidOperationException("Invalid Wisp Memory Cue/loop data; correct the cue before exporting.");
+        }
+        while (position < bytes.Length)
+        {
+            if (bytes.Length - position < 12) throw new InvalidOperationException("Truncated Pioneer analysis section header.");
             var length = ReadBe32(bytes, position + 8);
-            if (length < 12 || position + length > bytes.Length) throw new InvalidOperationException("Generated Pioneer analysis section is malformed.");
-            if (bytes.AsSpan(position, 4).SequenceEqual("PCOB"u8) && ReadBe32(bytes, position + 12) == 0)
-                count = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(position + 18, 2));
+            var header = ReadBe32(bytes, position + 4);
+            if (length < 12 || length > bytes.Length - position || header < 12 || header > length)
+                throw new InvalidOperationException("Generated Pioneer analysis section is malformed.");
+            if (bytes.AsSpan(position, 4).SequenceEqual("PPTH"u8))
+            {
+                if (foundPath || header != 16 || length < 18 || ReadBe32(bytes, position + 12) != length - 16 || (length - 16) % 2 != 0 ||
+                    bytes[position + length - 2] != 0 || bytes[position + length - 1] != 0 ||
+                    Encoding.BigEndianUnicode.GetString(bytes, position + 16, length - 18) != contentPath)
+                    throw new InvalidOperationException("Pioneer analysis audio path does not match the exported track.");
+                foundPath = true;
+            }
+            var isPreview = bytes.AsSpan(position, 4).SequenceEqual("PWAV"u8);
+            var isTiny = bytes.AsSpan(position, 4).SequenceEqual("PWV2"u8);
+            if (isPreview || isTiny)
+            {
+                var columns = isPreview ? 400 : 100;
+                if ((isPreview ? foundPreview : foundTiny) || header != 20 || length != 20 + columns ||
+                    ReadBe32(bytes, position + 12) != columns || ReadBe32(bytes, position + 16) != 0x10000)
+                    throw new InvalidOperationException("Invalid or duplicate Pioneer waveform preview section.");
+                if (isTiny && bytes.AsSpan(position + 20, columns).ContainsAnyExceptInRange((byte)0, (byte)15))
+                    throw new InvalidOperationException("Pioneer tiny waveform height is out of range.");
+                if (expectedWaveform is not null && !bytes.AsSpan(position + 20, columns).SequenceEqual(isPreview ? expectedWaveform.Preview : expectedWaveform.Tiny))
+                    throw new InvalidOperationException("Pioneer waveform does not match the analyzed audio.");
+                if (isPreview) foundPreview = true; else foundTiny = true;
+            }
+            if (bytes.AsSpan(position, 4).SequenceEqual("PCOB"u8))
+            {
+                if (header != 24 || length < 24) throw new InvalidOperationException("Invalid Pioneer cue-list header.");
+                var type = ReadBe32(bytes, position + 12);
+                var count = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(position + 18, 2));
+                if (type is not (0 or 1) || (type == 0 ? foundMemory : foundHot) || length != 24 + count * 56)
+                    throw new InvalidOperationException("Invalid or duplicate Pioneer cue list, or cue record length mismatch.");
+                if (type == 1)
+                {
+                    foundHot = true;
+                    if (count != 0) throw new InvalidOperationException("This CDJ profile must not export Hot Cues.");
+                }
+                else
+                {
+                    foundMemory = true;
+                    if (count != expected.Count) throw new InvalidOperationException("Generated Pioneer Memory Cue count does not match Wisp data.");
+                    for (var i = 0; i < count; i++)
+                    {
+                        var cue = position + 24 + i * 56;
+                        var wanted = expected[i];
+                        if (!bytes.AsSpan(cue, 4).SequenceEqual("PCPT"u8) || ReadBe32(bytes, cue + 4) != 28 || ReadBe32(bytes, cue + 8) != 56 ||
+                            ReadBe32(bytes, cue + 12) != 0 || ReadBe32(bytes, cue + 16) != 0 || ReadBe32(bytes, cue + 20) != 0x10000 ||
+                            bytes[cue + 28] != (wanted.Kind == DeviceCueKind.Loop ? 2 : 1) ||
+                            !bytes.AsSpan(cue + 29, 3).SequenceEqual(new byte[] { 0, 3, 0xe8 }) ||
+                            BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(cue + 32, 4)) != ExpectedMilliseconds(wanted.StartSeconds) ||
+                            BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(cue + 36, 4)) !=
+                                (wanted.Kind == DeviceCueKind.Loop && wanted.EndSeconds is { } end ? ExpectedMilliseconds(end) : uint.MaxValue))
+                            throw new InvalidOperationException($"Pioneer Memory Cue {i + 1} does not match its Wisp type, timestamp or record layout.");
+                        if (BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(cue + 24, 2)) != (i == 0 ? ushort.MaxValue : i - 1) ||
+                            BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(cue + 26, 2)) != (i == count - 1 ? ushort.MaxValue : i + 1))
+                            throw new InvalidOperationException("Pioneer Memory Cue ordering is invalid.");
+                    }
+                }
+            }
             position += length;
         }
-        if (count != expectedMemoryCues) throw new InvalidOperationException("Generated Pioneer Memory Cue count does not match Wisp data.");
+        if (!foundPath || !foundMemory || !foundHot) throw new InvalidOperationException("Missing Pioneer audio path or cue lists.");
+        if (expectedWaveform is not null && (!foundPreview || !foundTiny || expectedWaveform.SampleFrames <= 0))
+            throw new InvalidOperationException("Missing Pioneer waveform previews or decoded audio.");
+    }
+
+    private static uint ExpectedMilliseconds(double seconds)
+    {
+        if (!double.IsFinite(seconds) || seconds < 0 || seconds * 1000 >= uint.MaxValue)
+            throw new InvalidOperationException("A Pioneer cue has an invalid timestamp.");
+        return checked((uint)Math.Round(seconds * 1000));
     }
 
     private static uint ReadLe32(byte[] source, int offset) => BinaryPrimitives.ReadUInt32LittleEndian(source.AsSpan(offset, 4));

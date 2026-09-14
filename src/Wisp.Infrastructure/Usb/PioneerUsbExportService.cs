@@ -10,12 +10,20 @@ namespace Wisp.Infrastructure.Usb;
 /// existing Pioneer library is never touched unless the caller explicitly
 /// confirms replacement, and is then moved into a dated Wisp backup.
 /// </summary>
-public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
+public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer, IUsbExportDevices? usbDevices = null,
+    IPioneerWaveformAnalyzer? waveforms = null)
 {
-    // Playlist insertion and audio loading now pass on a CDJ-850 using the
-    // accepted template. The next isolated hardware step is Wisp's PCOB
-    // Memory Cue / loop analysis sidecar for those same appended tracks.
-    private const bool CatalogueOnlyHardwareValidation = false;
+    private readonly IUsbExportDevices _usbDevices = usbDevices ?? new WindowsUsbExportDevices();
+
+    public Task<IReadOnlyList<UsbExportDevice>> ListUsbDevicesAsync(CancellationToken ct) => _usbDevices.ListAsync(ct);
+
+    public async Task<UsbExportDevice> ValidateUsbTargetAsync(string targetRoot, string? deviceId, CancellationToken ct)
+    {
+        try { return UsbExportTarget.Require(await _usbDevices.ListAsync(ct), targetRoot, deviceId); }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or JsonException)
+        { throw new UsbExportTargetException("USB detection failed. Refresh the connected devices before exporting. " + ex.Message); }
+    }
+    // Preserve the hardware-confirmed CDJ-900 analysis path/waveform/cue baseline.
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mp3", ".m4a", ".aac", ".wav", ".aiff", ".aif",
@@ -28,11 +36,13 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
         IReadOnlyList<UsbPlaylist> playlists,
         IReadOnlyList<DeviceCue> deviceCues,
         bool confirmReplaceExistingPioneerLibrary,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? usbDeviceId = null)
     {
         if (string.IsNullOrWhiteSpace(targetRoot)) throw new ArgumentException("A USB target folder is required.");
         if (!Directory.Exists(targetRoot)) throw new DirectoryNotFoundException($"USB target does not exist: {targetRoot}");
         var root = Path.GetFullPath(targetRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (IsDriveRoot(root) || usbDeviceId is not null) await ValidateUsbTargetAsync(root, usbDeviceId, ct);
         var pioneer = Path.Combine(root, "PIONEER");
         if (Directory.Exists(pioneer) && !confirmReplaceExistingPioneerLibrary)
             throw new PioneerLibraryExistsException("This USB already has a Pioneer library. Review the preflight and explicitly confirm replacement; Wisp will first back it up under WISP/backups.");
@@ -44,6 +54,14 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
         var unsupported = selected.Where(t => !SupportedExtensions.Contains(Path.GetExtension(t.FileName))).ToList();
         if (unsupported.Count > 0) throw new UnsupportedPioneerFormatException($"{unsupported.Count} track(s) are not supported by the CDJ-850 profile. Convert them to MP3, AAC, WAV or AIFF first.");
 
+        // Resolve before copying potentially gigabytes of music. A locally
+        // preserved reference allows the diagnostic USB itself to be formatted.
+        var templatePdb = IsDriveRoot(root) ? FindPlayerAcceptedTemplate(root) : null;
+        // Null is retained only for low-level folder fixtures using synthetic audio.
+        // Application/physical-USB exports must never silently omit waveforms.
+        if (waveforms is null && (IsDriveRoot(root) || usbDeviceId is not null))
+            throw new PioneerWaveformException("The CDJ waveform analyzer is unavailable. Restart WISP with its audio tools installed.");
+
         var staging = Path.Combine(root, $".wisp-pioneer-staging-{Guid.NewGuid():N}");
         var backupRoot = Path.Combine(root, "WISP", "backups");
         string? pioneerBackup = null;
@@ -53,14 +71,22 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
         try
         {
             Directory.CreateDirectory(staging);
-            var planned = CreateDeviceTracks(selected, deviceCues, includeAnalysis: !CatalogueOnlyHardwareValidation);
-            foreach (var track in planned)
+            var planned = CreateDeviceTracks(selected, deviceCues);
+            PioneerAnalysisPath.RequireDistinct(planned);
+            for (var index = 0; index < planned.Count; index++)
             {
+                var track = planned[index];
                 ct.ThrowIfCancellationRequested();
                 var destination = Path.Combine(staging, track.ContentPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 await CopyFileAsync(track.Track.FilePath, destination, ct);
                 File.SetLastWriteTimeUtc(destination, File.GetLastWriteTimeUtc(track.Track.FilePath));
+                if (waveforms is not null)
+                {
+                    try { planned[index] = track with { Waveform = await waveforms.AnalyzeAsync(destination, ct) }; }
+                    catch (PioneerWaveformException ex)
+                    { throw new PioneerWaveformException($"Waveform export failed for '{track.Track.Title ?? track.Track.FileName}': {ex.Message}", ex); }
+                }
             }
 
             var deviceIdByWispId = planned.ToDictionary(t => t.Track.Id, t => t.DeviceId);
@@ -76,14 +102,13 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
             List<PioneerExportPlaylist> installedPlaylists;
             if (IsDriveRoot(root))
             {
-                var templatePdb = FindPlayerAcceptedTemplate(root);
                 // Keep this first physical compatibility pass unmistakable on
                 // the player: the template itself can already contain a
                 // playlist with the same name as the Wisp source.
                 var templatePlaylists = exportPlaylists
                     .Select(playlist => playlist with { Name = $"WISP — {playlist.Name}" })
                     .ToList();
-                write = writer.WriteFromTemplate(staging, templatePdb, planned, templatePlaylists);
+                write = writer.WriteFromTemplate(staging, templatePdb!, planned, templatePlaylists);
                 installedTracks = planned.Select(track => track with { DeviceId = write.TrackIdMap![track.DeviceId] }).ToList();
                 installedPlaylists = templatePlaylists.Select(playlist => playlist with
                 {
@@ -109,6 +134,8 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
 
             // No target data is moved until staging has copied every audio file and passed the
             // PDB/ANLZ validator above.
+            // Recheck physical identity and layout after staging, before moving a library.
+            if (IsDriveRoot(root) || usbDeviceId is not null) await ValidateUsbTargetAsync(root, usbDeviceId, ct);
             Directory.CreateDirectory(backupRoot);
             var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
             if (Directory.Exists(pioneer))
@@ -142,14 +169,18 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
                 validateFreshPageLayout: write.TrackIdMap is null);
 
             var receipt = new PioneerExportReceipt(
-                Version: 1,
+                Version: 3,
                 CollectionName: collectionName,
                 ExportedAt: DateTimeOffset.UtcNow,
                 TrackCount: planned.Count,
                 PlaylistCount: exportPlaylists.Count,
                 PioneerBackupPath: pioneerBackup,
                 ContentsBackupPath: contentsBackup,
-                Tracks: installedTracks.Select(t => new PioneerExportReceiptTrack(t.Track.Id, t.DeviceId, t.ContentPath, t.AnalysisPath, t.DeviceCues.Count)).ToList());
+                Tracks: installedTracks.Select(t => new PioneerExportReceiptTrack(t.Track.Id, t.DeviceId, t.ContentPath, t.AnalysisPath, t.DeviceCues.Count,
+                    t.DeviceCues.OrderBy(c => c.StartSeconds).Select(c => new PioneerExportReceiptCue(
+                        c.Kind.ToString(), (long)Math.Round(c.StartSeconds * 1000),
+                        c.Kind == DeviceCueKind.Loop && c.EndSeconds is { } end ? (long)Math.Round(end * 1000) : null)).ToList(),
+                    t.Waveform?.Preview.Length ?? 0, t.Waveform?.Tiny.Length ?? 0, t.Waveform?.SampleFrames)).ToList());
             var receiptPath = Path.Combine(root, "WISP", "pioneer-export-receipt.json");
             await File.WriteAllTextAsync(receiptPath, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }), ct);
             return new PioneerUsbExportResult(planned.Count, exportPlaylists.Count, installedPdb, receiptPath, pioneerBackup, contentsBackup);
@@ -171,7 +202,7 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
         }
     }
 
-    private static List<PioneerExportTrack> CreateDeviceTracks(IReadOnlyList<Track> tracks, IReadOnlyList<DeviceCue> cues, bool includeAnalysis)
+    private static List<PioneerExportTrack> CreateDeviceTracks(IReadOnlyList<Track> tracks, IReadOnlyList<DeviceCue> cues)
     {
         return tracks.Select((track, index) =>
         {
@@ -184,33 +215,20 @@ public sealed class PioneerUsbExportService(PioneerDeviceLibraryWriter writer)
             var title = Sanitize(track.Title ?? Path.GetFileNameWithoutExtension(track.FileName));
             var suffix = track.Id.ToString("N")[..8];
             var contentPath = $"/Contents/WISP/{artist}/{title} [{suffix}]{extension}";
-            var analysisPath = includeAnalysis ? $"/PIONEER/USBANLZ/P{id % 1000:000}/{id:X8}/ANLZ0000.DAT" : "";
-            var selectedCues = includeAnalysis
-                ? cues.Where(c => c.TrackId == track.Id).OrderBy(c => c.StartSeconds).ToList()
-                : [];
+            var analysisPath = PioneerAnalysisPath.ForAudio(contentPath);
+            var selectedCues = cues.Where(c => c.TrackId == track.Id).OrderBy(c => c.StartSeconds).ToList();
             return new PioneerExportTrack(id, contentPath, analysisPath, track, selectedCues);
         }).ToList();
     }
 
     private static string FindPlayerAcceptedTemplate(string targetRoot)
     {
-        var configured = Environment.GetEnvironmentVariable("WISP_PIONEER_TEMPLATE");
-        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return Path.GetFullPath(configured);
-
-        var target = Path.GetFullPath(targetRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var candidates = DriveInfo.GetDrives()
+        return PioneerTemplateLocator.Resolve(targetRoot,
+            Environment.GetEnvironmentVariable("WISP_PIONEER_TEMPLATE"),
+            Path.Combine(WispPaths.AppDataDir, "pioneer-reference", "export.pdb"),
+            DriveInfo.GetDrives()
             .Where(drive => drive.IsReady)
-            .Select(drive => Path.Combine(drive.RootDirectory.FullName, "PIONEER", "rekordbox", "export.pdb"))
-            .Where(File.Exists)
-            .Select(Path.GetFullPath)
-            .Where(path => !path.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            .Where(path => new FileInfo(path).Length >= 4096)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (candidates.Count == 1) return candidates[0];
-        if (candidates.Count == 0)
-            throw new PioneerTemplateRequiredException("Connect a separate USB exported by rekordbox so Wisp can use its player-accepted Pioneer database as a read-only template.");
-        throw new PioneerTemplateRequiredException("More than one Pioneer database template was found. Set WISP_PIONEER_TEMPLATE to the exact export.pdb file Wisp should read.");
+            .Select(drive => Path.Combine(drive.RootDirectory.FullName, "PIONEER", "rekordbox", "export.pdb")));
     }
 
     private static bool IsDriveRoot(string path)
@@ -244,4 +262,6 @@ public sealed class UnsupportedPioneerFormatException(string message) : InvalidO
 public sealed class PioneerTemplateRequiredException(string message) : InvalidOperationException(message);
 public sealed record PioneerUsbExportResult(int TrackCount, int PlaylistCount, string StagedPdbPath, string ReceiptPath, string? PioneerBackupPath, string? ContentsBackupPath);
 public sealed record PioneerExportReceipt(int Version, string CollectionName, DateTimeOffset ExportedAt, int TrackCount, int PlaylistCount, string? PioneerBackupPath, string? ContentsBackupPath, IReadOnlyList<PioneerExportReceiptTrack> Tracks);
-public sealed record PioneerExportReceiptTrack(Guid TrackId, int DeviceId, string ContentPath, string AnalysisPath, int MemoryCueCount);
+public sealed record PioneerExportReceiptTrack(Guid TrackId, int DeviceId, string ContentPath, string AnalysisPath, int MemoryCueCount,
+    IReadOnlyList<PioneerExportReceiptCue>? MemoryCues = null, int WaveformPreviewColumns = 0, int WaveformTinyColumns = 0, long? DecodedSampleFrames = null);
+public sealed record PioneerExportReceiptCue(string Kind, long StartMilliseconds, long? EndMilliseconds);

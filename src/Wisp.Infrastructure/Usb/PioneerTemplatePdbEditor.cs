@@ -25,21 +25,6 @@ internal sealed class PioneerTemplatePdbEditor
     public int NextId(int tableType, int idOffset)
         => EnumerateRows(tableType).Select(row => (int)Read32(_bytes, row + idOffset)).DefaultIfEmpty(0).Max() + 1;
 
-    /// <summary>
-    /// Hides the template's tracks and playlists using DeviceSQL's own
-    /// delete-only transaction semantics. Reference tables are left intact:
-    /// they do not make a track playable, and preserving them avoids needless
-    /// mutations to verified page structures.
-    /// </summary>
-    public void ClearCatalogueRows()
-    {
-        var changed = false;
-        changed |= ClearRows(0); // tracks
-        changed |= ClearRows(7); // playlist tree
-        changed |= ClearRows(8); // playlist entries
-        if (changed) Write32(20, Read32(_bytes, 20) + 1);
-    }
-
     public void Append(int tableType, byte[] row, int allocation, int? indexShiftOffset = null)
     {
         if (allocation > PageSize - PageHeaderSize - DirectoryBytes(1))
@@ -112,56 +97,6 @@ internal sealed class PioneerTemplatePdbEditor
         Write32(entry + 4, (uint)nextUnused);
         Write32(12, (uint)(nextUnused + 1));
         return page;
-    }
-
-    private bool ClearRows(int type)
-    {
-        var entry = TableOffset(type);
-        var page = (int)Read32(_bytes, entry + 8);
-        var last = (int)Read32(_bytes, entry + 12);
-        var generation = 0u;
-        var scan = page;
-        while (true)
-        {
-            generation = Math.Max(generation, Read32(_bytes, scan * PageSize + 16));
-            if (scan == last) break;
-            scan = (int)Read32(_bytes, scan * PageSize + 12);
-        }
-        generation++;
-        var changed = false;
-        while (true)
-        {
-            var offset = page * PageSize;
-            var next = (int)Read32(_bytes, offset + 12);
-            if ((_bytes[offset + 27] & 0x40) == 0)
-            {
-                // DeviceSQL represents deletion exclusively through each
-                // row group's presence bitmap. Keep the row count, heap
-                // length, free-space accounting and transaction masks byte
-                // exact: older CDJs validate those page-level values even
-                // when no rows are present. A missing presence bit makes the
-                // old row unreachable without changing the accepted page
-                // topology.
-                var slots = SlotCount(offset);
-                if (slots > 0)
-                {
-                    for (var group = 0; group < (slots + 15) / 16; group++)
-                    {
-                        var groupBase = offset + PageSize - group * 0x24;
-                        Write16(groupBase - 4, 0); // deleted: no live rows
-                        Write16(groupBase - 2, 0); // no appended rows in this save
-                    }
-                    _bytes[offset + 27] |= 0x10; // data page with deletions
-                    Write16(offset + 25, (ushort)(slots > 255 ? 1 : 0)); // zero live rows, retain overflow bit
-                    Write16(offset + 32, 0x1fff); // delete-only save sentinel
-                    Write16(offset + 34, 0x1fff); // delete-only save sentinel
-                    Write32(offset + 16, generation);
-                    changed = true;
-                }
-            }
-            if (page == last) return changed;
-            page = next;
-        }
     }
 
     private IEnumerable<int> EnumerateRows(int type)
