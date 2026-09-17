@@ -2,6 +2,63 @@
 
 Last reviewed: 2026-09-14
 
+## 2026-09-14: Rekordbox USB crash — transaction bookkeeping and playlist positions
+
+- **New compatibility failure:** owner reports rekordbox 7.2.16 crashes when
+  opening the WISP USB. CDJ-900 playback/waveform/Memory Cue acceptance does not
+  establish that rekordbox can safely open or edit the same database.
+- **Crash evidence:** the September 14 dump records a read access violation at
+  `rekordbox.exe+0x2561392`; a September 10 dump has the same fault offset, with
+  its original trigger unknown. Local instruction inspection shows a loop
+  population-counting/clearing 16-bit masks and moving backwards in 36-byte
+  groups until a remaining counter reaches zero. No private symbols or claimed
+  symbolized stack trace; dumps remain private and outside Git.
+- **Concrete defect matching that loop:** six WISP-modified pages declare one
+  changed row but retain 3–10 transaction bits from earlier appends. The preserved
+  native reference has matching counts/masks. Subtracting an oversized mask
+  population from a count of one underflows, allowing an out-of-page scan. This
+  is supported by the code/fixture evidence and the successful owner retest below.
+- **Implemented:** each template append clears the previous transaction masks,
+  marks only its own row, and uses the current database sequence before advancing
+  it. Fresh development databases now also publish matching transaction counts.
+  Presence masks, track/audio paths and waveform/cue encoding are unchanged.
+- **Implemented:** playlist-entry positions restart at one per playlist; duplicate
+  tracks retain separate occurrences. New root playlists append after existing
+  sibling sort orders. Missing referenced tracks fail rather than silently vanish.
+- **Validation:** validate transaction counts, masks and first-changed slot in
+  templates and staged/installed exports, with native paired failure sentinels
+  supported. Reject invalid/shared/cyclic table pages, uninitialized data pages,
+  heap/directory overlap and transaction bits beyond allocated slots. Playlist
+  checks use stored positions rather than physical row order and reject gaps,
+  duplicates and colliding sibling sort orders. This remains a bounded validator,
+  not full DeviceSQL compatibility certification or a general repair utility.
+- **Controlled F: retest prepared:** hash-gated offline repair of the saved
+  pre-crash catalogue changes 27 bytes on six data pages plus the file header,
+  only transaction metadata/sequence and playlist positions/order. The repaired
+  file passes the new validator; the pre-crash file is rejected. Installed it
+  with the saved working Pioneer tree after verifying the spare's physical
+  identity and closed apps. All nine installed Pioneer files are verified against
+  the snapshot except that deliberate PDB repair; all seven audio files are
+  byte-identical. No audio or waveform/cue regeneration, formatting or deletion.
+  The post-crash tree is recoverable at
+  `F:\WISP\backups\PIONEER-before-rekordbox-compat-20260914`; both original and
+  crash snapshots remain under `E:\Wisp USB Backups`, outside Git.
+- **Owner-confirmed rekordbox retest:** after installing the repaired saved
+  catalogue, the owner reports that opening/browsing F: now works without a crash.
+  This confirms the repaired USB opens in their rekordbox environment; it does
+  not certify later edit/delete/sync operations.
+- **Verification:** 115 Core, 149 Infrastructure and 166 API tests passed with
+  FFmpeg enabled and the private native/pre-crash/repaired fixtures exercised
+  read-only. Added 21 transaction/playlist cases, including 16-row group and page
+  boundaries, repeated/empty playlists, corrupt masks/counts and native sentinels.
+  Client code is unchanged; existing NuGet advisory warnings remain. No installer.
+- **Pending acceptance:** CDJ waveform/cue/playback regression; then a fresh export
+  from the patched WISP app. The one-off saved-file repair is not itself proof that
+  every fresh export or rekordbox edit works. Reference catalogue removal,
+  template independence and the Devices workspace remain separate open work.
+
+Format reference: [DeviceSQL transaction and playlist structure](https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html).
+
 ## 2026-09-14: Consolidated pending CDJ work after the Mixes redesign merge
 
 - Consolidated PRs #29 (cue encoding/USB selection), #30 (waveforms/path lookup)

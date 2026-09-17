@@ -60,7 +60,7 @@ public sealed class PioneerDeviceLibraryWriter
         var nextGenreId = editor.NextId(1, 0);
         var nextArtistId = editor.NextId(2, 4);
         var nextPlaylistId = editor.NextId(7, 12);
-        var nextPlaylistEntryId = editor.NextId(8, 0);
+        var nextPlaylistOrder = editor.NextRootPlaylistOrder();
         var artistIds = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
         var genreIds = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
         var trackIds = new Dictionary<int, int>();
@@ -100,14 +100,18 @@ public sealed class PioneerDeviceLibraryWriter
         foreach (var source in playlists)
         {
             var deviceId = nextPlaylistId++;
-            var row = BuildPlaylistRow(deviceId, source.Name, playlistIds.Count);
+            var row = BuildPlaylistRow(deviceId, source.Name, nextPlaylistOrder++);
             editor.Append(7, row, Align4(row).Length);
             playlistIds[source.DeviceId] = deviceId;
 
+            var entryPosition = 1;
             foreach (var oldTrackId in source.TrackIds)
             {
-                if (!trackIds.TryGetValue(oldTrackId, out var trackId)) continue;
-                var entry = BuildPlaylistEntryRow(nextPlaylistEntryId++, trackId, deviceId);
+                if (!trackIds.TryGetValue(oldTrackId, out var trackId))
+                    throw new InvalidOperationException($"Pioneer playlist '{source.Name}' references an unexported track.");
+                // entry_index is a one-based position WITHIN this playlist, not
+                // a database-global row ID. Repeated tracks remain occurrences.
+                var entry = BuildPlaylistEntryRow(entryPosition++, trackId, deviceId);
                 editor.Append(8, entry, Align4(entry).Length);
             }
         }
@@ -380,6 +384,8 @@ public sealed class PioneerDeviceLibraryWriter
         }
         BinaryPrimitives.WriteUInt16LittleEndian(page[(PageSize - 4)..], (ushort)((1 << rows.Count) - 1));
         BinaryPrimitives.WriteUInt16LittleEndian(page[(PageSize - 2)..], (ushort)((1 << rows.Count) - 1));
+        BinaryPrimitives.WriteUInt16LittleEndian(page[32..], (ushort)rows.Count);
+        BinaryPrimitives.WriteUInt16LittleEndian(page[34..], 0);
     }
 
     private static void WritePageHeader(Span<byte> page, int pageIndex, int type, int nextPage, uint sequence, int rowSlots, int validRows, byte flags, int freeSize, int usedSize)

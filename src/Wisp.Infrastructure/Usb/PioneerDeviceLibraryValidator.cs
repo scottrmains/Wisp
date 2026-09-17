@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Numerics;
 using System.Text;
 using Wisp.Core.Cues;
 
@@ -30,6 +31,8 @@ public static class PioneerDeviceLibraryValidator
         if (tables < 9 || bytes.Length % PageSize != 0)
             throw new InvalidOperationException("Generated Pioneer database is truncated or missing required tables.");
 
+        ValidatePageTransactions(bytes);
+
         var foundTrackIds = ReadRows(bytes, 0).Select(r => ReadLe32(bytes, r + 0x48)).ToHashSet();
         var expectedTrackIds = tracks.Select(t => (uint)t.DeviceId).ToHashSet();
         if (allowAdditionalRows ? !expectedTrackIds.IsSubsetOf(foundTrackIds) : !expectedTrackIds.SetEquals(foundTrackIds))
@@ -49,13 +52,19 @@ public static class PioneerDeviceLibraryValidator
         ValidateTrackRows(bytes);
 
         var entries = ReadRows(bytes, 8)
-            .Select(r => (TrackId: ReadLe32(bytes, r + 4), PlaylistId: ReadLe32(bytes, r + 8)))
+            .Select(r => (Position: ReadLe32(bytes, r), TrackId: ReadLe32(bytes, r + 4), PlaylistId: ReadLe32(bytes, r + 8)))
             .ToList();
         foreach (var playlist in playlists)
         {
-            var actual = entries.Where(e => e.PlaylistId == playlist.DeviceId).Select(e => e.TrackId).ToList();
-            if (!actual.SequenceEqual(playlist.TrackIds.Select(id => (uint)id)))
+            var actual = entries.Where(e => e.PlaylistId == playlist.DeviceId).OrderBy(e => e.Position).ToList();
+            if (!actual.Select(e => e.Position).SequenceEqual(Enumerable.Range(1, playlist.TrackIds.Count).Select(i => (uint)i)))
+                throw new InvalidOperationException($"Generated Pioneer playlist '{playlist.Name}' must have consecutive one-based entry positions.");
+            if (!actual.Select(e => e.TrackId).SequenceEqual(playlist.TrackIds.Select(id => (uint)id)))
                 throw new InvalidOperationException($"Generated Pioneer playlist '{playlist.Name}' has the wrong track order.");
+            var row = playlistRows.Single(r => ReadLe32(bytes, r + 12) == playlist.DeviceId);
+            if (playlistRows.Any(other => other != row && ReadLe32(bytes, other) == ReadLe32(bytes, row) &&
+                    ReadLe32(bytes, other + 8) == ReadLe32(bytes, row + 8)))
+                throw new InvalidOperationException($"Generated Pioneer playlist '{playlist.Name}' has a duplicate sibling sort order.");
         }
 
         foreach (var track in tracks)
@@ -82,6 +91,64 @@ public static class PioneerDeviceLibraryValidator
         if ((kind & 1) != 0) return Encoding.ASCII.GetString(bytes, start + 1, (kind >> 1) - 1);
         var length = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(start + 1, 2)) - 4;
         return (kind == 0x90 ? Encoding.Unicode : Encoding.ASCII).GetString(bytes, start + 4, length);
+    }
+
+    // Applies to native templates as well as freshly generated libraries. This
+    // does not require WISP's synthetic index layout or rewrite native pages.
+    internal static void ValidatePageTransactions(byte[] bytes)
+    {
+        if (bytes.Length < PageSize || bytes.Length % PageSize != 0 || ReadLe32(bytes, 4) != PageSize)
+            throw new InvalidOperationException("Pioneer database has an invalid page size or length.");
+        var count = ReadLe32(bytes, 8);
+        if (count == 0 || count > (PageSize - 28) / 16)
+            throw new InvalidOperationException("Pioneer database has an invalid table directory.");
+        var ownedPages = new HashSet<uint>();
+        for (var table = 0; table < count; table++)
+        {
+            var pointer = 28 + table * 16;
+            var type = ReadLe32(bytes, pointer);
+            var page = ReadLe32(bytes, pointer + 8);
+            var last = ReadLe32(bytes, pointer + 12);
+            while (true)
+            {
+                if (page == 0 || page >= bytes.Length / PageSize || !ownedPages.Add(page))
+                    throw new InvalidOperationException("Pioneer database has an invalid, shared or cyclic table page.");
+                var offset = checked((int)page * PageSize);
+                if (ReadLe32(bytes, offset + 4) != page || ReadLe32(bytes, offset + 8) != type)
+                    throw new InvalidOperationException("Pioneer database page identity does not match its table.");
+                var flags = bytes[offset + 27];
+                if ((flags & 0x40) == 0)
+                {
+                    if (flags is not (0x24 or 0x34))
+                        throw new InvalidOperationException("Pioneer database contains an uninitialized or unsupported data page.");
+                    var slots = (int)(ReadLe32(bytes, offset + 24) & 0x1fff);
+                    var directoryBytes = 2 * slots + 4 * ((slots + 15) / 16);
+                    var used = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 30, 2));
+                    if (40 + used + directoryBytes > PageSize)
+                        throw new InvalidOperationException("Pioneer database row directory overlaps its heap.");
+                    var changed = 0;
+                    var firstChanged = -1;
+                    for (var group = 0; group < (slots + 15) / 16; group++)
+                    {
+                        var footer = offset + PageSize - group * 36;
+                        var mask = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(footer - 2, 2));
+                        var validBits = (1u << Math.Min(16, slots - group * 16)) - 1;
+                        if (((uint)mask & ~validBits) != 0)
+                            throw new InvalidOperationException("Pioneer transaction references an unallocated row slot.");
+                        if (mask != 0 && firstChanged < 0) firstChanged = group * 16 + BitOperations.TrailingZeroCount((uint)mask);
+                        changed += BitOperations.PopCount((uint)mask);
+                    }
+                    var transactionCount = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 32, 2));
+                    var transactionFirst = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 34, 2));
+                    // Native failed/no-op transactions use this paired sentinel.
+                    if (!(transactionCount == 0x1fff && transactionFirst == 0x1fff) &&
+                        (transactionCount != changed || (changed > 0 && transactionFirst != firstChanged)))
+                        throw new InvalidOperationException($"Pioneer table {type} page {page} has inconsistent transaction row counts/masks. Use an intact rekordbox reference, not a previous WISP or crashed export.");
+                }
+                if (page == last) break;
+                page = ReadLe32(bytes, offset + 12);
+            }
+        }
     }
 
     /// <summary>
