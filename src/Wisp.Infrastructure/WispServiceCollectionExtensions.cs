@@ -36,6 +36,7 @@ public static class WispServiceCollectionExtensions
         services.AddSingleton<IAudioFileValidator, AudioFileValidator>();
         services.AddSingleton<UsbFileSync>();
         services.AddSingleton<PioneerDeviceLibraryWriter>();
+        services.AddSingleton<IPioneerWaveformAnalyzer, PioneerWaveformAnalyzer>();
         services.AddSingleton<PioneerUsbExportService>();
 
         services.AddScoped<CleanupSuggestionService>();

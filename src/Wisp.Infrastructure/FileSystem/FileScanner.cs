@@ -27,7 +27,13 @@ public class FileScanner : IFileScanner
 
         foreach (var path in Directory.EnumerateFiles(root, "*", options))
         {
-            if (AudioExtensions.Contains(Path.GetExtension(path)) && !Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path))
+            if (AudioExtensions.Contains(Path.GetExtension(path)) && !Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path)
+                && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Contains("recording-input-tests", StringComparer.OrdinalIgnoreCase)
+                && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Contains(Wisp.Infrastructure.Audio.RecordingDiskStore.FolderName, StringComparer.OrdinalIgnoreCase)
+                && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Contains(Wisp.Infrastructure.Audio.MixExportEncoder.FolderName, StringComparer.OrdinalIgnoreCase))
                 yield return path;
         }
     }

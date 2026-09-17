@@ -4,8 +4,7 @@ import { alertDialog, confirmDialog, promptDialog } from '../../components/dialo
 import { bridge, bridgeAvailable } from '../../bridge'
 import { mixPlans } from '../../api/mixPlans'
 import { useMixPlans } from './useMixPlans'
-
-const directCdjExportAvailable = true
+import { CdjExportButton } from '../usb/CdjExportButton'
 
 export function PlanSwitcher() {
   const { plans, activePlanId, setActivePlanId, create, remove } = useMixPlans()
@@ -54,48 +53,6 @@ export function PlanSwitcher() {
     await alertDialog({
       title: 'USB track sync complete',
       message: `Copied ${result.copied} track${result.copied === 1 ? '' : 's'}; ${result.skipped} already up to date. This creates a portable folder-browse USB plus WISP playlists. Use “Export to CDJ USB” for the Pioneer device-library export.`,
-    })
-    setOpen(false)
-  }
-
-  const exportToCdj = async () => {
-    if (!directCdjExportAvailable) {
-      await alertDialog({
-        title: 'Direct CDJ export is unavailable',
-        message: 'The current Pioneer Device Library writer did not pass the physical CDJ-850 test. WISP has disabled it to avoid creating USBs that appear empty. Track-only USB sync remains available while the verified writer is completed.',
-        tone: 'error',
-      })
-      return
-    }
-    if (!active || !bridgeAvailable()) return
-    const picked = await bridge.pickFolder()
-    if (!picked.path) return
-    const preflight = await mixPlans.cdjPreflight(active.id, picked.path)
-    if (preflight.missingFiles.length || preflight.unsupportedFiles.length) {
-      await alertDialog({ title: 'CDJ export needs attention', message: `${preflight.missingFiles.length} missing file(s) and ${preflight.unsupportedFiles.length} unsupported file(s) were found. All tracks must be MP3, AAC, WAV or AIFF.`, tone: 'error' })
-      return
-    }
-    if (preflight.requiredBytes > preflight.availableBytes) {
-      await alertDialog({ title: 'Not enough USB space', message: 'CDJ export was not started because the selected USB does not have enough available space.', tone: 'error' })
-      return
-    }
-    const approved = await confirmDialog(preflight.needsPioneerReplacement
-      ? {
-        title: 'Replace the Pioneer library?',
-        message: 'WISP will move the existing PIONEER directory to WISP/backups before installing the prepared library. Existing audio stays on the USB, but only the new WISP library will be shown on the player.',
-        confirmLabel: 'Back up and replace', danger: true,
-      }
-      : {
-        title: 'Run Memory Cue compatibility test?',
-        message: `WISP will copy ${preflight.trackCount} tracks, append its playlist and write ${preflight.deviceCueCount} WISP Memory Cue(s). This test retains the template catalogue; on the CDJ, open the WISP playlist, load each track and verify its Memory Cues.`,
-        confirmLabel: 'Create test USB',
-      })
-    if (!approved) return
-    const result = await mixPlans.exportToCdj(active.id, picked.path, preflight.needsPioneerReplacement)
-    await alertDialog({
-      title: 'CDJ Memory Cue test USB created',
-      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported. On the CDJ, open the WISP playlist, verify each copied track loads, then verify its WISP Memory Cues; template tracks are expected during this diagnostic.`,
-      confirmLabel: 'Done',
     })
     setOpen(false)
   }
@@ -169,14 +126,8 @@ export function PlanSwitcher() {
                 >
                   Sync tracks to USBâ€¦
                 </button>
-                <button
-                  onClick={() => void exportToCdj()}
-                  disabled={!bridgeAvailable() || !directCdjExportAvailable}
-                  title={directCdjExportAvailable ? (bridgeAvailable() ? 'Create a CDJ-850 prepared Pioneer USB library' : 'CDJ export is available in the Wisp desktop app') : 'Direct CDJ-850 export is disabled pending physical-device validation.'}
-                  className="mt-1 w-full rounded border border-amber-400/50 bg-amber-400/10 px-2 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Export to CDJ USB
-                </button>
+                <CdjExportButton source="mix-plan" sourceId={active.id} sourceName={active.name}
+                  className="mt-1 w-full justify-center" />
               </div>
             )}
 

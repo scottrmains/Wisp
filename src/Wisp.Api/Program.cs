@@ -12,9 +12,11 @@ using Wisp.Api.Playlists;
 using Wisp.Api.Tagging;
 using Wisp.Api.MixPlans;
 using Wisp.Api.Settings;
+using Wisp.Api.Recordings;
 using Wisp.Api.Soulseek;
 using Wisp.Api.Transcoder;
 using Wisp.Api.Wanted;
+using Wisp.Api.Usb;
 using Wisp.Infrastructure;
 using Wisp.Infrastructure.ExternalCatalog.Discogs;
 using Wisp.Infrastructure.ExternalCatalog.Soulseek;
@@ -29,6 +31,29 @@ public class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Read-only support command: no profile creation, DB, host or capture.
+        if (args.SequenceEqual(new[] { "--list-cdj-usbs" }))
+        {
+            try
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+                    new Wisp.Infrastructure.Usb.WindowsUsbExportDevices().ListAsync(CancellationToken.None).GetAwaiter().GetResult(),
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                return 0;
+            }
+            catch (Exception ex) { Console.Error.WriteLine($"Cannot list USB devices: {ex.Message}"); return 1; }
+        }
+        if (args.SequenceEqual(new[] { "--list-recording-inputs" }))
+        {
+            try
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+                    new Wisp.Infrastructure.Audio.RecordingInputDevices().List(),
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                return 0;
+            }
+            catch (Exception ex) { Console.Error.WriteLine($"Cannot list recording inputs: {ex.Message}"); return 1; }
+        }
         WispPaths.EnsureCreated();
 
         Log.Logger = new LoggerConfiguration()
@@ -71,6 +96,25 @@ public class Program
                 opts.UseSqlite(WispPaths.DatabaseConnectionString));
 
             builder.Services.AddSingleton<WispSettingsStore>();
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.CaptureLease>();
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.RecordingDiskStore>();
+            builder.Services.AddSingleton<MixRecorder>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<MixRecorder>());
+            builder.Services.AddSingleton(sp => new RecordingWorkspace(sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<Wisp.Infrastructure.Audio.CaptureLease>(),
+                sp.GetRequiredService<Wisp.Infrastructure.Audio.RecordingDiskStore>(), sp.GetRequiredService<Wisp.Infrastructure.Audio.Mp3Transcoder>(),
+                Path.Combine(WispPaths.AppDataDir, "recording-waveforms"), sp.GetRequiredService<ILogger<RecordingWorkspace>>()));
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<RecordingWorkspace>());
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.MixExportEncoder>();
+            builder.Services.AddSingleton<RecordingExports>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<RecordingExports>());
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.IRecordingInputDevices, Wisp.Infrastructure.Audio.RecordingInputDevices>();
+            builder.Services.AddSingleton(sp => new RecordingInputTest(
+                sp.GetRequiredService<Wisp.Infrastructure.Audio.IRecordingInputDevices>(),
+                sp.GetRequiredService<ILogger<RecordingInputTest>>(),
+                Path.Combine(WispPaths.AppDataDir, "recording-input-tests"),
+                sp.GetRequiredService<Wisp.Infrastructure.Audio.CaptureLease>()));
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<RecordingInputTest>());
             // Mp3Transcoder reads the optional ffmpeg-path override from
             // WispSettings; injecting the lookup as a Func keeps the
             // Infrastructure layer ignorant of WispSettings internals.
@@ -170,6 +214,12 @@ public class Program
             app.MapLibrary();
             app.MapTrackFiles();
             app.MapLoudness();
+            app.MapRecordingInputs();
+            app.MapRecordings();
+            app.MapRecordingWorkspace();
+            app.MapRecordingTracklists();
+            app.MapRecordingFeedback();
+            app.MapRecordingExports();
             app.MapMixPlans();
             app.MapCues();
             app.MapCleanup();
@@ -180,6 +230,7 @@ public class Program
             app.MapBlendRatings();
             app.MapTags();
             app.MapPlaylists();
+            app.MapCdjUsbDevices();
             app.MapWanted();
             app.MapDiscover();
             app.MapTranscoder();

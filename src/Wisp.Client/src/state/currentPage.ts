@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type AppPage = 'library' | 'mix-plans' | 'discover' | 'wanted' | 'crate-digger'
+export type AppPage = 'library' | 'mix-plans' | 'discover' | 'wanted' | 'crate-digger' | 'recordings'
 
 interface CurrentPageState {
   page: AppPage

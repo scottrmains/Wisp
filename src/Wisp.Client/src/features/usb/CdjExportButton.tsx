@@ -1,7 +1,9 @@
 import { HardDriveUpload } from 'lucide-react'
-import { cdjExport, type CdjExportSource } from '../../api/cdjExport'
-import { bridge, bridgeAvailable } from '../../bridge'
+import { lazy, Suspense, useRef, useState } from 'react'
+import { cdjExport, type CdjExportSource, type CdjUsbDevice } from '../../api/cdjExport'
+import { bridgeAvailable } from '../../bridge'
 import { alertDialog, confirmDialog } from '../../components/dialog'
+const CdjUsbPicker = lazy(() => import('./CdjUsbPicker').then(module => ({ default: module.CdjUsbPicker })))
 
 interface Props {
   source: CdjExportSource
@@ -11,20 +13,20 @@ interface Props {
   className?: string
 }
 
-// A removable-drive export uses a separate player-accepted Pioneer USB as a
-// read-only database template. The template USB is never modified.
-const directCdjExportAvailable = true
+// A preserved player-accepted database is still used as a read-only template.
+// CDJ-900 playlist playback, overview waveforms and Memory Cues are hardware-confirmed.
 
 /// A deliberately prominent export entry point. The server performs the
 /// format/capacity checks again during the actual write; this preflight makes
 /// the important failures visible before the user confirms a USB change.
 export function CdjExportButton({ source, sourceId, sourceName, disabled = false, className = '' }: Props) {
-  const exportToCdj = async () => {
+  const [exporting, setExporting] = useState(false)
+  const [choosing, setChoosing] = useState(false)
+  const inFlight = useRef(false)
+  const exportToCdj = async (device: CdjUsbDevice) => {
     if (!bridgeAvailable()) return
-    const picked = await bridge.pickFolder()
-    if (!picked.path) return
 
-    const preflight = await cdjExport.preflight(source, sourceId, picked.path)
+    const preflight = await cdjExport.preflight(source, sourceId, device.rootPath, device.deviceId)
     if (preflight.missingFiles.length || preflight.unsupportedFiles.length) {
       await alertDialog({
         title: 'CDJ export needs attention',
@@ -45,38 +47,58 @@ export function CdjExportButton({ source, sourceId, sourceName, disabled = false
     const approved = await confirmDialog(preflight.needsPioneerReplacement
       ? {
         title: 'Replace the Pioneer library?',
-        message: 'WISP will move the existing PIONEER directory to WISP/backups before installing the prepared library. Existing audio stays on the USB, but only the new WISP library will be shown on the player.',
+        message: 'This replaces the USB’s current Pioneer library with this export, not an incremental sync. WISP first backs up PIONEER and its previous exported audio under WISP/backups. Use the playlists prefixed WISP on the player: leftover reference entries are still listed and may not load.',
         confirmLabel: 'Back up and replace',
         danger: true,
       }
       : {
-        title: 'Run Memory Cue compatibility test?',
-        message: `WISP will copy ${preflight.trackCount} tracks, append its playlist and write ${preflight.deviceCueCount} WISP Memory Cue(s). This test retains the template catalogue; on the CDJ, open the WISP playlist, load each track and verify its Memory Cues.`,
-        confirmLabel: 'Create test USB',
+        title: 'Export to CDJ USB?',
+        message: `Copy ${preflight.trackCount} tracks with overview waveforms and ${preflight.deviceCueCount} Memory Cue(s) to ${device.label} (${device.rootPath}). Analysis may take a few minutes. WISP still uses a reference database, so extra reference entries may appear. On the CDJ, open the playlists prefixed WISP.`,
+        confirmLabel: 'Export tracks',
       })
     if (!approved) return
 
-    const result = await cdjExport.export(source, sourceId, picked.path, preflight.needsPioneerReplacement)
+    const result = await cdjExport.export(source, sourceId, device.rootPath, preflight.needsPioneerReplacement, device.deviceId)
     await alertDialog({
-      title: 'CDJ Memory Cue test USB created',
-      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported. On the CDJ, open the WISP playlist, verify each copied track loads, then verify its WISP Memory Cues; template tracks are expected during this diagnostic.`,
+      title: 'CDJ export complete',
+      message: `${result.trackCount} tracks and ${result.playlistCount} playlists were exported with validated overview waveforms and Memory Cue records. Safely eject the USB, then open a WISP playlist. Use CUE/LOOP CALL to recall saved cues. Playback, overview waveforms and Memory Cues have been tested on CDJ-900; the full CDJ-850 profile remains unverified. Extra reference entries remain; beat grids and detailed scrolling waveforms are not included.`,
       confirmLabel: 'Done',
     })
   }
 
+  const startExport = async (device: CdjUsbDevice) => {
+    if (inFlight.current) return
+    inFlight.current = true
+    setChoosing(false)
+    setExporting(true)
+    try {
+      await exportToCdj(device)
+    } catch (error) {
+      await alertDialog({
+        title: 'CDJ export could not complete',
+        message: error instanceof Error ? error.message : 'The USB export failed. Check the reference database and USB connection, then try again.',
+        tone: 'error',
+      })
+    } finally {
+      inFlight.current = false
+      setExporting(false)
+    }
+  }
+
   const unavailable = !bridgeAvailable()
-  const unavailableForHardware = !directCdjExportAvailable
-  return (
+  return (<>
     <button
-      onClick={() => void exportToCdj()}
-      disabled={disabled || unavailable || unavailableForHardware}
-      title={unavailableForHardware
-        ? 'Direct CDJ-850 export is disabled until it passes the physical-device compatibility test.'
-        : unavailable ? 'CDJ export is available in the WISP desktop app' : `Run the CDJ-850 hardware-validation export for “${sourceName}”`}
+      onClick={() => setChoosing(true)}
+      disabled={disabled || unavailable || exporting || choosing}
+      aria-busy={exporting}
+      title={unavailable ? 'CDJ export is available in the WISP desktop app' : `Export “${sourceName}” with overview waveforms and Memory Cues`}
       className={`inline-flex items-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
     >
       <HardDriveUpload size={14} strokeWidth={1.8} />
-      Export to CDJ USB
+      {exporting ? 'Preparing CDJ export…' : 'Export to CDJ USB'}
     </button>
-  )
+    {choosing && <Suspense fallback={<span role="status" className="text-xs text-[var(--color-muted)]">Loading USB selector…</span>}>
+      <CdjUsbPicker sourceName={sourceName} onClose={() => setChoosing(false)} onChoose={device => void startExport(device)} />
+    </Suspense>}
+  </>)
 }

@@ -1,6 +1,737 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-11
+Last reviewed: 2026-09-14
+
+## 2026-09-14: Rekordbox USB crash — transaction bookkeeping and playlist positions
+
+- **New compatibility failure:** owner reports rekordbox 7.2.16 crashes when
+  opening the WISP USB. CDJ-900 playback/waveform/Memory Cue acceptance does not
+  establish that rekordbox can safely open or edit the same database.
+- **Crash evidence:** the September 14 dump records a read access violation at
+  `rekordbox.exe+0x2561392`; a September 10 dump has the same fault offset, with
+  its original trigger unknown. Local instruction inspection shows a loop
+  population-counting/clearing 16-bit masks and moving backwards in 36-byte
+  groups until a remaining counter reaches zero. No private symbols or claimed
+  symbolized stack trace; dumps remain private and outside Git.
+- **Concrete defect matching that loop:** six WISP-modified pages declare one
+  changed row but retain 3–10 transaction bits from earlier appends. The preserved
+  native reference has matching counts/masks. Subtracting an oversized mask
+  population from a count of one underflows, allowing an out-of-page scan. This
+  is supported by the code/fixture evidence and the successful owner retest below.
+- **Implemented:** each template append clears the previous transaction masks,
+  marks only its own row, and uses the current database sequence before advancing
+  it. Fresh development databases now also publish matching transaction counts.
+  Presence masks, track/audio paths and waveform/cue encoding are unchanged.
+- **Implemented:** playlist-entry positions restart at one per playlist; duplicate
+  tracks retain separate occurrences. New root playlists append after existing
+  sibling sort orders. Missing referenced tracks fail rather than silently vanish.
+- **Validation:** validate transaction counts, masks and first-changed slot in
+  templates and staged/installed exports, with native paired failure sentinels
+  supported. Reject invalid/shared/cyclic table pages, uninitialized data pages,
+  heap/directory overlap and transaction bits beyond allocated slots. Playlist
+  checks use stored positions rather than physical row order and reject gaps,
+  duplicates and colliding sibling sort orders. This remains a bounded validator,
+  not full DeviceSQL compatibility certification or a general repair utility.
+- **Controlled F: retest prepared:** hash-gated offline repair of the saved
+  pre-crash catalogue changes 27 bytes on six data pages plus the file header,
+  only transaction metadata/sequence and playlist positions/order. The repaired
+  file passes the new validator; the pre-crash file is rejected. Installed it
+  with the saved working Pioneer tree after verifying the spare's physical
+  identity and closed apps. All nine installed Pioneer files are verified against
+  the snapshot except that deliberate PDB repair; all seven audio files are
+  byte-identical. No audio or waveform/cue regeneration, formatting or deletion.
+  The post-crash tree is recoverable at
+  `F:\WISP\backups\PIONEER-before-rekordbox-compat-20260914`; both original and
+  crash snapshots remain under `E:\Wisp USB Backups`, outside Git.
+- **Owner-confirmed rekordbox retest:** after installing the repaired saved
+  catalogue, the owner reports that opening/browsing F: now works without a crash.
+  This confirms the repaired USB opens in their rekordbox environment; it does
+  not certify later edit/delete/sync operations.
+- **Verification:** 115 Core, 149 Infrastructure and 166 API tests passed with
+  FFmpeg enabled and the private native/pre-crash/repaired fixtures exercised
+  read-only. Added 21 transaction/playlist cases, including 16-row group and page
+  boundaries, repeated/empty playlists, corrupt masks/counts and native sentinels.
+  Client code is unchanged; existing NuGet advisory warnings remain. No installer.
+- **Pending acceptance:** CDJ waveform/cue/playback regression; then a fresh export
+  from the patched WISP app. The one-off saved-file repair is not itself proof that
+  every fresh export or rekordbox edit works. Reference catalogue removal,
+  template independence and the Devices workspace remain separate open work.
+
+Format reference: [DeviceSQL transaction and playlist structure](https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html).
+
+## 2026-09-14: Consolidated pending CDJ work after the Mixes redesign merge
+
+- Consolidated PRs #29 (cue encoding/USB selection), #30 (waveforms/path lookup)
+  and #31 (milestone cleanup/Devices roadmap) into #31, updated against `develop`
+  after the owner merged #28. Preserved both sets of implementation history in
+  the status-file conflict; the merged Mixes UI and all CDJ changes remain intact.
+- No new feature, USB mutation or hardware compatibility claim. Devices browsing
+  and ordering remain planned; catalogue pruning still needs the recorded
+  evidence gates. Superseded PRs are closed without merging their branches.
+- **Combined verification:** 115 Core, 128 Infrastructure, 166 API, 53 client
+  unit and 74 browser tests passed; client build and lint passed (13 existing
+  warnings). Existing NuGet advisories remain. No installer generated.
+
+## 2026-09-13: CDJ milestone cleanup, recovery snapshot and Devices roadmap
+
+- **Safe closeout, not full Phase 25 completion:** preserve the owner's accepted
+  CDJ-900 playback/overview/Memory Cue baseline. Reference-only catalogue entries
+  still remain; template-independent export, catalogue pruning and broader
+  hardware/format coverage are not implemented by this cleanup.
+- **Export UI:** replace stale test-only/pending-hardware messages with accurate
+  CDJ-900 scope, safe-eject/cue-recall instructions and remaining limitations.
+  Replacement explicitly means the whole Pioneer library, not incremental sync,
+  with the previous PIONEER and WISP audio backed up first.
+- **Missed entry point fixed:** the header's Mix Plan dropdown now uses the shared
+  USB picker/export component, including physical-device identity and replacement
+  review. Removed its obsolete folder-picker API wrappers. A browser regression
+  test exercises that exact entry point and rejects any folder-picker request.
+- **Dead code removed:** the disabled catalogue-only switch and unused
+  `ClearCatalogueRows` deletion prototype. This does not change the active
+  database append/analysis encoder or remove any reference tracks from a USB.
+  Do not resurrect the unverified deletion algorithm as a compatibility fix.
+- **Recovery evidence:** with owner authorization, copied the current spare F:
+  contents to `E:\Wisp USB Backups\2026-09-13-working-cdj900-76F3C2B2` outside Git.
+  All 53 files (345,357,611 bytes), including existing backups and player files,
+  were length/SHA-256 verified, then the source inventory/hashes rechecked.
+  Only Windows System Volume Information was excluded. This is a file snapshot,
+  not a sector image; the single-partition MBR/FAT32 USB was not changed.
+  One spare USB suffices for sequential samples; other prepared USBs stay untouched.
+- **Next evidence gate:** capture a native rekordbox before/after device-track
+  deletion on that same spare, preserving both states before implementing pruning.
+  The working WISP snapshot is a recovery baseline, not that deletion fixture.
+- **Planned, not built:** [Devices workspace phases](WISP_USB_WORKSPACE_PLAN.md):
+  actual device-library browsing first, then USB-local draft ordering with explicit
+  reviewed Save to USB; later incremental playlist management and cue/history
+  import. Browsing/playing/dragging does not auto-sync. Reordering must preserve
+  audio paths and byte-identical analysis to protect the accepted hardware baseline.
+- **Verification:** 115 Core, 128 Infrastructure and 166 API tests passed using
+  an isolated build output; client build, 53 unit tests, 73 browser tests and lint
+  passed (13 existing warnings). No installer, production-data mutation or new
+  hardware test performed.
+
+## 2026-09-13: CDJ-900 hardware acceptance — waveform and Memory Cues working
+
+- **Owner-confirmed result after `5f05fb1`:** following the analysis-path repair
+  and re-export in the ongoing F:/Smoke Test Mix/CDJ-900 test, the owner reports
+  that both the waveform and Memory Cues are working. Together with the earlier
+  playlist/playback confirmation, this verifies direct Wisp export with overview
+  waveform display and Memory Cue recall in this tested CDJ-900 workflow.
+- **Scope:** this is user-reported physical hardware evidence, not just a binary
+  parser/test pass. The report does not individually certify all 11 timestamps,
+  loops, every supported audio format, large libraries or the CDJ-850. Those
+  cases need separate acceptance tests; do not label export universally flawless.
+- **Key repair:** player-derived audio-path hashing places Wisp's analysis where
+  the CDJ looks for it. A PDB link alone was insufficient. Preserve this lookup
+  behavior and its regression tests in future exporter changes.
+- **Remaining work:** remove retained reference catalogue entries/template
+  dependency, handle analysis hash collisions beyond safe rejection, and address
+  VBR seek indexes/beat grids/detailed waveforms as separately scoped features.
+  No additional code, USB changes or formatting were needed to record this result.
+
+This successful hardware report supersedes the pending waveform/Memory Cue
+acceptance statements in the historical entries below for this CDJ-900 test.
+
+## 2026-09-13: CDJ analysis lookup path repair — hardware retest pending
+
+- **Hardware result:** the owner re-exported with waveform support and still
+  saw no waveform. F:'s version-3 receipt confirms the new exporter was used;
+  all seven DAT files contain the generated previews. Software validation was
+  insufficient: a self-consistent PDB link does not establish player discovery.
+- **Concrete path mismatch:** for Blue Monday, Wisp wrote analysis under
+  `P001/00000001`, while the CDJ created its own file under `P050/00018218`.
+  The published rekordbox audio-path hash reproduces the latter exactly. It
+  also reproduces all three saved rekordbox reference directories and the
+  previously observed CDJ-created directories for the other two loaded tracks.
+  This establishes an incorrect lookup location; it does not prove there are
+  no other analysis-acceptance requirements on CDJ-850/900.
+- **Fixed:** derive `PIONEER/USBANLZ/Pxxx/yyyyyyyy/ANLZ0000.DAT` from the exact
+  USB-relative audio path using UTF-16 code units and uint32 wraparound, instead
+  of sequential DeviceSQL IDs. PDB links, DAT placement and receipt paths use
+  the same result. Waveform-bearing export validation now also requires this
+  player-derived location. Waveform payloads, cue encoding, audio, catalogue
+  allocation and USB layout are unchanged in this follow-up.
+- **Collision safety:** detect duplicate analysis paths before copying tracks
+  and before sidecar writes. The 200003-bucket hash can collide; until shared
+  bucket allocation is hardware-verified, stop with an actionable error rather
+  than overwrite another selected track's waveform/cues.
+- **Verified:** 115 Core, 128 Infrastructure and 166 API tests. Added published
+  path vectors, UTF-16/overflow coverage, a genuine hash-collision case, rejection
+  of the former self-consistent ID-based folder and opt-in comparison against
+  private rekordbox/player-created folders. Reanalyzed all seven actual export
+  tracks into an isolated template-based test database at the corrected paths,
+  validating their previews and all 11 cue timestamps. USB and production data
+  were read-only. Client code is unchanged from the preceding 72-browser /
+  53-unit-test pass; no installer generated. One published example disagrees
+  with that source's own algorithm and is not used as a trusted test oracle;
+  the actual local rekordbox/CDJ evidence matches.
+- **Next:** rebuild/restart the updated debug app and export the same playlist
+  to F: again, accepting the existing-library backup/replacement. No formatting
+  is needed. Safely eject, load from the WISP playlist and check the overview.
+  This lookup repair could also affect cue discovery, but Memory Cue recall
+  remains unconfirmed. Missing VBR/beat-grid/detailed-waveform support and the
+  retained reference catalogue remain separate limitations.
+
+Algorithm source (reported hardware work used CDJ-3000, so checked locally
+against the owner's older-player files rather than assuming compatibility):
+[fourfour — ANLZ path hash](https://github.com/morizkraemer/fourfour/blob/master/pioneer-usb-writer/reference-code/PIONEER.md#1-anlz-path-hash-algorithm).
+
+## 2026-09-13: CDJ overview waveform export — software verified, player test pending
+
+- **New hardware evidence:** after the MBR/single-FAT32 preparation, the owner
+  reports that the CDJ-900 recognizes the USB and plays tracks loaded directly
+  from the WISP playlist. This establishes basic playback for that test, not
+  complete compatibility. The owner is unsure about Memory Cue recall and will
+  retest it; it is **unconfirmed**, not a confirmed failure or success.
+- **Waveform diagnosis:** the seven-track version-2 export had no `PWAV` or
+  `PWV2` sections. Its 11 cue timestamps remained intact. Additional apparently
+  player-created `ANLZ0001.DAT` files existed for three tracks; their existence
+  does not establish why the player did or did not use Wisp's cue data.
+- **Implemented:** decode each staged audio copy through the configured/bundled
+  FFmpeg and write 400-column `PWAV` and 100-column `PWV2` overview previews in
+  its `ANLZ0000.DAT`. Set the database analysis date and validate its analysis
+  and audio path links. Original audio, cue timestamps, playlist allocation and
+  physical USB layout are unchanged. This adds overview waveforms, not detailed
+  scrolling/RGB waveforms, beat grids or MP3 variable-bitrate seek indexes.
+- **Signal handling:** stream 44.1 kHz stereo PCM into bounded 10 ms energy
+  summaries, using actual decoded length rather than cached track duration.
+  Separate channel energy avoids anti-phase cancellation. Preserve silence and
+  the final partial window; fixed square-root RMS display scaling does not
+  normalize the music or alter playback gain. PWAV uses neutral whiteness;
+  Wisp is not reproducing rekordbox's proprietary spectral/color analysis.
+  Tiny-preview low-nibble range follows the privately preserved reference.
+- **Safety:** complete analysis and validation before replacing the existing
+  library. Decode failure/cancellation leaves existing USB files intact; hidden
+  FFmpeg children are terminated on failure/cancellation. Ten-minute analysis
+  timeout per track, six-hour decoded duration cap, bounded stderr. Application
+  exports cannot silently skip an unavailable analyzer. Both export endpoints
+  return actionable waveform errors through Wisp's existing dialogs.
+- **Validation/receipt:** reject missing/duplicate/malformed preview sections,
+  incorrect counts/header constants, tiny heights outside the profile range,
+  payload mismatches and wrong database links/dates. Version-3 receipts retain
+  every cue timestamp and add preview sizes and decoded sample-frame count.
+  Dialogs now explain waveform analysis and the pending physical test.
+- **Verified locally:** 115 Core, 117 Infrastructure and 166 API tests pass;
+  client build, 53 unit tests, all 72 browser tests and zero-error lint pass
+  (13 existing warnings).
+  Real FFmpeg integration ran, including anti-phase WAV, corruption handling,
+  all seven tracks from the owner's F: receipt, and an isolated template-based
+  database containing their waveforms and all 11 cues. Preview headers match
+  the three private rekordbox reference DAT files. No USB files or production
+  library data were modified by these tests. Existing SQLite/OpenAPI package
+  advisory warnings remain unrelated. No installer was generated.
+- **Next:** rebuild/restart Wisp, re-export `Smoke Test Mix` to the existing F:
+  USB, confirm the backup/replacement dialog and safely eject. Load the WISP
+  playlist on CDJ-900 and check the overview waveform. No reformat is required.
+  Waveform display and Memory Cue recall still require physical verification;
+  retained reference catalogue entries remain a known limitation.
+
+Format sources: [Crate Digger ANLZ schema](https://github.com/Deep-Symmetry/crate-digger/blob/main/src/main/kaitai/rekordbox_anlz.ksy)
+and [Beat Link preview decoder](https://github.com/Deep-Symmetry/beat-link/blob/main/src/main/java/org/deepsymmetry/beatlink/data/WaveformPreview.java).
+
+## 2026-09-13: connected USB selector and CDJ-900 NO USB diagnosis
+
+- **Hardware report:** the owner exported `Smoke Test Mix` from the corrected
+  debug build; the original CDJ-900 displayed **NO USB**. This is not a successful
+  player acceptance result for the cue repair.
+- **Read-only finding:** Windows reports a single approximately 32 GB Generic
+  Flash Disk using **GPT**, with its main FAT32 volume at F: and a 512 KiB
+  `UEFI_NTFS` boot partition at H:. These are partitions of the SAME physical
+  USB, not two separate sticks. Formatting F: alone retained the GPT layout and
+  second partition. AlphaTheta explicitly lists GUID partition maps as unsupported
+  on CDJ-900. The earlier instructions to format FAT32 alone were incomplete.
+- **Export inspection:** version-2 receipt identifies seven copied tracks,
+  three playlists and 11 Memory Cues. All seven audio paths exist. Independent
+  read-only decoding of their DAT files found the corrected 56-byte record
+  boundaries and all cue timestamps matching the receipt. This does not prove
+  playback or cue recall on the player.
+- **Implemented:** Export to CDJ USB opens a Wisp-styled USB selector with a
+  labelled dropdown, refresh/automatic recheck, volume label/letter, device model,
+  capacity/free space, filesystem, partition style/count and preparation warning.
+  One entry per physical USB (largest mounted volume); internal/system disks and
+  unmounted disks are not offered. USB-attached SSDs are detected by bus type,
+  not just Windows' Removable classification. No folder browser in this flow.
+- **Implemented safeguards:** block GPT/unknown layouts, multiple partitions,
+  unsupported filesystems, system/internal/read-only/unready disks. HTTP export
+  requires the selected device identity; the backend validates it at preflight,
+  before copying and again after staging/before replacing the library. A changed
+  selection is rejected rather than silently following a reused drive letter.
+  Existing non-root infrastructure folder fixtures remain isolated test exports;
+  the application API cannot use this as a folder-picker bypass.
+- **Read-only discovery:** bounded, hidden Windows Storage inventory subprocess
+  runs a fixed Get-Disk/Get-Partition/Get-Volume script with no interpolated user
+  arguments. Detection errors block export and offer refresh. The support CLI
+  `--list-cdj-usbs` runs without starting Wisp, creating a profile or opening its
+  database. Tested against the owner's USB: F:, GPT, two partitions, blocked.
+- **Verified:** 381 backend tests (115 Core / 100 Infrastructure / 166 API),
+  53 client unit tests, 72 browser tests, client build and zero-error lint pass.
+  Browser checks include GPT blocking, missing/swapped USBs, refresh/error
+  recovery, confirmation/cancel and no folder-picker call. Visual inspection at
+  1400px and 800px; selector is lazy-loaded. No local installer generated.
+- **USB preparation completed after separate owner approval:** backed up all 29
+  non-system files from both F: and H: (115,197,663 bytes), verifying each copy's
+  length and SHA-256 before erasure. Only Windows-managed `System Volume
+  Information` was excluded. The private backup and verification manifest are at
+  `E:\Wisp USB Backups\2026-09-13-before-mbr-76F3C2B2`, outside Git. Recreated only
+  the identity-checked USB as **MBR with one FAT32 partition**, 32 KiB clusters,
+  labelled `WISP USB` at F:. The former H: boot partition is removed; its files
+  remain in the backup. No internal disks were changed. Windows retained GPT
+  after clearing and temporarily held F:'s old mapping; guarded preparation
+  stopped at each unexpected state before completing the verified layout.
+- **Post-preparation verification:** Windows reports one MBR/FAT32 partition;
+  Wisp's read-only `--list-cdj-usbs` reports `CanExport: true` and no compatibility
+  problem. The volume contains only Windows filesystem metadata: old exports
+  were not restored. The separate local Pioneer reference remains available.
+- **Next hardware test:** freshly export `Smoke Test Mix` from Wisp to F:, safely
+  eject, then test the WISP-prefixed playlist and Memory Cues using the player's
+  CUE/LOOP CALL controls. Layout acceptance by Wisp is not hardware acceptance;
+  CDJ-900 playback and Memory Cue recall still need physical proof. Catalogue
+  cleanup and Pioneer waveform support remain unresolved.
+
+Source: [AlphaTheta — CDJ-900 USB device not recognized](https://support.alphatheta.com/en-US/articles/19545774076185?product=4416496076569).
+
+## 2026-09-13: CDJ Memory Cue encoding repair — hardware test pending
+
+- **Fixed:** classic `PCPT` entries now occupy exactly 56 bytes. The old writer
+  declared 56 but emitted 60, writing cue type as uint32 rather than one byte
+  plus the three-byte `00 03 e8` field. This shifted cue/loop timestamps and
+  broke the next record boundary. Corrected the `0x00010000` marker and matched
+  the reference PMAI header and empty cue-list sentinel as well.
+- **Verified locally:** literal format-oracle tests and independent field-offset
+  decoding cover zero/multiple cues, time zero, milliseconds, loops and malformed
+  records. Opt-in comparison with the privately preserved September rekordbox
+  reference matched all six classic Memory Cue records across three DAT files
+  (normalizing only creation-order versus timestamp-order link fields).
+  The reference currently has two stored points per track, including a near-start
+  point; no USB/hardware acceptance is inferred from this comparison.
+- **Fixed validation:** before installation and again afterwards, decode every
+  cue's signature, length, type, flags, ordering and timestamps. Check audio-path
+  tag, section boundaries and unique cue lists. The former count-only validator
+  accepted malformed records. Regression tests explicitly recreate that bug.
+- **Diagnostic reference:** the exporter can read an explicitly preserved
+  `<WISP_DATA_DIR>/pioneer-reference/export.pdb` (normally under
+  `%LOCALAPPDATA%/Wisp`) before searching separate connected USBs. An explicit
+  `WISP_PIONEER_TEMPLATE` override takes priority and fails if missing/invalid.
+  The target itself cannot be its own reference. Reference selection happens
+  before copying music; no reference is automatically learned from Wisp output.
+- **Local test preparation:** the owner's F: export.pdb and USBANLZ directory
+  were copied privately to that reference folder, outside Git. Database SHA-256
+  matched before/after copy. This is NOT an audio/full-USB backup. F: was not
+  written or formatted. Formatting the test USB no longer removes the only
+  available database template on this PC.
+- **Export UX:** prevent repeat clicks, show errors in Wisp dialogs, and state
+  the retained-catalogue limitation in both fresh and replacement confirmation.
+  Version-2 export receipts record each cue/loop timestamp in milliseconds.
+- **Verification:** 26 targeted Pioneer tests pass with the private PDB and DAT
+  reference enabled. Full backend suite: 369 passing tests. Client unit tests:
+  53 passing; browser suite: 69 passing, including fresh/replacement/cancel/error
+  CDJ export flows. Client production build and lint (zero errors) pass. Existing
+  SQLite/OpenAPI dependency advisory warnings remain unrelated to this change.
+- **Not shipped as full compatibility:** no new hardware result yet. Template
+  tracks remain visible; clean independent catalogue generation, Pioneer
+  waveforms/beatgrids and VBR seek analysis remain unresolved. Synthetic loop
+  tests are not hardware proof. This repair does not change the catalogue
+  allocator that previously permitted three-track playback on CDJ-850.
+- **Next test:** run the updated build, format the intended test USB as FAT32
+  only after retaining any wanted files, save two clearly separated Wisp **CDJ
+  Memory** cues per track, explicitly export a small playlist, safely eject, and
+  open the playlist prefixed `WISP` on each player. Check audio and use
+  **CUE/LOOP CALL**, not just the large transport CUE button, to verify both saved
+  times. Record CDJ-850 and original CDJ-900 results separately. Extra template
+  tracks and no waveform are expected in this isolated cue test.
+
+Format reference: [Crate Digger's independent ANLZ schema](https://github.com/Deep-Symmetry/crate-digger/blob/main/src/main/kaitai/rekordbox_anlz.ksy).
+This entry supersedes older claims below that cue counts alone validate export.
+
+## 2026-09-13: Phase 26g UI — approved Mixes redesign
+
+- **Implemented:** the owner-approved recording-desk/listening-notebook concept.
+  The sidebar now says **Mixes**. Its library has real cached waveform thumbnails,
+  search, review/attention filters, date/title/duration/rating sorts, saved planned-set
+  names, ratings and recording/file status. Record and import are explicit actions.
+  Selecting a row opens a separate mix workspace rather than expanding one long page.
+- **Recording desk:** separate setup and active-capture views; prominent server-clock
+  duration, stereo dBFS meters, clipping warning and Stop and save. Input diagnostics
+  are behind Test input & routing and remain open after results/errors. The global
+  capture indicator returns to the recorder after navigation/reload. Successful stop
+  opens the saved take; capture, checkpoints, close protection and recovery use the
+  existing backend. No fabricated live waveform or software monitoring.
+- **Individual mix:** persistent, height-adjustable waveform/transport; distinct
+  Review / Tracklist / Exports areas preserve the same audio element and in-progress
+  forms while switching. Comment ranges, comment/bookmark/track-start icons and a
+  separate playhead layer replace indistinguishable ticks. The peaks canvas no longer
+  redraws or recreates its resize observer for each playback update.
+- **Review:** star satisfaction controls (including Unrated), status, listening notes,
+  composer and personal reflection. Explicit Save feedback and Save comment & feedback
+  commit all review edits atomically. Unsaved/draft/saving/error states remain visible;
+  existing local draft persistence, conflict checks and discard confirmation remain.
+  Quick bookmarks still save separately and are not actual track entrances or song cues.
+- **Tracklist and plans:** compact occurrence rows, per-row timing/order editor,
+  direct Go to start, library/manual additions, historical blueprint comparison/linking
+  and Revise for next time. Original plan snapshots and actual played entries remain
+  separate; no automatic track recognition, guessed timestamps or rewritten history.
+- **Exports and files:** dedicated format choices (320 kbps MP3 / 24-bit WAV / exact
+  master), destination and export history. Existing verified jobs, cancellation,
+  immutable tracklist copies and RF64-derived playback are preserved. Details & files
+  contains show-folder, recover, relink, new linked take and separately confirmed
+  remove-entry/delete-managed-audio actions. No duplicate saved-takes audio players.
+- **Shell/responsiveness:** unrelated global Mix Plan/scan controls and the duplicate
+  track player are hidden in Mixes; the shared track audio engine stays mounted.
+  Narrow Mixes windows compact the sidebar (expand remains available), and review
+  columns/controls reflow. Library/mix navigation resets scroll and survives reload
+  within the window; restoring navigation never starts a recording or export.
+- **Verification:** 469 tests: 115 core / 70 infrastructure / 164 API / 53 client /
+  67 browser. Client typecheck/build and lint pass (13 pre-existing lint warnings).
+  Browser tests cover the redesigned navigation, retained playback/composer across
+  tabs, sticky player at 800×600, ratings/drafts, recovery, input-test results, exports,
+  tracklist/revision workflows and existing drag/playlist/loudness regressions. API
+  checks cover 32-bin cache-only thumbnails, missing sources, unchanged master bytes
+  and historical planned-set names. Desktop/small-window screenshots reviewed using
+  isolated mocked browser APIs, not the owner's recordings.
+- **Evidence boundary:** no live database/music/`D:/Mixes` writes, new Xone capture,
+  installer build or CDJ compatibility claim. Existing NuGet advisory warnings remain.
+  Long-session Xone/unplug/sleep/native-close and independent exported-mix listening
+  acceptance are still open; this implements the UI part, not all Phase 26g gates.
+
+## 2026-09-13: Phase 26f — finished-mix exports and large-master playback
+
+- **Implemented:** Recordings → choose a mix → Export finished mix. Choose a
+  destination, MP3 320 kbps CBR / 24-bit PCM WAV / exact original master, and
+  optionally include the saved actual tracklist. This exports the complete recorded
+  mix, not individual songs or a rekordbox/CDJ USB database.
+- Every export has a unique folder beneath `WISP Mix Exports`, with audio and a
+  title/date/hash manifest. MP3/WAV carry title/date tags; original-master copies
+  are byte-identical. No automatic normalisation or destructive processing. WAV
+  converts float to 24-bit PCM at the master sample rate; standard WAV's 4 GiB
+  ceiling is enforced. Larger exact masters retain RF64, or use MP3 for compatibility.
+- Tracklists are immutable copies of the saved actual list at a checked revision:
+  confirmed entrance times sorted chronologically, repeated/equal-time occurrences
+  retained, played-but-untimed entries separately labelled, drafts excluded.
+  No invented timestamps, blueprint substitution, private comments or ratings.
+- Durable job IDs/history, progress, cancel, errors and no-overwrite retries.
+  Capture/input tests and mix import/export are mutually exclusive. Source format,
+  length and SHA-256 are checked under a read lock. Encoded output is verified as
+  stereo / required bitrate or PCM subtype and fully decoded to count frames and
+  confirm duration before publishing; all audio/log buffers are bounded.
+- Preflight estimates the new copy plus reserve alongside the existing master;
+  monitor free space during processing. Flush/hash output and atomically publish
+  its directory on the same volume. Cancel removes only recognised owned temporary
+  files; unexpected files/links are retained. Restart marks unfinished jobs
+  Interrupted. Completed packages after a DB commit failure remain at the reported
+  path; create a fresh export after restart to register another copy, never overwrite.
+- Verified MP3 exports now enable playback of >4 GiB RF64 takes in WISP. Normal
+  mixes can select original or export playback. Playback never starts an export,
+  and capture still pauses/blocks it. Missing/changed exports are not treated as
+  valid playback copies. Scanner/Git exclusions keep generated mixes out of library/code.
+- **Verification:** 468 tests (115 core / 70 infrastructure / 164 API / 53 client /
+  66 browser). Full FFmpeg encode/decode of 3-minute and approximately 46.6-minute
+  sparse >4 GiB fixtures; 320 kbps checked in every MP3 frame; 24-bit WAV subtype/
+  frame length, metadata, source/review preservation, request retries, real-process
+  cancel, disk/encoder/DB failure, owned cleanup/restart, range playback, stale
+  tracklists and rollback guard. Browser flows cover options, progress/navigation,
+  failed retries/reload and large-master derivative playback. Client build/typecheck
+  pass; lint zero errors with 13 existing warnings. Prior drag/playlist/loudness/
+  recording regressions remain passing. Existing NuGet vulnerability warnings remain.
+- **Evidence boundary:** isolated profiles/generated audio only; no live library,
+  database or `D:/Mixes` modifications, new hardware capture, CDJ claim or installer.
+  Browser API responses are mocked with actual browser audio playback; the large
+  encoder fixture is synthetic silence. Listen to a real exported mix independently
+  before relying on it for sharing. Back up audio folders AND WISP's database to
+  retain reviews, tracklists and plan history; save local browser drafts first.
+- **Next: Phase 26g.** The owner-requested visual/structural recording-page redesign
+  is still required. This phase used the frontend-design skill for grouped export
+  options, visible job states and responsive controls within the current UI; it
+  does not claim that the existing recording-page layout is now final or approved.
+  Multi-hour Xone capture, native-close, unplug/sleep and real-mix listening acceptance
+  remain outstanding.
+
+## 2026-09-13: Phase 26e — detailed feedback and revised Mix Plans
+
+- **Implemented for review:** Feedback & next attempt groups 1–5 satisfaction,
+  overall notes, review status and timestamped comments. Point/range comments support
+  categories, optional occurrence/transition associations, edit/remove and revisit/
+  resolved states. Click times to seek with bounded pre-roll or loop a comment range.
+  Quick bookmarks remain separate. No global track rating or recommendation changes.
+- **Draft safety:** explicit Save feedback commits rating, status, notes and comments
+  atomically, with optimistic checks against both feedback and quick-marker/rating
+  revisions. Local unfinished drafts and errors survive navigation/reload, including
+  saves that fail while away. Discarding a draft requires confirmation. Browser
+  storage failure produces an explicit session-only warning; save to WISP before
+  clearing browser storage or closing. Drafts are not part of the database backup.
+- **Timing/history:** new live comments use captured-frame time at save, not UI time.
+  If recording stops before saving a live comment, its text is retained and the user
+  explicitly chooses a playback time. Deleted tracklist associations retain their
+  copied label and timestamps. Capture finalisation cannot overwrite review edits.
+- **New plan from a take:** choose saved blueprint or confirmed actual order, name
+  the new plan, select saved feedback, and preview before creating. Draft actual
+  entries require explicit exclusion; manual/deleted references require library
+  matching or omission. Repeats stay separate. Valid same-track source cues/anchors
+  survive; recording timestamps never become song cues. Changed next-track pairs
+  do not inherit inappropriate old transition notes. Unavailable audio is warned.
+- Creation is atomic and idempotent, with durable recording/parent-plan lineage and
+  revalidation of preview content. Stale library/feedback/tracklist data cannot
+  silently change a previewed plan. Original plans, takes, annotations and snapshots
+  are never rewritten; deleting a plan preserves lineage. Downgrade guards protect
+  nonempty feedback/history tables. Revision choices/previews reset on navigation.
+- **Verification:** 446 tests (111 core / 66 infrastructure / 153 API / 53 client /
+  63 browser), including the linked-plan/two-take loop, selected feedback, repeated/
+  missing references, invalid ranges, stale saves, atomic failures and persisted
+  drafts. Existing drag, playlist, loudness and recording-close regressions remain
+  passing. Client build/browser-test typecheck pass; lint has zero errors and 13
+  existing warnings. Existing NuGet vulnerability warnings remain. Isolated profiles
+  and generated audio only; no live library/database/D:/Mixes edits or installers.
+- **Next:** Phase 26f export/file lifecycle. The existing >4 GiB browser playback
+  limitation remains; hardware long-session/unplug acceptance is still outstanding.
+- **Owner's UI feedback is an explicit Phase 26g requirement:** the current recording
+  page is not intuitive or visually organised enough. Redesign it into distinct
+  functional areas for capture, mix history, playback/review and plan/tracklist work.
+  This is a structural UX pass, not just colours or spacing; it remains deferred
+  until functionality is complete. New review controls use the current design
+  system and are grouped, but are not claimed as the final recording UI.
+
+## 2026-09-13: Phase 26d — saved blueprints and actual recording tracklists
+
+- **Implemented for review:** optional Mix Plan selection before recording and
+  Record this plan from the plan page. Setup still requires explicit Start; no
+  automatic capture or song recognition. Session and immutable blueprint snapshot
+  are registered atomically before capture. Each new take saves the current plan.
+- Existing/imported mixes can link a plan later, clearly labelled as a snapshot
+  taken then, not historical proof of the original plan. Re-linking/unlinking keeps
+  every older snapshot and the actual tracklist. Links work in both directions;
+  the plan page lists takes with any historical snapshot of that plan.
+- Actual entries are independent of the plan: explicit draft copy into an empty
+  list, library/manual additions, repeated occurrences, removal and reordering.
+  Unconfirmed, Played/Untimed and Played/Timed are distinct. Set start here uses
+  playback position; optional live Track started uses backend captured frames.
+  Manual time correction, clearing, seek-to-entry and waveform markers are included.
+  The shared in-app text prompt now uses a labelled, focus-trapped dialog (matching
+  existing confirmations), with validation feedback and focus restoration on cancel.
+  Equal starts are valid; conflicting order warns and offers explicit sorting.
+- Recorded starts never become song cue points. Generic review markers never
+  become track entrances. No drafts are represented as confirmed performance.
+  Full comparison/revised-plan feedback tools remain Phase 26e; exports remain 26f.
+- Separate tables and optimistic revisions protect against stale overwrites and
+  capture finalisation races. Plan/track deletion keeps historical text; recording
+  removal never deletes its plan. Downgrade guards refuse nonempty history loss.
+- **Verification:** 417 tests (100 core / 66 infrastructure / 143 API / 50 client /
+  58 browser); client build and browser-test typecheck pass. Lint has zero errors
+  and 13 pre-existing warnings; existing NuGet vulnerability warnings remain.
+  Tests cover A/B/C planned versus A/X/C actual, live-plan edits between takes,
+  repeated/deleted sources, import then link, stale writes, clock-based entrances,
+  failed-save retry, navigation, and the existing drag/playlist/close regressions.
+  Isolated test profiles only; no changes to live library data or D:/Mixes audio,
+  no installer packaging and no new hardware compatibility claim.
+- **User test:** open an existing take, expand Saved blueprint, link a plan and
+  Copy blueprint as draft. Remove what you skipped, add what you played instead,
+  then seek and Set start here. Confirmed played can also remain untimed.
+- **UI direction:** the owner wants functionality first and a dedicated recording
+  page design pass at the end. Current controls reuse WISP styles/modals; this is
+  not the final recording layout. Existing >4 GiB browser playback limitation remains.
+
+## 2026-09-13: Clarified Mix Plan linking before Phase 26d
+
+- **Agreed design, not implemented:** a Mix Plan is an optional blueprint saved as
+  an immutable snapshot; each recording has an independent editable actual tracklist.
+  Recording remains hands-off and a spontaneous mix never requires a plan.
+- Explicitly copying planned tracks creates unconfirmed, untimed draft occurrences.
+  Users can remove skipped tracks, reorder, add library/manual-text tracks and assign
+  entrance times at the waveform with Set start here. Repeated tracks have separate
+  occurrence IDs; confirmation and timestamp presence are independent states.
+- Times are recording-relative entrances, allow overlapping transitions and are
+  never inferred from track length or song cues. Plan comparison, text exports and
+  creation of a revised plan must distinguish confirmed performance from draft plans.
+- Added acceptance cases and revision/export rules to the tracked recordings plan.
+  This is documentation only; Phase 26d linking/tracklists remain unimplemented.
+
+## 2026-09-13: Phase 26c — recordings workspace and playback
+
+- **Implemented for review:** a lazy-loaded Recordings workspace with searchable
+  history, date/title/duration/rating sorting, keyboard/pointer-resizable history,
+  waveform-led playback and collapsible recording setup/file management. Reuses
+  WISP's palette, typography and modal behavior; inspected at 800x600 and 1440x1000.
+- **Playback:** seekable range-served audio, 10-second jumps, volume, waveform
+  zoom/window navigation, section looping and configurable marker pre-roll. The
+  player pauses on navigation/selection; playback position and view preferences
+  are currently session-local. Capture continues independently. The global capture
+  indicator now suppresses browser/mini-player playback while recording to avoid
+  feedback; there is still no software monitoring.
+- **Waveforms:** explicitly start Prepare waveform; a cancellable backend job reads
+  the owned float master in 64 KiB buffers, producing up to 200,000 fine extrema
+  buckets plus coarser levels. No whole-file browser decode. Results cache under the
+  profile, keyed by recording/hash with length/mtime invalidation; missing masters
+  do not return cached waveforms. Failed/cancelled jobs can be restarted.
+- **Review foundations brought forward:** optional 1–5 rating (distinct unrated)
+  and up to 500 labelled point markers. New live markers use server captured-frame
+  time; playback markers use recording-relative seconds. RecordingReviews is a
+  separate table with optimistic revision checks, so capture finalisation cannot
+  overwrite edits. Failed saves remain visible and preserve the current label draft.
+  Full point/range comments, categories, review status and plan revision workflows
+  remain Phase 26e; the Tracklist panel explicitly identifies Phase 26d as pending.
+- **Import:** WAV/MP3/FLAC/AIFF via native file selection, chosen managed destination,
+  background progress and cancellation. Retains both the untouched external source
+  and an exact managed source copy, then fully decodes to a 44.1 kHz stereo float
+  playback master. This can resample/downmix; it does not improve original quality.
+  Exact source/master hashes prevent duplicate imports of visible Ready entries.
+  Capture/import share a lease; aborted imports retain partial files and are marked
+  Failed, never silently promoted as complete recordings. Restart explains interrupted
+  imports; retry explicitly starts a new import. File deletion confirmations now
+  include managed source copies but never external originals or relinked files.
+- **Verification:** 395 tests (94 core, 66 infrastructure, 134 API, 47 client unit,
+  54 browser), including real FFmpeg import of all four formats, duplicate/corrupt/
+  cancelled import, source preservation, cached peaks/extrema, stale-review rejection,
+  live-frame markers and real browser range playback/looping. Existing drag,
+  playlist, loudness and close-dialog suites remain passing. Client build passes;
+  lint has zero errors / 13 existing warnings. Existing NuGet vulnerability warnings
+  remain. Isolated test profiles only; no live database/music edits or installer build.
+- **Known limits:** >4 GiB RF64 masters still need external audio playback, although
+  backend waveforms and review markers work. Browser section loops use media events,
+  not sample-accurate DAW looping. Import progress is approximate; cancel/failure
+  intentionally retains managed partials for manual inspection, not automatic cleanup.
+  Phase 26f will add export/compatible derived-file lifecycle. Real Xone long-session,
+  sleep/unplug and actual native close acceptance remain outstanding from Phase 26b.
+- **Try next:** select the existing mix in Recordings, Prepare waveform, play/seek,
+  mark a transition, click it to revisit with pre-roll, and rate the take. Phase 26d
+  will link these takes to immutable Mix Plan snapshots and performed tracklists.
+
+## 2026-09-13: Phase 26b hardware check and repeat-close fix
+
+- User reports both decks recorded correctly in a roughly ten-minute mix on
+  Input 1. Read-only FFmpeg analysis of the resulting local master found 10:37.41
+  of stereo 44.1 kHz float audio, successful full decoding, matching file/checkpoint
+  lengths, -1.9 dBTP true peak and no per-channel silence of at least one second
+  below -60 dBFS. Metadata is Ready with no issue. This is technical validation,
+  not a listening critique or proof against brief glitches; audio was unchanged.
+- GitHub PR #23 exposed a repeat-close race: two native close attempts between
+  status polls could leave the UI's observed boolean unchanged and suppress the
+  second confirmation. Recheck on every successful status poll while retaining
+  the single-dialog guard. Add a deterministic regression with no intervening
+  false snapshot. This prerequisite is fixed before starting Phase 26c from develop.
+- Verification: all 49 browser tests and 47 client unit tests pass; client build
+  passes and lint retains zero errors / 13 pre-existing warnings. No backend or
+  audio-storage changes were needed for the repeat-close fix.
+- Multi-hour capture, physical sleep/unplug and native close acceptance remain
+  outstanding. Phase 26c is requested but awaits the owner merging Phase 26b.
+
+## 2026-09-13: Phase 26b — durable full-length mix recording
+
+- **Implemented for review:** full-length stereo recording from the explicitly
+  chosen input, with a selected destination, levels/clipping, duration, checkpoint
+  progress, disk-space estimate and a global recording/stop indicator. Navigation
+  and frontend reload reconnect to the same native coordinator. Short input tests
+  and full recordings cannot capture simultaneously. Close while recording offers
+  Keep recording or Stop and save, using accessible WISP-themed confirmations.
+- **Persistence:** isolated-tested `RecordingSessions` schema; bounded disk writer,
+  flushed atomic checkpoints, WAV/RF64 promotion without copying the full master,
+  explicit interrupted-take recovery and separate linked takes. Queue/disk/device
+  failures stop explicitly; a stuck native stop/dispose retains its input lease.
+  Masters retain shared-mode stereo float samples without gain/format processing.
+- **Storage safety:** `<chosen folder>/WISP Recordings` is excluded from the music
+  scanner. FAT32 is rejected; 128 MiB preflight and 64 MiB reserve protect recording
+  space. Remove entry and permanent managed-audio deletion are separate confirmed
+  operations. Byte-identical SHA-256 relinking never grants permission to delete
+  the external file. No live profile/database, existing music or real mixer capture
+  was touched during implementation; verification used disposable isolated profiles.
+- **Verification:** 379 tests: 94 core, 65 infrastructure, 125 API, 47 client unit,
+  48 browser. Includes a forcibly terminated child writer/recovery, >4 GiB sparse
+  RF64 decode/seek with real FFmpeg, queue overflow, disk/rename/DB commit failures,
+  driver loss/stall, idempotency and byte preservation. Existing internal/external
+  drag, playlist and loudness suites remain passing. Client build passes, lint has
+  zero errors and 13 existing warnings. Existing Microsoft.OpenApi/SQLitePCLRaw
+  dependency vulnerability warnings remain; no package changes or installer build.
+- **Limitations:** less than six seconds of accepted but not checkpointed audio can
+  be excluded after abrupt process termination; this is not physical power-loss
+  assurance or detection of every hardware dropout. Hardware long-session/sleep/
+  unplug and real Photino close acceptance are still pending. Large RF64 masters
+  need an external compatible player. Full waveform/history, ratings, timestamp
+  comments, Mix Plan snapshots and 320 kbps MP3 export remain later phases.
+- **Next:** user tests a 10–15 minute Input 1 take and both close-dialog choices;
+  then Phase 26c builds the full recordings/playback workspace. Detailed decisions
+  and evidence boundaries are in `WISP_RECORDINGS_IMPLEMENTATION_PLAN.md`.
+
+## 2026-09-13: User confirms Xone:24C Input 1 recording works
+
+- **User-tested hardware evidence:** the user recorded a short test using Input 1
+  and reported that it "seems to record it perfectly". Input 1 is now the confirmed
+  working capture choice for this setup; Phase 26b can build on this capture path.
+- **Evidence boundary:** the agent has not inspected the recorded audio. The user
+  did not separately report USB mode, individual-deck/fader testing, deliberate
+  left/right mapping or this clip's exact negotiated format. Those detailed
+  checks remain open in the plan. No long-recording or crash-recovery claim follows
+  from this short test; those belong to later phases.
+- **Change:** updated documentation only. No capture, audio modification, live
+  settings/database update or new phase implementation was performed.
+
+## 2026-09-13: Phase 26a — recording input discovery and short stereo test
+
+- **Implemented for review:** new Recordings sidebar entry opens an explicitly
+  labelled input-test workspace, not a full mix recorder. Choose an exact capture
+  endpoint, capture up to 30 seconds, inspect L/R levels and latched clipping,
+  stop early, listen back and save routing observations. A global indicator survives
+  navigation; frontend reload reconnects without restarting capture. The design
+  follows WISP's existing layout/theme with a scrollable small-window view.
+- **Audio:** NAudio 2.2.1 WASAPI shared-mode capture at the endpoint's current sample
+  rate, two channels, 32-bit float WAV. This is the Windows transport/file format,
+  not a claim of 32-bit ADC precision. No loopback/default-device fallback, no gain,
+  limiting, sample-rate up-conversion, software monitoring or automatic recording.
+  Non-stereo/unsupported-rate endpoints are explained and disabled. An exhaustive
+  format picker is not included; change the shared format in Windows and refresh.
+- **Safety/storage:** explicit endpoint saved in existing settings, no DB migration
+  or library-track creation. Test clips and per-clip JSON evidence live under the
+  active WISP profile's `recording-input-tests` directory; completed prior clips are
+  retained, and the latest result/observations reload after restart. Audio access
+  resolves a current test GUID, not an arbitrary client path. Temp files are scoped
+  to the test; collisions never delete a pre-existing temporary clip. The library
+  scanner excludes the reserved test folder even when scanning a parent directory.
+  Starts are retry-safe and conflicting sessions cannot change settings.
+  Clips are not deleted automatically; the UI displays their location.
+- **Discovery evidence, not capture acceptance:** the read-only
+  `dotnet src/Wisp.Api/bin/Debug/net10.0/Wisp.dll --list-recording-inputs` command
+  bypasses profile creation/DB/host and reports Input 1, 2 and 3 (Xone:24C), all
+  stereo 44.1 kHz shared IEEE float. Windows driver inventory reports Allen & Heath
+  5.72.0.19773. No real recording, live profile edit or installed-app modification
+  was performed. The mixer USB mode and full-mix routing are still unverified.
+- **Verification:** isolated fake-device/API tests cover explicit selection,
+  format/sample preservation, independent channels, clipping, duration cap,
+  duplicate/conflicting requests, disconnect/permission errors, empty input,
+  unwritable storage and evidence reload. Browser tests cover explicit/missing
+  devices, meters, float WAV decoding, stop/playback, observations, navigation,
+  reload, failure states and 800x600 layout. **349 tests pass**: 94 core, 54
+  infrastructure (including real FFmpeg fixtures), 111 API, 47 client unit and
+  43 browser. Client build passes; lint has zero errors / 13 existing warnings.
+  Internal/external drag and loudness suites are retained. Existing NuGet security
+  advisories for Microsoft.OpenApi 2.0.0 and SQLitePCLRaw 2.1.11 are unchanged.
+- **Remaining gate:** in the updated app, select Input 1 (Xone:24C) as a candidate,
+  check STREAM routing, record deck 1 alone, deck 2 alone, then both, and exercise
+  channel faders. Listen back and verify L/R with a known stereo source. Save USB
+  mode, driver and observations. Only the user's physical test can close 26a.
+- **Limitations:** a bounded diagnostic, not production mix capture. It buffers
+  at most 30 seconds (46.1 MB at 192 kHz), writes/finalises on stop, and has no crash
+  recovery. Keep WISP open through completion; a killed process can lose this test.
+  Device failure with received frames preserves a labelled incomplete clip. NAudio's
+  high-level capture does not expose all hardware discontinuity flags, so this is
+  not proof of dropout-free long sessions. History management, durable capture,
+  waveform/review/plan links and 320 kbps exports remain Phases 26b–26g. No installer
+  was generated and no CDJ compatibility claim is made.
+
+## 2026-09-13: Recordings and Mix Plan review planning
+
+- **Documentation only:** added the tracked Phase 26
+  [Recordings implementation plan](WISP_RECORDINGS_IMPLEMENTATION_PLAN.md).
+  The Git-ignored legacy master plan also has a local Phase 26 pointer; it is not
+  newly tracked or included in the PR.
+  No capture engine, UI, schema migration or audio processing is implemented by
+  this change; no live database, music, recording device or installation changed.
+- **Scope:** seven gated phases cover Xone:24C input proof, durable capture and
+  recovery, recording history/playback/import, immutable plan snapshots with
+  editable performed tracklists, ratings/timestamped feedback and new plan
+  revisions, lossless/320 kbps MP3 export, and regression/hardware acceptance.
+- **Decisions:** preserve original masters and historic plans; track occurrences
+  and recording-relative timestamps are distinct from library track cue positions.
+  No automatic recognition, destructive plan updates or recording normalisation.
+- **Unverified:** Windows `Input 1 (Xone:24C)` routing, negotiated capture format,
+  long-session reliability and interruption recovery need physical tests. The
+  documented STREAM vs DVS/DAW routing informs the test, not a compatibility claim.
+  All implementation checkboxes remain open; first full release requires all gates.
 
 ## 2026-09-11: Reference loudness matching and boost-only review
 

@@ -27,6 +27,7 @@ import { SuggestRouteDialog } from './SuggestRouteDialog'
 import { TransitionGap } from './TransitionGap'
 import { computePlanSummary, indexWarningsByTransition } from './summary'
 import { useMixPlan, useMixPlans } from './useMixPlans'
+import { PlanRecordingLinks } from '../recordings/PlanRecordingLinks'
 
 /// Mix Plans workspace as a routed peer page — list of plans on the left,
 /// active plan on the right. No `fixed inset-0` overlay; lives inside the App
@@ -191,6 +192,7 @@ export function MixPlansPage() {
                 onRename={(name) => rename.mutate({ id: plan.id, name })}
                 onScopeChange={(playlistId) => setScope.mutate(playlistId)}
               />
+              <PlanRecordingLinks planId={plan.id} />
               {plan.tracks.length > 0 && <ChainStats tracks={plan.tracks} />}
 
               <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-6 py-4">

@@ -11,7 +11,7 @@ export default defineConfig({
     userAgent: 'Photino WebView', screenshot: 'only-on-failure', trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 19589 --strictPort',
+    command: 'node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 19589 --strictPort',
     url: 'http://127.0.0.1:19589', reuseExistingServer: false,
   },
 })

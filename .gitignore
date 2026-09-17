@@ -39,6 +39,10 @@ yarn-error.log*
 Thumbs.db
 
 # App data (in case the user runs it from the repo dir)
+recording-input-tests/
+WISP Recordings/
+WISP Mix Exports/
+recording-waveforms/
 wwwroot/assets/
 src/Wisp.Api/wwwroot/
 !src/Wisp.Api/wwwroot/.gitkeep

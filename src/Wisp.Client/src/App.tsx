@@ -10,6 +10,8 @@ import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 import { DialogHost } from './components/DialogHost'
+import { RecordingInputIndicator } from './features/recordings/RecordingInputPage'
+import { MixRecordingIndicator } from './features/recordings/MixRecorderPanel'
 
 // These feature areas are not needed for first paint of the library workspace.
 // Keep their dependencies out of the startup bundle and load only on navigation.
@@ -18,6 +20,7 @@ const MixPlansPage = lazy(() => import('./features/mixchain/MixPlansPage').then(
 const DiscoverPage = lazy(() => import('./features/discover/DiscoverPage').then((m) => ({ default: m.DiscoverPage })))
 const WantedPage = lazy(() => import('./features/wanted/WantedPage').then((m) => ({ default: m.WantedPage })))
 const SettingsPanel = lazy(() => import('./features/settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel })))
+const RecordingsWorkspace = lazy(() => import('./features/recordings/RecordingsWorkspace').then(m => ({ default: m.RecordingsWorkspace })))
 
 /// App-level shell. Layout is:
 ///
@@ -57,7 +60,7 @@ function App() {
 
   // Mix Plans has its own full chain workspace; showing the compact dock there too
   // would render the same plan twice. Hide it on that page only.
-  const showChainDock = !!activePlanId && page !== 'mix-plans'
+  const showChainDock = !!activePlanId && page !== 'mix-plans' && page !== 'recordings'
   // Hide the bottom MiniPlayer (visually) whenever the Library workspace is in
   // front — the workspace already shows playback controls + waveform for the
   // loaded track, so two strips would just duplicate.
@@ -67,7 +70,7 @@ function App() {
   // commands published into usePlayer). Unmounting it kills the deck, which is
   // why playback fired off the workspace was silent until the user navigated to
   // a page where MiniPlayer remounted.
-  const showMiniPlayer = !libraryWorkspaceActive
+  const showMiniPlayer = !libraryWorkspaceActive && page !== 'recordings'
 
   return (
     <div className="flex h-full"
@@ -93,6 +96,8 @@ function App() {
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
+        <RecordingInputIndicator />
+        <MixRecordingIndicator />
         <main className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<div className="p-6 text-sm text-[var(--color-muted)]">Loading workspaceâ€¦</div>}>
           {page === 'library' && <LibraryPage />}
@@ -100,6 +105,7 @@ function App() {
           {page === 'discover' && <DiscoverPage />}
           {page === 'wanted' && <WantedPage />}
           {page === 'crate-digger' && <CrateDiggerPage />}
+          {page === 'recordings' && <RecordingsWorkspace />}
           </Suspense>
         </main>
 

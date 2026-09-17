@@ -15,6 +15,13 @@ namespace Wisp.Infrastructure.Persistence;
 public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(options)
 {
     public DbSet<Track> Tracks => Set<Track>();
+    public DbSet<Wisp.Core.Recordings.RecordingExport> RecordingExports => Set<Wisp.Core.Recordings.RecordingExport>();
+    public DbSet<Wisp.Core.Recordings.RecordingSession> RecordingSessions => Set<Wisp.Core.Recordings.RecordingSession>();
+    public DbSet<Wisp.Core.Recordings.RecordingReview> RecordingReviews => Set<Wisp.Core.Recordings.RecordingReview>();
+    public DbSet<Wisp.Core.Recordings.RecordingFeedback> RecordingFeedback => Set<Wisp.Core.Recordings.RecordingFeedback>();
+    public DbSet<Wisp.Core.Recordings.RecordingPlanRevision> RecordingPlanRevisions => Set<Wisp.Core.Recordings.RecordingPlanRevision>();
+    public DbSet<Wisp.Core.Recordings.RecordingTracklist> RecordingTracklists => Set<Wisp.Core.Recordings.RecordingTracklist>();
+    public DbSet<Wisp.Core.Recordings.RecordingPlanSnapshot> RecordingPlanSnapshots => Set<Wisp.Core.Recordings.RecordingPlanSnapshot>();
     public DbSet<ScanJob> ScanJobs => Set<ScanJob>();
     public DbSet<MixPlan> MixPlans => Set<MixPlan>();
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
@@ -34,6 +41,23 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<Wisp.Core.Recordings.RecordingExport>().HasKey(r => r.Id);
+        b.Entity<Wisp.Core.Recordings.RecordingExport>().HasIndex(r => r.RecordingId);
+        var recording = b.Entity<Wisp.Core.Recordings.RecordingSession>();
+        recording.HasKey(r => r.Id);
+        recording.Property(r => r.Title).HasMaxLength(200);
+        recording.HasIndex(r => r.StartedAt);
+        b.Entity<Wisp.Core.Recordings.RecordingReview>().HasKey(r => r.Id);
+        b.Entity<Wisp.Core.Recordings.RecordingReview>().Property(r => r.Revision).IsConcurrencyToken();
+        b.Entity<Wisp.Core.Recordings.RecordingFeedback>().HasKey(r => r.Id);
+        b.Entity<Wisp.Core.Recordings.RecordingFeedback>().Property(r => r.Revision).IsConcurrencyToken();
+        b.Entity<Wisp.Core.Recordings.RecordingPlanRevision>().HasKey(r => r.Id);
+        b.Entity<Wisp.Core.Recordings.RecordingPlanRevision>().HasIndex(r => r.RecordingId);
+        b.Entity<Wisp.Core.Recordings.RecordingTracklist>().HasKey(r => r.Id);
+        b.Entity<Wisp.Core.Recordings.RecordingTracklist>().Property(r => r.Revision).IsConcurrencyToken();
+        b.Entity<Wisp.Core.Recordings.RecordingPlanSnapshot>().HasKey(r => r.Id);
+        b.Entity<Wisp.Core.Recordings.RecordingPlanSnapshot>().HasIndex(r => r.RecordingId);
+        b.Entity<Wisp.Core.Recordings.RecordingPlanSnapshot>().HasIndex(r => r.SourcePlanId);
         var track = b.Entity<Track>();
         track.HasKey(t => t.Id);
         track.Property(t => t.FilePath).IsRequired();

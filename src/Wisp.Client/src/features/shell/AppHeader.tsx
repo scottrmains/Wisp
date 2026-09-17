@@ -2,6 +2,7 @@ import { FolderSearch, Settings } from 'lucide-react'
 import { bridgeAvailable } from '../../bridge'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { SoulseekStatusIndicator } from '../soulseek/SoulseekStatusIndicator'
+import { useCurrentPage } from '../../state/currentPage'
 
 interface Props {
   scanActive: boolean
@@ -13,12 +14,13 @@ interface Props {
 /// owns global actions (Plan switcher, Soulseek transfer indicator, Scan, Settings).
 /// Kept around as its own component partly for the global-search slot we'll add later.
 export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
+  const recordingPage = useCurrentPage(s => s.page === 'recordings')
   return (
     <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-[var(--color-border)] px-4">
       <SoulseekStatusIndicator />
-      <PlanSwitcher />
+      {!recordingPage && <PlanSwitcher />}
       <span className="h-6 w-px bg-[var(--color-border)]" aria-hidden />
-      <button
+      {!recordingPage && <button
         onClick={onScan}
         disabled={!bridgeAvailable() || scanActive}
         className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
@@ -26,7 +28,7 @@ export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
       >
         <FolderSearch size={14} strokeWidth={1.75} />
         {scanActive ? 'Scanning…' : 'Scan folder'}
-      </button>
+      </button>}
       <button
         onClick={onOpenSettings}
         className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-muted)] hover:text-white"
