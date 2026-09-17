@@ -33,6 +33,13 @@ jobs:
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '10.0.x'
+      - name: Test dependency download recovery
+        run: ./tools/test-dependency-downloads.ps1
+      - name: Cache verified FFmpeg archive
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: artifacts/dependencies/ffmpeg-*-essentials_build.zip
+          key: ffmpeg-win-x64-v1-${{ hashFiles('tools/ffmpeg-dependency.json') }}
       - name: Prepare FFmpeg for isolated audio tests
         run: ./tools/get-ffmpeg.ps1
       - name: Test backend
@@ -74,6 +81,11 @@ jobs:
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '10.0.x'
+      - name: Cache verified FFmpeg archive
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: artifacts/dependencies/ffmpeg-*-essentials_build.zip
+          key: ffmpeg-win-x64-v1-${{ hashFiles('tools/ffmpeg-dependency.json') }}
       - name: Build installer
         run: ./tools/build-installer.ps1 -Version "0.1.$env:GITHUB_RUN_NUMBER"
       - name: Verify install, launch, upgrade and uninstall

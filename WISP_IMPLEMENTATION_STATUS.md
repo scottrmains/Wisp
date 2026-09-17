@@ -1,6 +1,38 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-14
+Last reviewed: 2026-09-17
+
+## 2026-09-17: Resilient, consistent FFmpeg acquisition in CI
+
+- **Failure confirmed:** main push run `35227109392` failed during Validate's
+  FFmpeg preparation because the moving gyan.dev latest URL returned HTTP 503.
+  The production installer job was skipped; this was not an application build
+  or test failure. The develop-to-main promotion itself was already merged.
+- **Implemented:** validation and packaging now share `ffmpeg-dependency.json`,
+  pinned to the installer's existing FFmpeg 8.0.1 essentials ZIP and SHA-256.
+  The GitHub release URL is primary with the same publisher's asset API endpoint
+  as fallback. Neither URL depends on gyan.dev. Both endpoints remain GitHub
+  infrastructure, not independent protection against a total GitHub outage.
+- **Implemented:** shared bounded retries/timeouts, backoff, checksum verification
+  on every cache hit and fresh download, and unique partial files promoted only
+  after verification. Exhausted retries fail clearly; no unverified binary is
+  accepted. slskd's existing pinned archive also uses this shared helper; its
+  version/hash and the separate signed WebView bootstrapper flow are unchanged.
+- **Implemented:** CI caches only the FFmpeg ZIP, keyed by the pinned manifest,
+  in validation and production packaging. Extraction selects exactly one binary
+  in isolation, checks its version, and preserves the existing binary on failure.
+  No recursive clearing of tools/ffmpeg; local development binaries are no longer
+  blindly accepted as the release test dependency.
+- **Verified:** eight offline download tests (including HTTP 503, fallback,
+  retries, checksum failures and cache paths) run in CI. Actual cold downloads
+  from both GitHub endpoints match the pinned checksum; extraction/version smoke
+  test and warm-cache reuse pass in isolated local directories. No local installer
+  or application package generated; no music, USB or application database changes.
+  All 430 backend tests (115 Core / 149 Infrastructure / 166 API) pass with the
+  freshly downloaded pinned FFmpeg enabled; PowerShell syntax/diff checks pass.
+- **Release policy unchanged:** only a successful push to main packages an
+  installer. Merge this fix into develop, then promote develop to main again;
+  rerunning the old failed commit will still use the old downloader.
 
 ## 2026-09-14: Rekordbox USB crash — transaction bookkeeping and playlist positions
 
