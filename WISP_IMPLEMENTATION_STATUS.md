@@ -2,6 +2,35 @@
 
 Last reviewed: 2026-09-30
 
+## 2026-09-30: Application UI redesign audit and phased plan
+
+- **Planning implemented:** tracked
+  [UI redesign plan](WISP_UI_REDESIGN_IMPLEMENTATION_PLAN.md) with four bounded
+  implementation phases, per-phase checklists, acceptance criteria and a shared
+  regression checklist. This documentation does not implement the redesign.
+- **Audit evidence:** 25 rendered states across all main pages, playlists,
+  preparation and Mixes sub-pages using fictional browser fixtures; laptop-width
+  checks include 1366 and 1024px. The sampled Library list shrank from 550px
+  alone to 80px with preparation, expanded plan and multi-selection. Settings
+  allowed keyboard focus behind its overlay. USB dialogs were source-reviewed,
+  not exercised against physical storage.
+- **Proposed direction:** marketing-inspired typography, crisp borders and
+  restrained purple in a dark desktop workspace; grouped navigation, usable
+  playlists in compact mode, contextual tools, configurable Library columns,
+  deliberate preparation/plan drawers and consistent accessible controls.
+  The owner must approve a shell/Library visual example before broad migration.
+- **Delivery:** shared foundations/navigation, Library/preparation, planning/
+  discovery, then remaining pages/final review, through codex branches and PRs
+  into develop. Owner merge and production-promotion policy is unchanged.
+- **Protected behaviour:** internal and external multi-file dragging, playlist
+  occurrence identity/duplicates, playback/capture across navigation, Memory
+  Cues, existing export safeguards, relinking/audio versions and plan/actual
+  recording tracklist separation. Native/hardware checks stay distinct from
+  mocked browser evidence; no new CDJ compatibility is claimed.
+- **Current limit:** all UI implementation phases and visual approval remain
+  pending. No application source, data, export engine or release pipeline changes
+  are included in this planning PR.
+
 ## 2026-09-30: Production marketing/release pipeline (deployment acceptance pending)
 
 - **Implemented:** main-only installer → smoke test → verified draft/public GitHub

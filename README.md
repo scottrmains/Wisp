@@ -125,6 +125,8 @@ The built-in **Settings** dialog (gear icon top-right) shows these paths and let
 
 ## Implementation plan & backlog
 
+- [Application UI redesign plan](WISP_UI_REDESIGN_IMPLEMENTATION_PLAN.md) — phased
+  navigation and workspace redesign, visual approval and regression checklists
 - `WISP_IMPLEMENTATION_PLAN.md` — phase-by-phase build plan (Phases 0–6 shipped; 7 packaging, 8 Artist Refresh, 9 Crate Digger, 10 Master Tempo are scoped)
 - `WISP_BACKLOG_FEATURES.md` — feature backlog with P0–P3 priorities
 - `WISP_IMPLEMENTATION_STATUS.md` — current quality remediation and USB/CDJ export status
