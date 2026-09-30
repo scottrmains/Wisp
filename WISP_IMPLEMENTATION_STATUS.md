@@ -1,6 +1,101 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-30
+Last reviewed: 2026-10-01
+
+## 2026-10-01: UI 1 application foundations and navigation implemented
+
+- **Implemented in PR #42:** approved dark editorial direction in the actual
+  client, with shared colour/type/spacing/focus tokens, self-hosted DM Sans and
+  Barlow Condensed fonts, reusable buttons, section navigation, native menus,
+  status messages, dialogs and hover/keyboard tooltips. Font licence downloads
+  are included in About and emitted with static-server-compatible `.txt` names.
+- **Navigation:** Workspace and Find music groups with consistent Lucide icons
+  and 38px rows; independently scrolling/searchable playlists, visible keyboard
+  management menus, current-page breadcrumbs and bounded global plan controls.
+  Compact navigation defaults consistently at 1100px, with additive saved
+  preferences and an explicit searchable playlist drawer. The drawer is non-modal
+  so Library selection and internal drops remain usable. Existing duplicate
+  confirmations, occurrence identities and native drag contracts are preserved.
+- **Accessibility:** Settings now uses a native modal, contains Tab/Shift+Tab
+  focus, prevents background interaction and returns focus on close. Common
+  confirmations/prompts/alerts and playlist creation use the same foundation;
+  queued prompts retain separate drafts. Playlist menus handle keyboard navigation,
+  errors and retry. Unavailable scan actions have focus-accessible explanations.
+- **Verified:** 56 unit tests and all 95 browser tests passed; client build and
+  browser-test TypeScript checks passed. Lint has zero errors and 12 existing
+  warnings. Browser renders cover 1024 by 768, 1366 by 768 and 1920 by 1080,
+  long names/55 playlists, all destinations, empty/error states, contrast,
+  reduced motion and equivalent 125/150 percent CSS viewports. Screenshots use
+  fictional fixtures under ignored `artifacts/ui-phase-one`.
+- **Regression evidence:** the existing internal/external drag-contract,
+  duplicate/removal, CDJ-export UI, recording, Mixes, loudness and Soulseek browser
+  suites pass. A real browser audio element/WAV fixture keeps playing across
+  navigation, sidebar changes and Settings; mocked active capture stays visible
+  without a stop/restart request. Native bridge mocks do not verify Windows OLE,
+  rekordbox dragging, WebView2 focus, Xone capture or CDJ hardware. Physical
+  Windows display scaling and owner visual/native acceptance remain outstanding.
+- **Limits and safety:** build emits a roughly 505 KB initial-chunk warning;
+  existing lazy feature loading is retained. No backend, user library/profile,
+  audio/cue data, USB, website or release pipeline changes; no installer/publish
+  was run. The actual Library/player/preparation layout is unchanged, including
+  existing waveform/beat-grid/cue behaviour. Its migration belongs to UI 2.
+- **Next gate:** owner reviews/merges PR #42 into develop and checks the native
+  interactions before UI 1 acceptance is marked complete. UI 2 then implements
+  the approved Library/preparation layout; production promotion remains owner-led.
+
+## 2026-10-01: Accepted UI direction and precision preparation preview
+
+- **Owner decision:** approved the shell direction with the adjustment that
+  compact bottom playback must not replace a usable cue editor. The design
+  approval gate is checked; application UI 1 and UI 2 remain unimplemented.
+- **Prototype revised:** wide top waveform above the track list, Memory Cue
+  bank on the right, whole-track through two-second zoom, centred playhead,
+  visible cue markers, click/keyboard seeking, millisecond timestamp display
+  and 10 ms adjustments. Pointer/keyboard resizing is bounded; Focus list
+  collapses preparation and reopening restores the session's chosen height
+  without resetting the position. Production preferences are still pending.
+- **Verified prototype:** Browse and Selected + plan retain eight full rows
+  at 1366 by 768 and 1024 by 768; expanded preparation retains four with the
+  waveform taking priority. All three states also passed at 1920 by 1080.
+  Browser checks passed for zoom, cue seeking, click seeking, fine positioning,
+  pointer and keyboard resize, height/position retention and Focus list, plus
+  existing search, selection, modal focus, tooltips and equivalent-zoom checks.
+- **Limits:** waveform samples and cues are fictional, not real audio analysis
+  or a detected beat grid. This verifies the layout and interaction proposal,
+  not audio-accurate cue placement in WISP. No application code, audio controller,
+  user profile, music, database, USB or release pipeline was changed.
+- **Next:** migrate the accepted shared foundations/navigation into WISP for
+  UI 1; implement the actual preparation layout and precision controls in UI 2.
+
+## 2026-09-30: UI 1 shell and Library approval preview
+
+- **Started:** isolated interactive design prototype in `design/ui-redesign`,
+  representing the visual gate before UI 1 application migration. No application
+  source, profile, audio, cue data, USB or production site is changed.
+- **Visual proposal:** marketing-inspired dark surfaces, DM Sans and condensed
+  headings, clearer navigation icons/groups, separately scrolling playlists,
+  compact-navigation playlist drawer, compact bottom transport and one right
+  pane for preparation or active plan. Shared selection tools replace search
+  tools instead of adding another permanent toolbar.
+- **Prototype only:** fictional Library/playlists, selection, cue feedback,
+  column controls, tooltip behaviour and native Settings dialog focus. Audio,
+  downloads, export, maintenance and other page destinations are not connected;
+  demo controls explicitly disclose this. The real Settings focus repair and
+  shared application foundations are still pending.
+- **Verified prototype:** browser checks for Browse/Prepare/Selected with plan
+  at 1024 by 768, 1366 by 768 and 1920 by 1080, retaining at least eight complete
+  track rows at the two laptop sizes. Long labels, search/empty state, Select all,
+  optional date column, playlist filtering and compact drawer, Settings focus
+  containment/return, keyboard tooltips/Escape and illustrative cue feedback
+  passed. Reduced-motion mode and equivalent 125/150 percent CSS viewport checks
+  passed; the latter are not physical Windows display-scaling evidence.
+- **Safety and limits:** browser reported no script/console errors or requests
+  to WISP APIs/external services. Fonts/icons reuse existing dependency assets;
+  no new package or generated asset is added to Git. Static prototype tables
+  do not validate real-library virtualisation, Windows OLE dragging, playback,
+  capture or CDJ hardware. These remain later implementation regression gates.
+- **Next gate:** owner approval of the visual example. The two prototype delivery
+  checkboxes are checked; UI 1 implementation and all later phases remain open.
 
 ## 2026-09-30: Application UI redesign audit and phased plan
 

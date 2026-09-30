@@ -8,6 +8,10 @@ import type { SystemInfo } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { WispLogo } from '../../components/WispLogo'
 import { SoulseekDownloadFolderSettings } from './SoulseekDownloadFolderSettings'
+import { Modal } from '../../components/ui/Modal'
+import { Button, IconButton } from '../../components/ui/Button'
+import dmSansLicence from '@fontsource/dm-sans/LICENSE?url'
+import barlowLicence from '@fontsource/barlow-condensed/LICENSE?url'
 
 interface Props {
   onClose: () => void
@@ -24,22 +28,11 @@ export function SettingsPanel({ onClose }: Props) {
     queryFn: () => cleanup.audits(undefined, 500),
   })
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-      <div className="flex max-h-full w-full max-w-xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl">
+      <Modal labelledBy="wisp-settings-title" onClose={onClose} className="flex flex-col">
         <header className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold"><WispLogo size={32} />Wisp settings</h2>
-          <button onClick={onClose} aria-label="Close settings" className="text-xl leading-none text-[var(--color-muted)] hover:text-white">
-            ×
-          </button>
+          <h2 id="wisp-settings-title" className="ui-dialog-heading flex items-center gap-2"><WispLogo size={32} />WISP settings</h2>
+          <IconButton onClick={onClose} label="Close settings" variant="quiet"><X aria-hidden="true" /></IconButton>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -47,6 +40,7 @@ export function SettingsPanel({ onClose }: Props) {
             <Row label="Version">{sys.data?.version ?? '…'}</Row>
             <Row label="Environment">{sys.data?.environment ?? '…'}</Row>
             <Row label="Cleanup audit entries">{audits.data?.length ?? '…'}</Row>
+            <Row label="Font licences"><span className="flex gap-3"><a className="underline" href={dmSansLicence} download="DM-Sans-LICENSE.txt">DM Sans</a><a className="underline" href={barlowLicence} download="Barlow-Condensed-LICENSE.txt">Barlow Condensed</a></span></Row>
           </Section>
 
           <Section title="Data locations">
@@ -88,15 +82,13 @@ export function SettingsPanel({ onClose }: Props) {
         </div>
 
         <footer className="flex items-center justify-end border-t border-[var(--color-border)] px-5 py-3">
-          <button
+          <Button
             onClick={onClose}
-            className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm hover:bg-white/5"
           >
             Close
-          </button>
+          </Button>
         </footer>
-      </div>
-    </div>
+      </Modal>
   )
 }
 

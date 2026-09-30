@@ -62,8 +62,9 @@ export type Pending =
   | { kind: 'choice'; opts: ChoiceOptions; resolve: (v: string | null) => void }
 
 interface DialogStore {
-  current: Pending | null
-  queue: Pending[]
+  current: (Pending & { id: number }) | null
+  queue: (Pending & { id: number })[]
+  nextId: number
   open: (p: Pending) => void
   close: () => void
 }
@@ -71,7 +72,11 @@ interface DialogStore {
 export const useDialogStore = create<DialogStore>((set) => ({
   current: null,
   queue: [],
-  open: (p) => set(s => s.current ? { queue: [...s.queue, p] } : { current: p }),
+  nextId: 1,
+  open: (p) => set(s => {
+    const pending = { ...p, id: s.nextId }
+    return s.current ? { queue: [...s.queue, pending], nextId: s.nextId + 1 } : { current: pending, nextId: s.nextId + 1 }
+  }),
   close: () => set(s => ({ current: s.queue[0] ?? null, queue: s.queue.slice(1) })),
 }))
 

@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WISP shell and Library design preview</title>
+    <link rel="icon" href="/wispa.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/preview.css" />
+    <script type="module" src="/preview.mjs"></script>
+  </head>
+  <body>
+    <div class="preview-bar">
+      <span
+        ><strong>DESIGN PREVIEW</strong>
+        <span class="preview-description"
+          >Fictional collection · no audio, downloads or USB writes</span
+        ></span
+      >
+      <div role="group" aria-label="Preview states">
+        <button data-state="browse" aria-pressed="true">Browse</button>
+        <button data-state="prepare" aria-pressed="false">Prepare</button>
+        <button data-state="selected" aria-pressed="false">
+          Selected + plan
+        </button>
+      </div>
+    </div>
+    <a class="skip-link" href="#library-heading">Skip to Library</a>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Application navigation">
+        <header class="brand">
+          <img src="/wispa.svg" width="34" height="34" alt="" /><span>WISP</span
+          ><button
+            id="collapse"
+            class="icon-button"
+            aria-label="Collapse navigation"
+            data-tip="Collapse navigation"
+          >
+            <i data-icon="PanelLeftClose"></i>
+          </button>
+        </header>
+        <nav aria-label="Main pages">
+          <p class="nav-heading">Workspace</p>
+          <button
+            class="nav-item current"
+            data-page="Library"
+            aria-current="page"
+            data-tip="Your music library"
+          >
+            <i data-icon="Library"></i><span>Library</span>
+          </button>
+          <button
+            class="nav-item"
+            data-page="Mix Plans"
+            data-tip="Arrange tracks and prepare transitions"
+          >
+            <i data-icon="ListMusic"></i><span>Mix Plans</span>
+          </button>
+          <button
+            class="nav-item"
+            data-page="Mixes"
+            data-tip="Record, listen back and review mixes"
+          >
+            <i data-icon="AudioLines"></i><span>Mixes</span>
+          </button>
+          <p class="nav-heading find-heading">Find music</p>
+          <button
+            class="nav-item"
+            data-page="Discover"
+            data-tip="Search for artists and tracks"
+          >
+            <i data-icon="Compass"></i><span>Discover</span>
+          </button>
+          <button
+            class="nav-item"
+            data-page="Crate Digger"
+            data-tip="Browse the sources you follow"
+          >
+            <i data-icon="Pickaxe"></i><span>Crate Digger</span>
+          </button>
+          <button
+            class="nav-item"
+            data-page="Wanted"
+            data-tip="Tracks you want to find"
+          >
+            <i data-icon="Heart"></i><span>Wanted</span><small>7</small>
+          </button>
+          <button
+            class="nav-item"
+            data-page="Soulseek"
+            data-tip="Search files and manage transfers"
+          >
+            <i data-icon="Network"></i><span>Soulseek</span>
+          </button>
+        </nav>
+        <div class="playlist-heading">
+          <span>Playlists</span
+          ><button
+            id="playlist-search-toggle"
+            class="icon-button"
+            aria-label="Search playlists"
+            aria-expanded="false"
+            data-tip="Find a playlist"
+          >
+            <i data-icon="Search"></i></button
+          ><button
+            class="icon-button demo"
+            aria-label="Create playlist"
+            data-tip="Create a playlist"
+          >
+            <i data-icon="Plus"></i>
+          </button>
+        </div>
+        <label class="playlist-search" hidden
+          ><span class="sr-only">Search playlists</span
+          ><input
+            id="playlist-search"
+            type="search"
+            placeholder="Find a playlist"
+        /></label>
+        <div
+          id="playlist-list"
+          class="playlist-list"
+          role="group"
+          aria-label="Playlists"
+        ></div>
+        <button
+          id="compact-playlists"
+          class="nav-item"
+          aria-label="Open your playlists"
+          data-tip="Open your playlists"
+          aria-haspopup="dialog"
+        >
+          <i data-icon="ListMusic"></i><span>Playlists</span>
+        </button>
+        <footer class="sidebar-footer">
+          <button
+            class="nav-item settings-open"
+            aria-label="Settings"
+            data-tip="Connections, folders and application settings"
+          >
+            <i data-icon="Settings2"></i><span>Settings</span></button
+          ><span class="sidebar-footnote">LOCAL FIRST. MUSIC FIRST.</span>
+        </footer>
+      </aside>
+      <div class="workspace">
+        <header class="app-header">
+          <span class="location"
+            >Collection <i data-icon="ChevronRight"></i
+            ><strong id="breadcrumb">Library</strong></span
+          >
+          <div class="global-actions">
+            <button id="transfers-toggle" class="quiet" aria-expanded="false">
+              <i data-icon="ArrowDownToLine"></i><span>Transfers</span
+              ><span class="count">2</span></button
+            ><button
+              id="plan-toggle"
+              class="quiet"
+              aria-expanded="false"
+              data-tip="Open the active mix plan without leaving the Library"
+            >
+              <i data-icon="ListMusic"></i><span>Sunday session</span
+              ><i data-icon="ChevronDown"></i></button
+            ><button
+              class="icon-button settings-open"
+              aria-label="Open Settings"
+              data-tip="Open Settings"
+            >
+              <i data-icon="Settings2"></i>
+            </button>
+          </div>
+        </header>
+        <main>
+          <div class="library-body">
+            <section
+              id="preparation-dock"
+              class="preparation-dock"
+              aria-label="Precision preparation preview"
+              hidden
+            >
+              <header class="wave-tools">
+                <div>
+                  <strong>Prepare track</strong
+                  ><span class="wave-demo-label"
+                    >Illustrative waveform · no audio</span
+                  >
+                </div>
+                <button
+                  id="focus-list"
+                  class="quiet"
+                  data-tip="Collapse preparation without stopping playback"
+                >
+                  <i data-icon="PanelTopClose"></i>Focus list
+                </button>
+              </header>
+              <div class="wave-navigation">
+                <label for="wave-zoom">View</label>
+                <select id="wave-zoom" aria-label="Waveform zoom">
+                  <option value="330">Whole track</option>
+                  <option value="32">32 seconds</option>
+                  <option value="16" selected>16 seconds</option>
+                  <option value="8">8 seconds</option>
+                  <option value="2">2 seconds</option>
+                </select>
+                <button
+                  id="centre-wave"
+                  class="quiet"
+                  data-tip="Centre the waveform on the demo playhead"
+                >
+                  Centre playhead
+                </button>
+                <output id="precise-position" aria-live="off">2:18.000</output>
+              </div>
+              <div id="wave-ruler" class="wave-ruler" aria-hidden="true"></div>
+              <div
+                id="prep-wave"
+                class="precision-wave"
+                role="slider"
+                tabindex="0"
+                aria-label="Illustrative waveform position"
+                aria-valuemin="0"
+                aria-valuemax="330"
+                aria-valuenow="138"
+                aria-describedby="wave-instructions"
+              ></div>
+              <footer class="wave-fine-controls">
+                <span id="wave-instructions">Click to seek · ← / → 10 ms</span>
+                <div>
+                  <button
+                    id="nudge-back"
+                    class="secondary"
+                    aria-label="Move demo playhead back 10 milliseconds"
+                  >
+                    −10 ms</button
+                  ><button
+                    id="nudge-forward"
+                    class="secondary"
+                    aria-label="Move demo playhead forward 10 milliseconds"
+                  >
+                    +10 ms
+                  </button>
+                </div>
+              </footer>
+              <div
+                id="prep-resize"
+                class="prep-resize"
+                role="separator"
+                tabindex="0"
+                aria-label="Resize preparation waveform"
+                aria-orientation="horizontal"
+                aria-valuemin="210"
+                aria-valuemax="360"
+                aria-valuenow="236"
+                data-tip="Drag to resize · Up/Down adjusts height · double-click resets"
+              >
+                <span></span>
+              </div>
+            </section>
+            <section class="collection" aria-labelledby="library-heading">
+              <header class="page-header">
+                <div>
+                  <p class="eyebrow" id="collection-caption">YOUR COLLECTION</p>
+                  <h1 id="library-heading" tabindex="-1">Library</h1>
+                  <p id="collection-summary">
+                    18 tracks · Ready for your next set
+                  </p>
+                </div>
+                <div class="page-actions">
+                  <button id="all-tracks" class="quiet" hidden>
+                    All tracks</button
+                  ><button
+                    id="usb"
+                    class="secondary demo"
+                    hidden
+                    data-tip="Preview only — does not access a USB"
+                  >
+                    <i data-icon="Usb"></i>Export to USB</button
+                  ><button
+                    id="prepare-toggle"
+                    class="primary"
+                    aria-expanded="false"
+                  >
+                    <i data-icon="AudioLines"></i>Prepare track
+                  </button>
+                </div>
+              </header>
+              <div id="browse-tools" class="toolbar">
+                <label class="track-search"
+                  ><i data-icon="Search"></i
+                  ><span class="sr-only">Search Library</span
+                  ><input
+                    id="track-search"
+                    type="search"
+                    placeholder="Search artist, title or album" /></label
+                ><button
+                  id="filters-toggle"
+                  class="secondary"
+                  aria-expanded="false"
+                >
+                  <i data-icon="SlidersHorizontal"></i>Filters</button
+                ><label class="sort-label"
+                  ><span class="sr-only">Sort tracks</span
+                  ><select id="sort">
+                    <option value="newest">Recently added</option>
+                    <option value="artist">Artist A–Z</option>
+                    <option value="bpm">BPM low–high</option>
+                  </select></label
+                ><button
+                  id="columns-toggle"
+                  class="icon-button"
+                  aria-label="Choose columns"
+                  aria-expanded="false"
+                  data-tip="Choose which columns are visible"
+                >
+                  <i data-icon="Settings2"></i>
+                </button>
+              </div>
+              <div id="selection-tools" class="toolbar selection-tools" hidden>
+                <strong id="selection-count">3 selected</strong
+                ><button class="secondary demo">
+                  <i data-icon="FolderPlus"></i>Add to playlist</button
+                ><button class="secondary demo">
+                  <i data-icon="ListMusic"></i>Add to plan</button
+                ><button
+                  class="icon-button demo"
+                  aria-label="Tag selected tracks"
+                  data-tip="Tag selected tracks"
+                >
+                  <i data-icon="Tag"></i></button
+                ><button
+                  class="secondary demo external-drag"
+                  data-tip="In the real app, this supplies audio files to other applications. This preview cannot perform native dragging."
+                >
+                  <i data-icon="GripVertical"></i>Files for other apps</button
+                ><button id="clear-selection" class="quiet">Clear</button>
+              </div>
+              <div id="filters" class="filter-panel" hidden>
+                <label
+                  >Key
+                  <select>
+                    <option>Any key</option>
+                    <option>8A</option>
+                    <option>9A</option>
+                  </select></label
+                ><label
+                  >BPM
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    aria-label="Minimum BPM" /><span>–</span
+                  ><input
+                    type="number"
+                    placeholder="Max"
+                    aria-label="Maximum BPM" /></label
+                ><label><input type="checkbox" />Include archived</label
+                ><span>Filter controls illustrate layout only.</span>
+              </div>
+              <div id="columns" class="column-panel" hidden>
+                <strong>DJ preparation</strong
+                ><label
+                  ><input id="show-dates" type="checkbox" />Date added</label
+                ><label
+                  ><input id="show-genre" type="checkbox" checked />Genre</label
+                ><span>Artist, title, BPM, key and length stay visible.</span>
+              </div>
+              <div class="table-scroll">
+                <table aria-label="Library tracks">
+                  <colgroup>
+                    <col class="check-col" />
+                    <col class="number-col" />
+                    <col class="artist-col" />
+                    <col class="title-col" />
+                    <col class="bpm-col" />
+                    <col class="key-col" />
+                    <col class="genre-col" />
+                    <col class="length-col" />
+                    <col class="date-col" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>
+                        <input
+                          id="select-all"
+                          type="checkbox"
+                          aria-label="Select all visible tracks"
+                        />
+                      </th>
+                      <th>#</th>
+                      <th>Artist</th>
+                      <th>Title</th>
+                      <th>BPM</th>
+                      <th>Key</th>
+                      <th class="genre-cell">Genre</th>
+                      <th>Length</th>
+                      <th class="date-cell" hidden>Added</th>
+                    </tr>
+                  </thead>
+                  <tbody id="track-rows"></tbody>
+                </table>
+                <p id="empty-search" class="empty-search" hidden>
+                  No matching demo tracks. Try another artist or title.
+                </p>
+              </div>
+              <footer class="table-footer">
+                <span id="visible-count">18 tracks</span
+                ><span>Double-click a track to prepare it</span>
+              </footer>
+            </section>
+            <aside
+              id="inspector"
+              class="inspector"
+              aria-label="Track preparation"
+              hidden
+            >
+              <header class="inspector-heading">
+                <span class="eyebrow">TRACK PREPARATION</span
+                ><button
+                  id="close-inspector"
+                  class="icon-button"
+                  aria-label="Close preparation without stopping playback"
+                  data-tip="Close preparation · playback stays available"
+                >
+                  <i data-icon="X"></i>
+                </button>
+              </header>
+              <h2 id="inspector-title">Moving Through</h2>
+              <p id="inspector-artist" class="muted">Sunday Club</p>
+              <div class="track-facts">
+                <span id="inspector-bpm">124 BPM</span
+                ><span id="inspector-key" class="key">8A</span
+                ><span id="inspector-duration">5:30</span>
+              </div>
+              <div
+                class="prep-tabs"
+                role="group"
+                aria-label="Preparation sections"
+              >
+                <button data-prep-tab="cues" aria-pressed="true">Cues</button
+                ><button data-prep-tab="notes" aria-pressed="false">
+                  Notes</button
+                ><button data-prep-tab="details" aria-pressed="false">
+                  Details
+                </button>
+              </div>
+              <div id="cue-panel">
+                <div class="section-heading">
+                  <h3>Memory Cues</h3>
+                  <span id="cue-count">2 / 10</span>
+                </div>
+                <p class="helper">
+                  Saved for CDJ export. No sync happens here.
+                </p>
+                <div id="memory-cues"></div>
+                <button id="add-cue" class="secondary add-cue">
+                  <i data-icon="Plus"></i>Save memory cue here
+                </button>
+                <div class="section-heading hot-heading">
+                  <h3>Hot Cues</h3>
+                  <i data-icon="CircleHelp"></i>
+                </div>
+                <p class="helper">
+                  Not recalled by CDJ-850 / original CDJ-900.
+                </p>
+                <div class="section-heading"><h3>Preparation markers</h3></div>
+                <div class="marker-row">
+                  <span>0:30</span><span>First beat</span
+                  ><small>WISP only</small>
+                </div>
+                <p class="helper">
+                  A preparation marker is not a saved device cue.
+                </p>
+              </div>
+              <div id="notes-panel" hidden>
+                <label for="track-note">Track note</label
+                ><textarea id="track-note" rows="5">
+Let the intro breathe. Bring the bass in after the first phrase.</textarea
+                >
+                <p class="helper">
+                  Fictional note. Edits stay in this preview only.
+                </p>
+              </div>
+              <div id="details-panel" hidden>
+                <dl>
+                  <dt>Audio</dt>
+                  <dd>MP3 · 320 kbps</dd>
+                  <dt>Version</dt>
+                  <dd>Original</dd>
+                  <dt>Added</dt>
+                  <dd>26 September 2026</dd>
+                </dl>
+                <button class="secondary demo">
+                  <i data-icon="Folder"></i>Reveal audio file
+                </button>
+              </div>
+              <footer class="inspector-footer">
+                <button class="quiet demo">
+                  <i data-icon="MoreHorizontal"></i>Track actions</button
+                ><span>Illustrative cues only</span>
+              </footer>
+            </aside>
+            <aside
+              id="plan"
+              class="inspector plan"
+              aria-label="Active mix plan"
+              hidden
+            >
+              <header class="inspector-heading">
+                <span class="eyebrow">ACTIVE MIX PLAN</span
+                ><button
+                  id="close-plan"
+                  class="icon-button"
+                  aria-label="Close mix plan drawer"
+                >
+                  <i data-icon="X"></i>
+                </button>
+              </header>
+              <h2>Sunday session</h2>
+              <p class="muted">5 tracks · 29 min</p>
+              <p class="plan-intro">
+                Start deep. Build slowly.<br />Leave space for the unexpected.
+              </p>
+              <ol id="plan-tracks"></ol>
+              <button class="secondary demo">
+                <i data-icon="ListMusic"></i>Open full plan
+              </button>
+              <p class="helper">
+                This drawer is a visual proposal, not a plan editor.
+              </p>
+            </aside>
+          </div>
+          <section class="player" aria-label="Demo playback presentation">
+            <button
+              id="play"
+              class="play-button"
+              aria-label="Play demo presentation"
+              aria-pressed="false"
+              data-tip="Visual demo only · no audio plays"
+            >
+              <i data-icon="Play"></i>
+            </button>
+            <div class="playing-track">
+              <strong id="player-title">Moving Through</strong
+              ><span id="player-artist">Sunday Club</span>
+            </div>
+            <div class="player-timeline">
+              <div id="mini-wave" class="mini-wave" aria-hidden="true"></div>
+              <input
+                id="position"
+                type="range"
+                min="0"
+                max="330"
+                step="0.01"
+                value="138"
+                aria-label="Demo playback position"
+              />
+              <div class="times">
+                <span id="position-label">2:18</span
+                ><span id="player-duration">5:30</span>
+              </div>
+            </div>
+            <div class="player-actions">
+              <button
+                id="previous"
+                class="icon-button"
+                aria-label="Previous demo track"
+              >
+                <i data-icon="SkipBack"></i></button
+              ><button
+                id="next"
+                class="icon-button"
+                aria-label="Next demo track"
+              >
+                <i data-icon="SkipForward"></i></button
+              ><button
+                id="player-prep"
+                class="quiet"
+                data-tip="Open preparation without replacing the list"
+              >
+                <i data-icon="AudioLines"></i><span>Prepare</span></button
+              ><button class="icon-button demo" aria-label="Demo volume">
+                <i data-icon="Volume2"></i>
+              </button>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog id="settings" aria-labelledby="settings-title">
+      <header>
+        <h2 id="settings-title">Settings</h2>
+        <button class="icon-button dialog-close" aria-label="Close Settings">
+          <i data-icon="X"></i>
+        </button>
+      </header>
+      <p class="helper">
+        Visual example only. Your real settings are untouched.
+      </p>
+      <nav class="settings-tabs" aria-label="Settings categories">
+        <button aria-current="page">General</button
+        ><button class="demo">Library &amp; files</button
+        ><button class="demo">Connections</button
+        ><button class="demo">Advanced</button>
+      </nav>
+      <div class="settings-content">
+        <h3>Appearance</h3>
+        <label
+          >Interface density
+          <select>
+            <option>Comfortable</option>
+            <option>Compact</option>
+          </select></label
+        ><label><input type="checkbox" checked />Show helpful tooltips</label>
+        <p class="helper">
+          These controls illustrate the proposed settings layout.
+        </p>
+      </div>
+      <footer><button class="secondary dialog-close">Close</button></footer>
+    </dialog>
+    <dialog id="playlist-drawer" aria-labelledby="playlist-drawer-title">
+      <header>
+        <h2 id="playlist-drawer-title">Playlists</h2>
+        <button class="icon-button dialog-close" aria-label="Close playlists">
+          <i data-icon="X"></i>
+        </button>
+      </header>
+      <label class="drawer-search"
+        ><span class="sr-only">Find playlist in drawer</span
+        ><input id="drawer-search" type="search" placeholder="Find a playlist"
+      /></label>
+      <div id="drawer-playlists"></div>
+      <p class="helper">Playlists remain reachable in compact navigation.</p>
+    </dialog>
+    <div id="transfers" class="transfer-popover" hidden>
+      <h3>Transfers</h3>
+      <p>Moving Through.mp3 <span>47%</span></p>
+      <progress
+        value="47"
+        max="100"
+        aria-label="Demo transfer progress"
+      ></progress>
+      <p>Back To You (Dub).mp3 <span>Queued</span></p>
+      <small>Fictional activity; no downloads are running.</small>
+    </div>
+    <div id="tooltip" role="tooltip" hidden></div>
+    <div id="notice" role="status" hidden></div>
+  </body>
+</html>

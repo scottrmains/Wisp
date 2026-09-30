@@ -1,4 +1,6 @@
 import type { ScanProgress } from '../../api/types'
+import { X } from 'lucide-react'
+import { IconButton } from '../../components/ui/Button'
 
 interface Props {
   progress: ScanProgress | null
@@ -12,13 +14,13 @@ export function ScanToast({ progress, error, active, onDismiss }: Props) {
 
   if (error) {
     return (
-      <div className="fixed bottom-6 right-6 max-w-sm rounded-lg border border-red-500/40 bg-[var(--color-surface)] p-4 shadow-lg">
+      <div role="alert" className="fixed bottom-6 right-6 max-w-sm rounded-[var(--ui-radius)] border border-[var(--ui-danger)] bg-[var(--color-surface)] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-semibold text-red-400">Scan failed</h3>
             <p className="mt-1 text-xs text-[var(--color-muted)]">{error}</p>
           </div>
-          <button onClick={onDismiss} className="text-[var(--color-muted)] hover:text-white">×</button>
+          <IconButton onClick={onDismiss} label="Dismiss scan error" variant="quiet"><X aria-hidden="true" /></IconButton>
         </div>
       </div>
     )
@@ -34,7 +36,7 @@ export function ScanToast({ progress, error, active, onDismiss }: Props) {
   const done = !active && (progress.status === 'Completed' || progress.status === 'Cancelled')
 
   return (
-    <div className="fixed bottom-6 right-6 w-[22rem] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-lg">
+    <div role="status" className="fixed bottom-6 right-6 w-[22rem] max-w-[calc(100vw-3rem)] rounded-[var(--ui-radius)] border border-[var(--ui-control-border)] bg-[var(--color-surface)] p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <h3 className="text-sm font-semibold">
@@ -59,7 +61,7 @@ export function ScanToast({ progress, error, active, onDismiss }: Props) {
           </div>
         </div>
         {done && (
-          <button onClick={onDismiss} className="text-[var(--color-muted)] hover:text-white">×</button>
+          <IconButton onClick={onDismiss} label="Dismiss scan result" variant="quiet"><X aria-hidden="true" /></IconButton>
         )}
       </div>
     </div>

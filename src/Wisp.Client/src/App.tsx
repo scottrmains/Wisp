@@ -10,6 +10,7 @@ import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 import { DialogHost } from './components/DialogHost'
+import { TooltipHost } from './components/ui/TooltipHost'
 import { RecordingInputIndicator } from './features/recordings/RecordingInputPage'
 import { MixRecordingIndicator } from './features/recordings/MixRecorderPanel'
 
@@ -88,7 +89,8 @@ function App() {
       // Never let an unhandled drop navigate the embedded browser or download.
       // Bubbling preserves playlist/mix handlers; no files are imported here.
       onDrop={(e) => e.preventDefault()}>
-      <AppSidebar />
+      <a className="app-skip-link" href="#workspace-content">Skip to workspace</a>
+      <AppSidebar onOpenSettings={() => setSettingsOpen(true)} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppHeader
@@ -99,7 +101,7 @@ function App() {
 
         <RecordingInputIndicator />
         <MixRecordingIndicator />
-        <main className="min-h-0 flex-1 overflow-hidden">
+        <main id="workspace-content" tabIndex={-1} className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<div className="p-6 text-sm text-[var(--color-muted)]">Loading workspaceâ€¦</div>}>
           {page === 'library' && <LibraryPage />}
           {page === 'mix-plans' && <MixPlansPage />}
@@ -137,6 +139,7 @@ function App() {
         </Suspense>
       )}
       <DialogHost />
+      <TooltipHost />
     </div>
   )
 }

@@ -1,8 +1,12 @@
-import { FolderSearch, Settings } from 'lucide-react'
+import { ChevronRight, FolderSearch, Settings2 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { bridgeAvailable } from '../../bridge'
 import { PlanSwitcher } from '../mixchain/PlanSwitcher'
 import { SoulseekStatusIndicator } from '../soulseek/SoulseekStatusIndicator'
 import { useCurrentPage } from '../../state/currentPage'
+import { useActivePlaylist } from '../../state/activePlaylist'
+import { playlists } from '../../api/playlists'
+import { Button, IconButton } from '../../components/ui/Button'
 
 interface Props {
   scanActive: boolean
@@ -14,29 +18,64 @@ interface Props {
 /// owns global actions (Plan switcher, Soulseek transfer indicator, Scan, Settings).
 /// Kept around as its own component partly for the global-search slot we'll add later.
 export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
-  const recordingPage = useCurrentPage(s => s.page === 'recordings')
+  const page = useCurrentPage((s) => s.page)
+  const recordingPage = page === 'recordings'
+  const activePlaylistId = useActivePlaylist((s) => s.activePlaylistId)
+  const list = useQuery({
+    queryKey: ['playlists'],
+    queryFn: () => playlists.list(),
+    staleTime: 30_000,
+  })
+  const activePlaylist =
+    page === 'library' ? list.data?.find((p) => p.id === activePlaylistId) : null
+  const label =
+    activePlaylist?.name ??
+    {
+      library: 'Library',
+      'mix-plans': 'Mix Plans',
+      recordings: 'Mixes',
+      discover: 'Discover',
+      'crate-digger': 'Crate Digger',
+      wanted: 'Wanted',
+      soulseek: 'Soulseek',
+    }[page]
   return (
-    <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-[var(--color-border)] px-4">
-      <SoulseekStatusIndicator />
-      {!recordingPage && <PlanSwitcher />}
-      <span className="h-6 w-px bg-[var(--color-border)]" aria-hidden />
-      {!recordingPage && <button
-        onClick={onScan}
-        disabled={!bridgeAvailable() || scanActive}
-        className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-        title={bridgeAvailable() ? 'Pick a folder and scan' : 'Folder picker only works inside Photino'}
-      >
-        <FolderSearch size={14} strokeWidth={1.75} />
-        {scanActive ? 'Scanning…' : 'Scan folder'}
-      </button>}
-      <button
-        onClick={onOpenSettings}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-muted)] hover:text-white"
-        aria-label="Settings"
-        title="Settings"
-      >
-        <Settings size={16} strokeWidth={1.75} />
-      </button>
+    <header className="app-header shrink-0">
+      <div className="app-breadcrumb" aria-label="Current workspace">
+        <span>
+          {activePlaylist
+            ? 'Playlists'
+            : ['discover', 'crate-digger', 'wanted', 'soulseek'].includes(page)
+              ? 'Find music'
+              : 'Workspace'}
+        </span>
+        <ChevronRight size={14} aria-hidden="true" />
+        <strong data-ui-tooltip={label}>{label}</strong>
+      </div>
+      <div className="app-global-actions">
+        <SoulseekStatusIndicator />
+        {!recordingPage && <PlanSwitcher />}
+        {!recordingPage && (
+          <Button
+            onClick={onScan}
+            disabled={!bridgeAvailable() || scanActive}
+            aria-label={scanActive ? 'Scanning folder' : 'Scan folder'}
+            tooltip={
+              bridgeAvailable()
+                ? scanActive
+                  ? 'A folder scan is already running.'
+                  : 'Choose a music folder to scan.'
+                : 'Folder selection requires the WISP desktop app.'
+            }
+          >
+            <FolderSearch aria-hidden="true" />
+            <span className="scan-label">{scanActive ? 'Scanning…' : 'Scan folder'}</span>
+          </Button>
+        )}
+        <IconButton onClick={onOpenSettings} label="Settings" variant="quiet">
+          <Settings2 aria-hidden="true" />
+        </IconButton>
+      </div>
     </header>
   )
 }

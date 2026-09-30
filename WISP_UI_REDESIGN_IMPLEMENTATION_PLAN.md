@@ -1,10 +1,11 @@
 # WISP application UI redesign implementation plan
 
-Updated: 2026-09-30
+Updated: 2026-10-01
 
-Status: planning only. The owner approved creating this plan following the UI
-audit; no redesign phase is implemented by this documentation PR. The proposed
-visual direction still needs approval through a shell and Library example.
+Status: UI 1 shared foundations and navigation are implemented in PR #42,
+with automated verification complete. Owner review and native acceptance remain
+pending. UI 2 is next: migrate the approved wide, resizable top preparation
+waveform and compact bottom playback overview from the isolated prototype.
 
 ## Product outcome
 
@@ -86,12 +87,36 @@ Proposed navigation groups are Workspace (Library, Mix Plans, Mixes), Find music
 (Discover, Crate Digger, Wanted, configured Soulseek), and a separate playlist
 area. Group names, icon choices and exact dimensions remain design proposals.
 
-- [ ] Produce a visual shell and Library example using fictional tracks, with
+- [x] Produce a visual shell and Library example using fictional tracks, with
   ordinary browsing, playback/preparation and multi-selection states.
-- [ ] Show a narrow-window variation and the plan drawer behaviour, not just a
+- [x] Show a narrow-window variation and the plan drawer behaviour, not just a
   wide empty page. Include long playlist and track names.
-- [ ] Obtain owner approval before broad page migration. Record the accepted
+- [x] Obtain owner approval before broad page migration. Record the accepted
   example and any requested adjustments in the status document and PR.
+
+Accepted adjustment: the compact bottom waveform is a playback overview, not a
+cue editor. Deliberate preparation opens a wide, resizable waveform above the
+track list, with the cue bank on the right. Include playhead-centred zoom,
+visible cue markers, accurate seeking and fine position adjustment. Focus list
+collapses preparation without stopping playback; reopening restores the chosen
+height. The eight-row target applies to compact browsing, not expanded cue
+editing, where precision takes priority. Production height preferences must be
+saved using existing UI preferences; the prototype remembers only in-session.
+
+The isolated prototype is in `design/ui-redesign`. Install the existing client
+and marketing dependencies with `npm ci --prefix src/Wisp.Client` and
+`npm ci --prefix src/Wisp.Marketing`, then run
+`node design/ui-redesign/serve.mjs` and open `http://127.0.0.1:19710`.
+Use Browse, Prepare and Selected + plan at the top to review the three states.
+`node design/ui-redesign/test-preview.mjs` runs prototype browser checks and
+saves ignored screenshots/metrics under `artifacts/ui-redesign`.
+
+The prototype has no WISP API, native bridge, storage or audio connections.
+Selection, playlist filtering, cue feedback and playback presentation are
+fictional demonstrations, not implemented app features. Settings in the actual
+application now uses the shared native modal and contains/restores focus.
+Its Library/player/preparation layout proposes UI 2 direction for approval, not
+an early implementation of UI 2. No installer or production asset includes it.
 
 ## Delivery workflow
 
@@ -113,29 +138,37 @@ accessibility issue open solely to match the cosmetic page sequence.
 
 ## Phase UI 1 Shared foundations and navigation
 
-- [ ] Define reusable colour, typography, spacing, border, radius, control-size
+- [x] Define reusable colour, typography, spacing, border, radius, control-size
   and focus tokens; replace inconsistent shared-shell styling first.
-- [ ] Establish shared buttons, icon buttons, tabs, menus, status messages and
+- [x] Establish shared buttons, icon buttons, tabs, menus, status messages and
   dialog presentation. Retain suitable existing native dialog semantics.
-- [ ] Choose clearer Lucide metaphors, consistent strokes and 18 to 20px main
+- [x] Choose clearer Lucide metaphors, consistent strokes and 18 to 20px main
   navigation icons. Aim for 36 to 40px navigation rows and comfortably padded
   desktop actions; do not inflate every dense table control to touch size.
-- [ ] Implement tooltips for hover and keyboard focus, Escape dismissal, actual
+- [x] Implement tooltips for hover and keyboard focus, Escape dismissal, actual
   shortcut hints, truncated labels and unavailable-action explanations. Give
   icon controls accessible names independent of tooltips. Essential warnings
   and instructions stay visible.
-- [ ] Group primary navigation; give playlists a separately scrolling area,
+- [x] Group primary navigation; give playlists a separately scrolling area,
   search and visible management menu with keyboard access. Preserve playlist
   drop targets and duplicate confirmation when navigating/searching.
-- [ ] Keep playlist access possible in compact navigation through an explicit
+- [x] Keep playlist access possible in compact navigation through an explicit
   accessible drawer. Make compact-window behaviour consistent across pages.
-- [ ] Standardise page headers, current-page semantics and global actions.
+- [x] Standardise page headers, current-page semantics and global actions.
   Keep transfer/capture status available without duplicate page controls.
-- [ ] Contain Settings focus, restore focus on close and prevent background
+- [x] Contain Settings focus, restore focus on close and prevent background
   interaction. Validate other shared menus/dialogs rather than assuming every
   custom overlay has the same fault.
-- [ ] Persist compatible layout preferences with safe defaults and bounds;
+- [x] Persist compatible layout preferences with safe defaults and bounds;
   avoid resetting existing preferences or storing sensitive data in new caches.
+
+Implementation scope: global shell/header and reusable foundations are migrated;
+feature-specific headers, tables and specialised dialogs follow in UI 2 to UI 4.
+No new keyboard shortcuts are invented or advertised. Wide and compact-window
+sidebar preferences are additive; existing panel dimensions remain unchanged.
+The compact playlist drawer is deliberately non-modal so background Library
+selection and internal dragging remain available. Settings and confirmations
+remain modal. These implementation checks do not close the native acceptance gate.
 
 Acceptance: all existing destinations remain reachable with mouse and keyboard,
 including configured/unconfigured Soulseek and playlists in compact navigation.
@@ -149,8 +182,10 @@ activate content behind the modal.
   header, primary search, optional advanced filters and one selection toolbar.
   Replace scope jargon with ordinary playlist and All tracks labels.
 - [ ] Create a compact persistent playback presentation and deliberately opened
-  preparation workspace. Preserve resizing, focus-list behaviour, cue seeking,
-  playback position and the application-level audio controller.
+  top preparation waveform with the cue bank on the right. Support zoom around
+  the playhead, clear cue markers, precise seeking and fine position adjustment.
+  Preserve resizing and remember the preferred dock height, focus-list behaviour,
+  cue seeking, playback position and the application-level audio controller.
 - [ ] Make the active plan a compact summary/drawer by default, retaining an
   explicit expanded view. Its presence must not reduce browsing to one row.
 - [ ] Offer selectable, resizable columns and remembered presets for DJ
@@ -170,6 +205,9 @@ activate content behind the modal.
 Acceptance: at 1366 by 768, the compact browsing layout with playback, active
 plan and multi-selection shows at least eight full track rows plus the header.
 Expanded preparation is an explicit choice with a clear return to browsing.
+Its waveform precision takes priority over eight visible rows; measure and
+record the remaining list space rather than shrinking the cue editor to meet
+the compact browsing target.
 At 1024px wide, core DJ columns remain usable without forcing the complete file
 management grid onto the screen. Record actual dimensions and screenshots.
 
@@ -258,7 +296,7 @@ working library. Keep screenshots, music, credentials and databases out of Git.
 
 - [x] Review current pages and navigation using isolated fictional fixtures.
 - [x] Record the proposed phased delivery and acceptance checklists.
-- [ ] Approve the shell and Library visual example.
+- [x] Approve the shell and Library visual example.
 - [ ] Complete and accept UI 1.
 - [ ] Complete and accept UI 2.
 - [ ] Complete and accept UI 3.
