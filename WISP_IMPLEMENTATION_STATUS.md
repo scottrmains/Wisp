@@ -2,6 +2,66 @@
 
 Last reviewed: 2026-09-30
 
+## 2026-09-30: Dedicated Soulseek workspace, resilient transfers and opt-in sharing
+
+- **Implemented:** a profile-gated Soulseek sidebar page with separate Search,
+  Downloads and Sharing sections. The existing header transfer dropdown remains
+  available and opens the Downloads section. Search results/query and the last
+  section survive navigation within the application session; peer filenames are
+  not persisted to browser localStorage.
+- **Search:** shared contextual/workspace search UI, format/quality/slot/locked
+  filters (including AIFF/AIF), sortable file/duration/quality/size/user/queue
+  columns, multi-selection and sequential download queueing. Restricted results
+  cannot be downloaded. Single and partial batch failures are visible, including
+  from the dropdown after navigating away. Stop queueing finishes the current
+  request without submitting the remaining files. Server searches are actually
+  stopped/deleted; network connection status checks logged-in state, not simply
+  daemon availability. A reconnect action is available when slskd is reachable.
+- **Transfers/imports:** active/completed/failed-or-cancelled filters, file/user
+  filtering, cancel/retry, clear individual/all finished history, active folder
+  visibility, speed/queue information and library-import status/retry. Clearing
+  still removes history only, never music files. Additive `SoulseekImportReceipts`
+  migration replaces process-memory receipts, scoped to the daemon URL hash.
+  Completed receipts survive restart and history clearing. Interrupted import
+  scans become explicitly retryable on startup; a retry retains its original
+  folder if the download preference has since changed.
+- **Queue acknowledgement:** slskd may return HTTP 201 with a `Failed` list and
+  no enqueued file. This is not reported as success. Queue HTTP calls have a
+  separate four-minute timeout because slskd can wait up to three minutes for a
+  peer acknowledgement; availability/list probes retain their three-second
+  timeout. Transfer polling continues while a queue request is pending.
+- **Sharing:** disabled by default, explicit selected folders only, persistent
+  upload slot/speed limits, current share counts and scan status, rescan, active
+  uploads and targeted upload cancellation. Drive roots, WISP profile paths and
+  the configured private recording folder are rejected. Managed YAML excludes
+  incomplete/private recording directories, identity sidecars and common
+  metadata/artwork/temporary files. Normal and dotted music directories remain
+  searchable (slskd applies regex filters to directories as well as files).
+  Folder aliases avoid exposing full local paths to peers. Single-quoted YAML
+  preserves Windows backslashes and apostrophes correctly.
+- **Explicit limitations:** saving/enabling/disabling sharing or changing limits
+  requires restarting WISP; the running connection is left unchanged, so active
+  transfers are not interrupted. External slskd folder/limit configuration is
+  read-only in WISP; share monitoring/rescan/upload cancellation remain available.
+  Filters are not an exhaustive privacy boundary: select folders containing only
+  files you intend to distribute. No chat/rooms/buddy management or automatic
+  whole-library sharing. Cleared slskd history is not reconstructed as a permanent
+  download catalogue. Successful folder scan completion does not certify that
+  every downloaded file was playable/indexed; the UI says “Library scan complete”.
+- **Protocol evidence:** checked bundled slskd 0.25.1 search, server, shares,
+  transfers, download service and share scanner source. Peer-to-peer downloads
+  and uploads on the user's account have not been exercised by this change;
+  network availability, peer restrictions and router/firewall setup still apply.
+  User credentials, library database and music remain untouched by testing.
+- **Verification:** all 486 backend tests (115 Core, 184 Infrastructure, 187 API),
+  53 client unit tests and 84 browser tests pass. Client build passes; changed
+  frontend files lint clean and the full lint run has no errors (12 existing
+  warnings). Compact Search/Downloads screenshots were reviewed. Generated YAML
+  also passes the bundled slskd 0.25.1 offline startup/config validation with
+  isolated fake credentials and `--no-start --no-connect`; no peer login occurs.
+  Existing dependency vulnerability advisories and the client chunk-size warning
+  remain; these checks do not substitute for a live peer transfer test.
+
 ## 2026-09-30: Portable track identity beyond filenames
 
 - **Implemented:** the existing track GUID is stored as `WISP_TRACK_ID` in MP3

@@ -52,6 +52,9 @@ public static class WispServiceCollectionExtensions
         // slskd runs locally — fail fast when it isn't running rather than letting
         // Windows do its full TCP-retry dance for ~4 seconds per call.
         services.AddHttpClient("Wisp.Soulseek", c => c.Timeout = TimeSpan.FromSeconds(3));
+        // slskd enqueue waits for peer discovery/acknowledgement (up to three
+        // minutes). Availability probes stay quick; queueing must not use 3s.
+        services.AddHttpClient("Wisp.Soulseek.Queue", c => c.Timeout = TimeSpan.FromMinutes(4));
 
         services.AddSingleton<SpotifyOptions>();
         services.AddSingleton<DiscogsOptions>();

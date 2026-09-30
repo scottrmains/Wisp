@@ -44,8 +44,16 @@ public sealed record TransferDto(
     DateTimeOffset? EndedAt)
 {
     public Guid? ImportScanId { get; init; }
+    public string? ImportStatus { get; init; }
+    public string? ImportError { get; init; }
+    public double AverageSpeed { get; init; }
+    public int? PlaceInQueue { get; init; }
+    public string? Error { get; init; }
 
     public static TransferDto From(SoulseekTransfer t) => new(
         t.Id, t.Username, t.Filename, t.Size, t.BytesTransferred, t.Percentage,
-        t.State, t.StartedAt, t.EndedAt);
+        t.State, t.StartedAt, t.EndedAt)
+    {
+        AverageSpeed = t.AverageSpeed, PlaceInQueue = t.PlaceInQueue, Error = t.Error,
+    };
 }

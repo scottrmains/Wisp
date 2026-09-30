@@ -46,12 +46,12 @@ interface UiPrefsState {
   /// Soulseek dialog filter prefs. Default to MP3 320 because that's the
   /// DJ-deck-friendly format the user explicitly picks; persisted so the
   /// preferred filter applies on every search without re-toggling.
-  slskdFormat: 'any' | 'mp3' | 'flac' | 'wav'
+  slskdFormat: 'any' | 'mp3' | 'flac' | 'wav' | 'aiff'
   slskdMp3Bitrate: 'any' | '320' | '256+'
   slskdHideLocked: boolean
   slskdFreeSlotsOnly: boolean
   setSlskdFilter: (next: Partial<{
-    slskdFormat: 'any' | 'mp3' | 'flac' | 'wav'
+    slskdFormat: 'any' | 'mp3' | 'flac' | 'wav' | 'aiff'
     slskdMp3Bitrate: 'any' | '320' | '256+'
     slskdHideLocked: boolean
     slskdFreeSlotsOnly: boolean

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet } from '../../api/client'
 import { library } from '../../api/library'
 import { soulseek } from '../../api/soulseek'
@@ -27,6 +27,7 @@ export function useSoulseekTransfers() {
   const stopPolling = useSoulseekStatus((s) => s.stopPolling)
   const ensurePolling = useSoulseekStatus((s) => s.ensurePolling)
   const refreshedScans = useRef(new Set<string>())
+  const queuePending = useIsMutating({ mutationKey: ['soulseek-queue'] }) > 0
 
   const status = useQuery({
     queryKey: ['soulseek-status'],
@@ -39,15 +40,15 @@ export function useSoulseekTransfers() {
     queryKey: ['soulseek-downloads'],
     queryFn: () => soulseek.listDownloads(),
     enabled: slskdConfigured,
-    refetchInterval: pollingActive ? POLL_INTERVAL_MS : false,
+    refetchInterval: pollingActive || queuePending ? POLL_INTERVAL_MS : false,
     retry: false,
   })
 
   useEffect(() => {
     if (!transfers.data) return
-    if (transfers.data.some(t => !transferState(t.state).finished)) ensurePolling()
+    if (queuePending || transfers.data.some(t => !transferState(t.state).finished)) ensurePolling()
     else stopPolling()
-  }, [transfers.data, ensurePolling, stopPolling])
+  }, [transfers.data, ensurePolling, stopPolling, queuePending])
 
   const scanIds = [...new Set((transfers.data ?? []).flatMap(t => t.importScanId ? [t.importScanId] : []))]
   const importScans = useQueries({ queries: scanIds.map(id => ({
@@ -67,6 +68,7 @@ export function useSoulseekTransfers() {
       if (!job || !['Completed', 'Failed', 'Cancelled'].includes(job.status) || refreshedScans.current.has(job.id)) continue
       refreshedScans.current.add(job.id)
       void qc.invalidateQueries({ queryKey: ['tracks'] })
+      void qc.invalidateQueries({ queryKey: ['soulseek-downloads'] })
     }
   }, [importScans, qc])
 

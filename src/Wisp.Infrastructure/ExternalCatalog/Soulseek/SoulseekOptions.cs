@@ -24,6 +24,8 @@ public sealed class SoulseekOptions
     /// True when Wisp owns the slskd lifecycle (spawns + manages it as a child process).
     /// False when the user runs slskd themselves — in which case the sidecar stays out.
     public bool ManageSlskd { get; set; } = true;
+    public bool OwnsDaemon { get; set; }
+    public string? ActiveSharingSignature { get; set; }
 
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(ApiKey);

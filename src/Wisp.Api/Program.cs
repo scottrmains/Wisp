@@ -130,6 +130,7 @@ public class Program
             // externally-running slskd if port 5030 is taken; respects the
             // ManageSlskd toggle in settings.
             builder.Services.AddHostedService<Wisp.Api.Soulseek.SlskdSidecar>();
+            builder.Services.AddHostedService<Wisp.Api.Soulseek.SoulseekImportRecovery>();
 
             if (builder.Environment.IsDevelopment())
             {
@@ -227,6 +228,7 @@ public class Program
             app.MapDiscovery();
             app.MapSoulseek();
             app.MapSoulseekDownloadSettings();
+            app.MapSoulseekSharing();
             app.MapBlendRatings();
             app.MapTags();
             app.MapPlaylists();

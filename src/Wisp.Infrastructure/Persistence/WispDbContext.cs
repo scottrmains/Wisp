@@ -23,6 +23,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
     public DbSet<Wisp.Core.Recordings.RecordingTracklist> RecordingTracklists => Set<Wisp.Core.Recordings.RecordingTracklist>();
     public DbSet<Wisp.Core.Recordings.RecordingPlanSnapshot> RecordingPlanSnapshots => Set<Wisp.Core.Recordings.RecordingPlanSnapshot>();
     public DbSet<ScanJob> ScanJobs => Set<ScanJob>();
+    public DbSet<SoulseekImportReceipt> SoulseekImportReceipts => Set<SoulseekImportReceipt>();
     public DbSet<MixPlan> MixPlans => Set<MixPlan>();
     public DbSet<MixPlanTrack> MixPlanTracks => Set<MixPlanTrack>();
     public DbSet<CuePoint> CuePoints => Set<CuePoint>();
@@ -41,6 +42,7 @@ public class WispDbContext(DbContextOptions<WispDbContext> options) : DbContext(
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<SoulseekImportReceipt>().HasKey(r => new { r.Source, r.TransferId });
         b.Entity<Wisp.Core.Recordings.RecordingExport>().HasKey(r => r.Id);
         b.Entity<Wisp.Core.Recordings.RecordingExport>().HasIndex(r => r.RecordingId);
         var recording = b.Entity<Wisp.Core.Recordings.RecordingSession>();

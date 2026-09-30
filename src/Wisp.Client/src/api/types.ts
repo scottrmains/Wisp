@@ -471,7 +471,12 @@ export interface SoulseekSearchResult {
 }
 
 export interface SoulseekTransfer {
-  importScanId?: string | null
+    importScanId?: string | null
+    importStatus?: string | null
+    importError?: string | null
+    averageSpeed?: number
+    placeInQueue?: number | null
+    error?: string | null
   id: string
   username: string
   filename: string

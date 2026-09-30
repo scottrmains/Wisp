@@ -29,4 +29,14 @@ public sealed record SoulseekTransfer(
     double Percentage,
     string State,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? EndedAt);
+    DateTimeOffset? EndedAt)
+{
+    public double AverageSpeed { get; init; }
+    public int? PlaceInQueue { get; init; }
+    public string? Error { get; init; }
+}
+
+public sealed record SoulseekConnection(bool IsConfigured, bool DaemonAvailable, bool IsConnected,
+    bool IsLoggedIn, bool IsTransitioning, string? Username, string? Message);
+public sealed record SoulseekShare(string Id, string Alias, string LocalPath, bool IsExcluded, int? Files);
+public sealed record SoulseekShareScan(bool Scanning, bool ScanPending, bool Ready, bool Faulted, double ScanProgress, int Files);
