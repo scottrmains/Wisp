@@ -274,7 +274,9 @@ public sealed class LoudnessTests : IAsyncLifetime
         using var scope = _app.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
         var migrator = db.GetService<IMigrator>();
         await Assert.ThrowsAsync<SqliteException>(() => migrator.MigrateAsync("20260911150947_AllowRepeatedPlaylistEntries"));
-        Assert.Equal(Source, (await db.Tracks.SingleAsync()).OriginalFilePath);
+        // Later additive migrations may already be rolled back before the older
+        // audio-version guard refuses the downgrade. Query the surviving field.
+        Assert.Equal(Source, await db.Database.SqlQueryRaw<string>("SELECT OriginalFilePath AS Value FROM Tracks").SingleAsync());
     }
 
     private sealed class Normalizer : ILoudnessNormalizer

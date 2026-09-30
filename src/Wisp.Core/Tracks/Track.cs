@@ -8,6 +8,12 @@ public class Track
     public string FileName { get; set; } = "";
     public string FileHash { get; set; } = "";
 
+    // Audio-only identity is independent of container tags and filename.
+    // FileHash remains the byte/cache validator; never use it as the portable ID.
+    public string? AudioContentHash { get; set; }
+    public string? IdentityFileHash { get; set; }
+    public string? IdentityStorage { get; set; }
+
     /// FilePath is the active version, used consistently by playback and exports.
     /// Originals and generated copies are never overwritten by normalisation.
     public string? OriginalFilePath { get; set; }

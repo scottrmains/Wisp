@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Wisp.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using Wisp.Infrastructure.Persistence;
 namespace Wisp.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(WispDbContext))]
-    partial class WispDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930181427_AddPortableTrackIdentity")]
+    partial class AddPortableTrackIdentity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
@@ -930,22 +933,6 @@ namespace Wisp.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ScanJobs");
-                });
-
-            modelBuilder.Entity("Wisp.Core.Tracks.SoulseekImportReceipt", b =>
-                {
-                    b.Property<string>("Source")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TransferId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ScanId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Source", "TransferId");
-
-                    b.ToTable("SoulseekImportReceipts");
                 });
 
             modelBuilder.Entity("Wisp.Core.Tracks.Track", b =>

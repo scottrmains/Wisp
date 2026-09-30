@@ -7,6 +7,7 @@ import {
   Library as LibraryIcon,
   Pencil,
   Pickaxe,
+  Disc3,
   Plus,
   SlidersVertical,
   Trash2,
@@ -21,6 +22,7 @@ import { addTracksToPlaylist } from '../library/addTracksToPlaylist'
 import { WispLogo } from '../../components/WispLogo'
 import { CreatePlaylistDialog } from '../library/CreatePlaylistDialog'
 import { useWantedTracks } from '../wanted/useWantedTracks'
+import { apiGet } from '../../api/client'
 
 interface SectionDef {
   id: AppPage
@@ -70,6 +72,8 @@ export function AppSidebar() {
   // Wanted page uses, so a Want from Discover bumps the badge in real time.
   const wantedTracks = useWantedTracks()
   const wantedCount = wantedTracks.items.length
+  const soulseek = useQuery({ queryKey: ['soulseek-status'], queryFn: () => apiGet<{ isConfigured: boolean; hasUsername?: boolean; hasPassword?: boolean }>('/api/settings/soulseek'), staleTime: 60_000 })
+  const soulseekSetUp = soulseek.data?.isConfigured || (soulseek.data?.hasUsername && soulseek.data?.hasPassword)
 
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => playlists.update(id, { name }),
@@ -150,6 +154,8 @@ export function AppSidebar() {
             }}
           />
         ))}
+        {soulseekSetUp && <SidebarButton active={page === 'soulseek'} collapsed={collapsed} icon={Disc3}
+          label="Soulseek" onClick={() => setPage('soulseek')} />}
 
         {!collapsed && (
           <>

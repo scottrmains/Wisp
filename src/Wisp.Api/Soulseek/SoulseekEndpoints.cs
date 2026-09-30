@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Wisp.Api.Settings;
@@ -12,8 +11,6 @@ namespace Wisp.Api.Soulseek;
 public static class SoulseekEndpoints
 {
     private static readonly SemaphoreSlim ImportGate = new(1, 1);
-    /// Tracks transfers we've already auto-imported so a single completion only re-scans once.
-    private static readonly ConcurrentDictionary<string, Guid> _autoImported = new();
 
     public static IEndpointRouteBuilder MapSoulseek(this IEndpointRouteBuilder app)
     {
@@ -24,24 +21,34 @@ public static class SoulseekEndpoints
         app.MapGet("/api/soulseek/downloads", ListDownloads);
         app.MapPost("/api/soulseek/downloads/cancel", CancelDownload);
         app.MapPost("/api/soulseek/downloads/clear", ClearDownloads);
+        app.MapPost("/api/soulseek/downloads/retry", RetryDownload);
+        app.MapPost("/api/soulseek/downloads/import", RetryImport);
+        app.MapGet("/api/soulseek/connection", async (SoulseekClient client, CancellationToken ct) =>
+            Results.Ok(await client.GetConnectionAsync(ct)));
+        app.MapPost("/api/soulseek/reconnect", (SoulseekClient client, CancellationToken ct) =>
+            Execute(() => client.ReconnectAsync(ct)));
+        app.MapPost("/api/soulseek/searches/{id:guid}/stop", (Guid id, SoulseekClient client, CancellationToken ct) =>
+            Execute(() => client.StopSearchAsync(id.ToString(), ct)));
+        app.MapDelete("/api/soulseek/searches/{id:guid}", (Guid id, SoulseekClient client, CancellationToken ct) =>
+            Execute(() => client.DeleteSearchAsync(id.ToString(), ct)));
         return app;
     }
 
     private static async Task<IResult> TestConnection(SoulseekClient client, CancellationToken ct)
     {
-        var error = await client.TestConnectionAsync(ct);
-        return error is null
+        var status = await client.GetConnectionAsync(ct);
+        return status.IsConnected && status.IsLoggedIn
             ? Results.Ok(new { ok = true })
-            : Results.BadRequest(new { ok = false, message = error });
+            : Results.BadRequest(new { ok = false, message = status.Message ?? "Soulseek is not connected and logged in." });
     }
 
     private static async Task<IResult> StartSearch(StartSearchRequest body, SoulseekClient client, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(body.Query))
+        if (string.IsNullOrWhiteSpace(body.Query) || body.Query.Length > 500)
             return Results.BadRequest(new { code = "query_required", message = "Query is required." });
         try
         {
-            var id = await client.StartSearchAsync(body.Query.Trim(), fileLimit: 200, ct);
+            var id = await client.StartSearchAsync(body.Query.Trim(), fileLimit: 1000, ct);
             return Results.Ok(new { id });
         }
         catch (SoulseekNotConfiguredException)
@@ -75,7 +82,7 @@ public static class SoulseekEndpoints
 
     private static async Task<IResult> QueueDownload(QueueDownloadRequest body, SoulseekClient client, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(body.Username) || string.IsNullOrWhiteSpace(body.Filename))
+        if (string.IsNullOrWhiteSpace(body.Username) || string.IsNullOrWhiteSpace(body.Filename) || body.Size < 0)
             return Results.BadRequest(new { code = "params_required", message = "Username and Filename are required." });
         try
         {
@@ -115,9 +122,17 @@ public static class SoulseekEndpoints
                 try { await TryAutoImportCompletedAsync(transfers, options, client, db, scanQueue, log, ct); }
                 finally { ImportGate.Release(); }
             }
+            var ids = transfers.Select(t => t.Id).ToArray();
+            var imports = await db.SoulseekImportReceipts.AsNoTracking()
+                .Where(r => r.Source == client.SourceKey && ids.Contains(r.TransferId))
+                .Join(db.ScanJobs, r => r.ScanId, j => j.Id, (r, j) => new { r.TransferId, Job = j })
+                .ToDictionaryAsync(x => x.TransferId, ct);
             return Results.Ok(transfers.Select(t => TransferDto.From(t) with
             {
-                ImportScanId = _autoImported.TryGetValue(t.Id, out var scanId) ? scanId : null,
+                ImportScanId = imports.TryGetValue(t.Id, out var import) ? import.Job.Id : null,
+                ImportStatus = imports.TryGetValue(t.Id, out import) ? import.Job.Status.ToString()
+                    : SoulseekTransferState.IsSuccessful(t.State) ? "Waiting" : null,
+                ImportError = imports.TryGetValue(t.Id, out import) ? import.Job.Error : null,
             }));
         }
         catch (SoulseekNotConfiguredException)
@@ -142,9 +157,11 @@ public static class SoulseekEndpoints
         // Detect terminal-state transfers up front. slskd reports terminal states as a comma-joined
         // flag like "Completed, Succeeded" / "Completed, Cancelled" — only "Succeeded" should land in
         // the library; failed or cancelled transfers must not trigger an import.
+        var received = (await db.SoulseekImportReceipts.Where(r => r.Source == client.SourceKey)
+            .Select(r => r.TransferId).ToListAsync(ct)).ToHashSet();
         var terminal = transfers
             .Where(t => !string.IsNullOrEmpty(t.Id) && SoulseekTransferState.IsFinished(t.State))
-            .Where(t => !_autoImported.ContainsKey(t.Id))
+            .Where(t => !received.Contains(t.Id))
             .ToList();
         var importable = terminal.Where(t => SoulseekTransferState.IsSuccessful(t.State)).ToList();
         if (importable.Count == 0) return;
@@ -179,9 +196,14 @@ public static class SoulseekEndpoints
             StartedAt = DateTime.UtcNow,
         };
         db.ScanJobs.Add(job);
+        foreach (var transfer in importable) db.SoulseekImportReceipts.Add(new()
+        {
+            Source = client.SourceKey, TransferId = transfer.Id, ScanId = job.Id,
+        });
         await db.SaveChangesAsync(ct);
-        await scanQueue.EnqueueAsync(new ScanRequest(job.Id, job.FolderPath), ct);
-        foreach (var transfer in importable) _autoImported.TryAdd(transfer.Id, job.Id);
+        // The queue is in-process and unbounded. Once persisted, don't abandon
+        // the enqueue merely because the HTTP caller navigated away.
+        await scanQueue.EnqueueAsync(new ScanRequest(job.Id, job.FolderPath), CancellationToken.None);
     }
 
     private static async Task<IResult> CancelDownload(TransferActionRequest body, SoulseekClient client, CancellationToken ct)
@@ -225,8 +247,9 @@ public static class SoulseekEndpoints
             foreach (var transfer in targets.Where(t => SoulseekTransferState.IsFinished(t.State)))
             {
                 if (SoulseekTransferState.IsSuccessful(transfer.State) &&
-                    (!_autoImported.TryGetValue(transfer.Id, out var scanId) ||
-                     !await db.ScanJobs.AnyAsync(s => s.Id == scanId && s.Status == ScanStatus.Completed, ct)))
+                    !await db.SoulseekImportReceipts.Where(r => r.Source == client.SourceKey && r.TransferId == transfer.Id)
+                        .Join(db.ScanJobs, r => r.ScanId, j => j.Id, (r, j) => j)
+                        .AnyAsync(j => j.Status == ScanStatus.Completed, ct))
                 {
                     skipped++;
                     continue;
@@ -248,6 +271,60 @@ public static class SoulseekEndpoints
         catch (Exception ex) when (ex is SoulseekNotConfiguredException or SoulseekUnreachableException or InvalidOperationException)
         {
             return Results.BadRequest(new { message = ex.Message });
+        }
+        finally { ImportGate.Release(); }
+    }
+
+    private static async Task<IResult> Execute(Func<Task> action)
+    {
+        try { await action(); return Results.NoContent(); }
+        catch (Exception ex) when (ex is SoulseekNotConfiguredException or SoulseekUnreachableException or InvalidOperationException)
+        { return Results.BadRequest(new { message = ex.Message }); }
+    }
+
+    private static async Task<IResult> RetryDownload(TransferActionRequest body, SoulseekClient client, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.Username) || !Guid.TryParse(body.Id, out _))
+            return Results.BadRequest(new { message = "A transfer username and valid ID are required." });
+        return await Execute(async () =>
+        {
+            var transfer = (await client.ListDownloadsAsync(ct)).FirstOrDefault(t => t.Id == body.Id && t.Username == body.Username)
+                ?? throw new InvalidOperationException("Transfer not found. Refresh the list.");
+            if (!SoulseekTransferState.IsFinished(transfer.State) || SoulseekTransferState.IsSuccessful(transfer.State))
+                throw new InvalidOperationException("Only failed or cancelled downloads can be retried.");
+            await client.QueueDownloadAsync(transfer.Username, transfer.Filename, transfer.Size, ct);
+        });
+    }
+
+    private static async Task<IResult> RetryImport(TransferActionRequest body, SoulseekClient client,
+        SoulseekOptions options, WispDbContext db, ScanQueue queue, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.Username) || !Guid.TryParse(body.Id, out _))
+            return Results.BadRequest(new { message = "A transfer username and valid ID are required." });
+        await ImportGate.WaitAsync(ct);
+        try
+        {
+            return await Execute(async () =>
+            {
+                var transfer = (await client.ListDownloadsAsync(ct)).FirstOrDefault(t => t.Id == body.Id && t.Username == body.Username);
+                if (transfer is null || !SoulseekTransferState.IsSuccessful(transfer.State))
+                    throw new InvalidOperationException("Only successful downloads can be imported.");
+                var receipt = await db.SoulseekImportReceipts.SingleOrDefaultAsync(r => r.Source == client.SourceKey && r.TransferId == body.Id, ct);
+                var previous = receipt is null ? null : await db.ScanJobs.FindAsync([receipt.ScanId], ct);
+                if (previous?.Status is ScanStatus.Running or ScanStatus.Pending)
+                    throw new InvalidOperationException("This import is already queued or running.");
+                if (previous?.Status == ScanStatus.Completed)
+                    throw new InvalidOperationException("This download is already indexed in your library.");
+                var folder = previous?.FolderPath ?? await client.GetEffectiveDownloadFolderAsync(ct) ?? options.ActiveDownloadFolder;
+                if (folder is null || !Directory.Exists(folder))
+                    throw new InvalidOperationException("The active download folder is unavailable. Check Soulseek and try again.");
+                var job = new ScanJob { Id = Guid.NewGuid(), FolderPath = Path.GetFullPath(folder), Status = ScanStatus.Pending, StartedAt = DateTime.UtcNow };
+                db.ScanJobs.Add(job);
+                if (receipt is null) db.SoulseekImportReceipts.Add(new() { Source = client.SourceKey, TransferId = transfer.Id, ScanId = job.Id });
+                else receipt.ScanId = job.Id;
+                await db.SaveChangesAsync(ct);
+                await queue.EnqueueAsync(new ScanRequest(job.Id, job.FolderPath), CancellationToken.None);
+            });
         }
         finally { ImportGate.Release(); }
     }

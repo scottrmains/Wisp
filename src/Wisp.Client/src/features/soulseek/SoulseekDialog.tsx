@@ -19,6 +19,7 @@ import { useUiPrefs } from '../../state/uiPrefs'
 import { useSoulseekTransfers } from './useSoulseekTransfers'
 import { SoulseekTransferList } from './SoulseekTransferList'
 import { transferState } from './transferState'
+import { useSearchSession } from './searchSession'
 
 interface Props {
   /// Initial search query — derived from the calling context (Discovered
@@ -26,12 +27,14 @@ interface Props {
   initialArtist: string | null
   initialTitle: string | null
   onClose: () => void
+  embedded?: boolean
+  networkReady?: boolean
 }
 
 const SEARCH_TIMEOUT_MS = 30_000
 const POLL_INTERVAL_MS = 2_000
 
-type SortKey = 'bitrate' | 'size' | 'speed' | 'queue' | 'user'
+type SortKey = 'bitrate' | 'size' | 'speed' | 'queue' | 'user' | 'file' | 'duration'
 type SortDir = 'asc' | 'desc'
 
 /// Phase 23 follow-up — full-screen modal Soulseek search.
@@ -45,15 +48,20 @@ type SortDir = 'asc' | 'desc'
 ///     hits count, time remaining, plus a Cancel button.
 ///   - In-flight downloads section so the user sees their queue without
 ///     navigating away.
-export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) {
-  const [query, setQuery] = useState(buildQuery(initialArtist, initialTitle))
-  const [searchId, setSearchId] = useState<string | null>(null)
-  const [hits, setHits] = useState<SoulseekSearchHit[]>([])
-  const [searching, setSearching] = useState(false)
+export function SoulseekDialog({ initialArtist, initialTitle, onClose, embedded = false, networkReady = true }: Props) {
+  const [snapshot] = useState(() => embedded ? useSearchSession.getState().snapshot : null)
+  const [query, setQuery] = useState(snapshot?.query ?? buildQuery(initialArtist, initialTitle))
+  const [searchId, setSearchId] = useState<string | null>(snapshot?.searchId ?? null)
+  const [hits, setHits] = useState<SoulseekSearchHit[]>(snapshot?.hits ?? [])
+  const [searching, setSearching] = useState(snapshot?.searching ?? false)
   const [error, setError] = useState<string | null>(null)
-  const [responseCount, setResponseCount] = useState(0)
+  const [responseCount, setResponseCount] = useState(snapshot?.responseCount ?? 0)
   const [elapsedMs, setElapsedMs] = useState(0)
-  const startedAtRef = useRef<number>(0)
+  const startedAtRef = useRef<number>(snapshot?.startedAt ?? 0)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const queueNotice = useSearchSession(s => s.queueNotice)
+  const setQueueNotice = useSearchSession(s => s.setQueueNotice)
+  const stopBatch = useRef(false)
   const [sortKey, setSortKey] = useState<SortKey>('bitrate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
@@ -67,9 +75,9 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
   const freeSlotsOnly = useUiPrefs((s) => s.slskdFreeSlotsOnly)
   const hideLocked = useUiPrefs((s) => s.slskdHideLocked)
   const setFilter = useUiPrefs((s) => s.setSlskdFilter)
-  const filter = { format, mp3Bitrate, freeSlotsOnly, hideLocked }
+  const filter = useMemo(() => ({ format, mp3Bitrate, freeSlotsOnly, hideLocked }), [format, mp3Bitrate, freeSlotsOnly, hideLocked])
 
-  const { transfers, slskdConfigured, error: transferError } = useSoulseekTransfers()
+  const { transfers, slskdConfigured, error: transferError, refresh } = useSoulseekTransfers()
   const ensurePolling = useSoulseekStatus((s) => s.ensurePolling)
 
   const activeByFilename = useMemo(() => {
@@ -78,13 +86,18 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
     return map
   }, [transfers])
 
+  useEffect(() => {
+    if (embedded) useSearchSession.getState().save({ query, searchId, hits, searching, responseCount, startedAt: startedAtRef.current })
+  }, [embedded, query, searchId, hits, searching, responseCount])
+
   // Esc to close (when not actively searching — close mid-search would
   // orphan the slskd request). Click-outside also closes.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    if (embedded) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !searching) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, embedded, searching])
 
   // Search-progress polling. Same shape as the legacy SoulseekPanel — start
   // search → poll every 2s until isComplete or 30s timeout. We also tick
@@ -104,6 +117,7 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
         const elapsed = Date.now() - startedAtRef.current
         if (res.isComplete || elapsed >= SEARCH_TIMEOUT_MS) {
           setSearching(false)
+          if (!res.isComplete) void soulseek.stopSearch(searchId).catch(e => { if (!cancelled) setError((e as Error).message) })
           return
         }
         pollTimer = setTimeout(tick, POLL_INTERVAL_MS)
@@ -132,12 +146,20 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
   }, [searching])
 
   const startSearch = useMutation({
-    mutationFn: () => soulseek.startSearch(query.trim()),
+    mutationFn: async () => {
+      if (searchId) {
+        await soulseek.stopSearch(searchId)
+        await soulseek.deleteSearch(searchId)
+      }
+      return soulseek.startSearch(query.trim())
+    },
     onSuccess: (r) => {
       setSearchId(r.id)
       setHits([])
       setResponseCount(0)
       setError(null)
+      setSelected(new Set())
+      setQueueNotice(null)
       setSearching(true)
       setElapsedMs(0)
       startedAtRef.current = Date.now()
@@ -145,13 +167,12 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
     onError: (e) => setError((e as Error).message),
   })
 
-  const cancelSearch = () => {
-    setSearching(false)
-    // We don't actually cancel the search server-side — slskd doesn't
-    // expose a cancel endpoint and search results trickle in for free
-    // afterward. Stopping the poll loop is enough; the user has indicated
-    // they're done with the results they've already seen.
-  }
+  const stopSearch = useMutation({
+    mutationFn: async () => { if (searchId) { await soulseek.stopSearch(searchId); await soulseek.deleteSearch(searchId) } },
+    onSuccess: () => { setSearching(false); setSearchId(null) },
+    onError: e => setError((e as Error).message),
+  })
+  const cancelSearch = () => stopSearch.mutate()
 
   const filteredHits = useMemo(() => {
     let f = hits
@@ -180,6 +201,31 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
     return sorted
   }, [filteredHits, sortKey, sortDir])
 
+  const downloadable = sortedHits.filter(hit => {
+    const transfer = activeByFilename.get(hitKey(hit))
+    return !hit.locked && (!transfer || (transferState(transfer.state).finished && !transferState(transfer.state).succeeded))
+  })
+  const selectedHits = downloadable.filter(hit => selected.has(hitKey(hit)))
+  const batch = useMutation({
+    mutationKey: ['soulseek-queue'],
+    onMutate: () => { stopBatch.current = false; setQueueNotice(null) },
+    mutationFn: async () => {
+      const errors: string[] = []
+      let queued = 0
+      for (const hit of selectedHits) {
+        if (stopBatch.current) break
+        try { await soulseek.download(hit.username, hit.filename, hit.size); queued++; ensurePolling() }
+        catch (e) { errors.push(`${hit.filename.split(/[\\/]/).pop()}: ${(e as Error).message}`) }
+      }
+      return { queued, errors, stopped: stopBatch.current }
+    },
+    onSuccess: async result => {
+      setQueueNotice([`${result.queued} ${result.queued === 1 ? 'file' : 'files'} queued.`, result.stopped ? 'Stopped queueing. Already queued downloads continue.' : '', ...result.errors].filter(Boolean).join(' '))
+      setSelected(new Set())
+      await refresh()
+    },
+  })
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -187,7 +233,7 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
       setSortKey(key)
       // Default direction depends on the column — bigger / faster is usually
       // what the user wants on top, so desc; user/queue go asc.
-      setSortDir(key === 'user' || key === 'queue' ? 'asc' : 'desc')
+      setSortDir(key === 'user' || key === 'queue' || key === 'file' ? 'asc' : 'desc')
     }
   }
 
@@ -200,13 +246,13 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
   // contain). The Wanted / Discover callsites mount the dialog inside list
   // items, and those ancestors can pin position:fixed to the wrong frame —
   // user reported the dialog showing as "empty" when launched from Wanted.
-  return createPortal(
+  const workspace = (
     <div
-      className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/70 p-4"
+      className={embedded ? 'h-full min-h-0' : 'fixed inset-0 z-[1500] flex items-center justify-center bg-black/70 p-4'}
       onClick={(e) => { if (e.target === e.currentTarget && !searching) onClose() }}
     >
-      <div className="flex h-[90vh] w-full max-w-5xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl">
-        <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3">
+      <div className={embedded ? 'flex h-full min-h-0 flex-col' : 'flex h-[90vh] w-full max-w-5xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl'}>
+        {!embedded && <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3">
           <div className="min-w-0 flex-1">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold">
               <Disc3 size={16} strokeWidth={1.75} /> Search Soulseek
@@ -223,7 +269,7 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
           >
             <X size={18} strokeWidth={1.75} />
           </button>
-        </header>
+        </header>}
 
         {/* Search bar — editable query + the action button. The button is the
             primary action so it's accent-coloured and chunky. */}
@@ -231,21 +277,24 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !searching && query.trim()) startSearch.mutate() }}
-            placeholder="Artist title"
+            onKeyDown={(e) => { if (e.key === 'Enter' && !searching && !startSearch.isPending && slskdConfigured && networkReady && query.trim()) startSearch.mutate() }}
+            placeholder="Search an artist, track or release…"
+            aria-label="Soulseek search query"
+            disabled={startSearch.isPending}
             className="min-w-0 flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
           />
           {searching ? (
             <button
               onClick={cancelSearch}
+              disabled={stopSearch.isPending}
               className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-muted)] hover:bg-white/5 hover:text-white"
             >
-              Cancel
+              {stopSearch.isPending ? 'Stopping…' : 'Stop search'}
             </button>
           ) : (
             <button
               onClick={() => startSearch.mutate()}
-              disabled={!query.trim() || !slskdConfigured || startSearch.isPending}
+              disabled={!query.trim() || !slskdConfigured || !networkReady || startSearch.isPending}
               className="inline-flex items-center gap-2 rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent)]/90 disabled:cursor-not-allowed disabled:opacity-50"
               title={!slskdConfigured ? 'Configure slskd in Settings first' : `Search slskd for "${query}"`}
             >
@@ -258,13 +307,13 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
             see + tweak filters without opening a sub-menu. */}
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)]/40 px-5 py-2 text-xs">
           <span className="text-[var(--color-muted)]">Format</span>
-          {(['any', 'mp3', 'flac', 'wav'] as const).map((f) => (
+          {(['any', 'mp3', 'flac', 'wav', 'aiff'] as const).map((f) => (
             <FilterChip
               key={f}
               active={filter.format === f}
               onClick={() => setFilter({ slskdFormat: f })}
             >
-              {f.toUpperCase()}
+              {f === 'any' ? 'All formats' : f.toUpperCase()}
             </FilterChip>
           ))}
           {filter.format === 'mp3' && (
@@ -331,6 +380,16 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
             <p className="inline-flex items-center gap-1.5 text-xs text-red-400"><AlertTriangle size={12} strokeWidth={1.75} /> {error}</p>
           </div>
         )}
+        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] px-5 py-2 text-xs">
+          <span className="text-[var(--color-muted)]">{selectedHits.length} selected</span>
+          <button onClick={() => batch.mutate()} disabled={!selectedHits.length || batch.isPending}
+            className="inline-flex items-center gap-2 rounded bg-[var(--color-accent)] px-3 py-2 text-white disabled:opacity-40">
+            <Download size={13} />{batch.isPending ? 'Queueing…' : 'Download selected'}
+          </button>
+          {batch.isPending && <button onClick={() => { stopBatch.current = true; setQueueNotice('Stopping after the current request. Downloads already queued will continue.') }}>Stop queueing</button>}
+          {selected.size > 0 && <button onClick={() => setSelected(new Set())} disabled={batch.isPending}>Clear selection</button>}
+          {queueNotice && <p role="status" className="min-w-0 flex-1 break-words">{queueNotice}</p>}
+        </div>
 
         {!slskdConfigured && (
           <div className="m-5 rounded-md border border-amber-400/30 bg-amber-400/10 p-4 text-xs text-amber-200">
@@ -343,9 +402,13 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {sortedHits.length > 0 ? (
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-[var(--color-bg)] text-[var(--color-muted)]">
+              <thead className="sticky top-0 z-10 bg-[var(--color-bg)] text-[var(--color-muted)]">
                 <tr>
-                  <th className="px-3 py-2 text-left font-normal">File</th>
+                  <th className="px-3 py-2"><input type="checkbox" aria-label="Select all downloadable results" disabled={batch.isPending || !downloadable.length}
+                    checked={downloadable.length > 0 && selectedHits.length === downloadable.length}
+                    onChange={e => setSelected(e.target.checked ? new Set(downloadable.map(hitKey)) : new Set())} /></th>
+                  <SortHeader k="file" current={sortKey} dir={sortDir} onClick={toggleSort} align="left">File</SortHeader>
+                  <SortHeader k="duration" current={sortKey} dir={sortDir} onClick={toggleSort} align="right">Duration</SortHeader>
                   <SortHeader k="bitrate" current={sortKey} dir={sortDir} onClick={toggleSort} align="right">Bitrate</SortHeader>
                   <SortHeader k="size" current={sortKey} dir={sortDir} onClick={toggleSort} align="right">Size</SortHeader>
                   <SortHeader k="user" current={sortKey} dir={sortDir} onClick={toggleSort} align="left">User</SortHeader>
@@ -355,12 +418,14 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
                 </tr>
               </thead>
               <tbody>
-                {sortedHits.map((h, i) => (
+                {sortedHits.map((h) => (
                   <HitRow
-                    key={`${h.username}:${h.filename}:${i}`}
+                    key={hitKey(h)}
                     hit={h}
                     transfer={activeByFilename.get(JSON.stringify([h.username, h.filename])) ?? null}
                     onQueued={ensurePolling}
+                    selected={selected.has(hitKey(h))} batchPending={batch.isPending}
+                    onSelect={checked => setSelected(old => { const next = new Set(old); if (checked) next.add(hitKey(h)); else next.delete(hitKey(h)); return next })}
                   />
                 ))}
               </tbody>
@@ -380,14 +445,14 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
           ) : !searchId && slskdConfigured ? (
             <EmptyState
               title="Ready to search."
-              hint={`Click "Search Soulseek" to query the peer network for "${query}".`}
+              hint={query ? `Search the files shared by users currently online for "${query}".` : 'Enter an artist, track or release above to search the files shared by users currently online.'}
               action={null}
             />
           ) : null}
         </div>
 
         {/* Share cancellation/history controls with the header transfers window. */}
-        {(transfers.length > 0 || transferError) && (
+        {!embedded && (transfers.length > 0 || transferError) && (
           <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)]">
             <p className="px-5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
               Downloads ({transfers.length})
@@ -396,9 +461,9 @@ export function SoulseekDialog({ initialArtist, initialTitle, onClose }: Props) 
           </div>
         )}
       </div>
-    </div>,
-    document.body,
+    </div>
   )
+  return embedded ? workspace : createPortal(workspace, document.body)
 }
 
 function SortHeader({
@@ -480,14 +545,21 @@ function HitRow({
   hit,
   transfer,
   onQueued,
+  selected, onSelect, batchPending,
 }: {
   hit: SoulseekSearchHit
   transfer: SoulseekTransfer | null
   onQueued: () => void
+  selected: boolean
+  onSelect: (checked: boolean) => void
+  batchPending: boolean
 }) {
   const download = useMutation({
+    mutationKey: ['soulseek-queue'],
+    onMutate: () => useSearchSession.getState().setQueueNotice(null),
     mutationFn: () => soulseek.download(hit.username, hit.filename, hit.size),
-    onSuccess: onQueued,
+    onSuccess: () => { onQueued(); useSearchSession.getState().setQueueNotice('File queued. Follow its progress in Downloads.') },
+    onError: error => useSearchSession.getState().setQueueNotice(error.message),
   })
 
   const fileName = hit.filename.split(/[\\/]/).pop() ?? hit.filename
@@ -496,10 +568,13 @@ function HitRow({
 
   return (
     <tr className="relative border-t border-[var(--color-border)]/30 hover:bg-white/5">
+      <td className="px-3 py-2"><input type="checkbox" checked={selected} onChange={e => onSelect(e.target.checked)}
+        disabled={hit.locked || !!inProgress || completed || batchPending || download.isPending} aria-label={`Select ${fileName} from ${hit.username}`} /></td>
       <td className="max-w-[28rem] truncate px-3 py-2" title={hit.filename}>
         {fileName}
+        {download.error && <p role="alert" className="whitespace-normal text-red-300">{download.error.message}</p>}
         {hit.locked && (
-          <span className="ml-2 inline-flex items-center gap-0.5 rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-300" title="User has share-ratio gate">
+          <span className="ml-2 inline-flex items-center gap-0.5 rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-300" title="This user has restricted access to this file">
             <Lock size={9} strokeWidth={2} /> locked
           </span>
         )}
@@ -514,6 +589,7 @@ function HitRow({
           </div>
         )}
       </td>
+      <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">{hit.length != null ? `${Math.floor(hit.length / 60)}:${String(hit.length % 60).padStart(2, '0')}` : '—'}</td>
       <td className="px-3 py-2 text-right tabular-nums">
         {hit.bitRate
           ? <span className={hit.bitRate >= 320 ? 'text-emerald-300' : 'text-[var(--color-muted)]'}>{hit.bitRate}k</span>
@@ -544,7 +620,9 @@ function HitRow({
         ) : (
           <button
             onClick={() => download.mutate()}
-            disabled={download.isPending}
+            disabled={download.isPending || hit.locked || batchPending}
+            aria-label={`Download ${fileName} from ${hit.username}`}
+            title={hit.locked ? 'This user has restricted access to this file' : 'Download this file'}
             className="inline-flex items-center gap-1 rounded bg-[var(--color-accent)] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[var(--color-accent)]/90 disabled:opacity-40"
           >
             {download.isPending ? '…' : <><Download size={11} strokeWidth={2} /> DL</>}
@@ -555,6 +633,8 @@ function HitRow({
   )
 }
 
+function hitKey(hit: SoulseekSearchHit) { return JSON.stringify([hit.username, hit.filename]) }
+
 function buildQuery(artist: string | null, title: string | null): string {
   if (artist && title) return `${artist} ${title}`
   return title ?? artist ?? ''
@@ -562,7 +642,8 @@ function buildQuery(artist: string | null, title: string | null): string {
 
 function fileExtension(filename: string): string {
   const idx = filename.lastIndexOf('.')
-  return idx >= 0 ? filename.slice(idx + 1).toLowerCase() : ''
+  const extension = idx >= 0 ? filename.slice(idx + 1).toLowerCase() : ''
+  return extension === 'aif' ? 'aiff' : extension
 }
 
 function sortValue(h: SoulseekSearchHit, k: SortKey): number | string {
@@ -572,6 +653,8 @@ function sortValue(h: SoulseekSearchHit, k: SortKey): number | string {
     case 'speed': return h.uploadSpeed
     case 'queue': return h.queueLength
     case 'user': return h.username.toLowerCase()
+    case 'file': return (h.filename.split(/[\\/]/).pop() ?? h.filename).toLowerCase()
+    case 'duration': return h.length ?? -1
   }
 }
 

@@ -57,6 +57,7 @@ public static class TrackFileEndpoints
             track.LoudnessAnalysisJson = null; track.NormalizationJson = null;
             track.FileName = Path.GetFileName(path);
             track.FileHash = hash;
+            track.AudioContentHash = null; track.IdentityFileHash = null; track.IdentityStorage = null;
             track.Duration = duration;
             track.FileModifiedAt = File.GetLastWriteTimeUtc(path);
             track.LastScannedAt = DateTime.UtcNow;

@@ -35,7 +35,7 @@ public class LibraryScannerTests : IDisposable
         return ctx;
     }
 
-    private async Task<ScanJob> RunScan(string folder)
+    private async Task<ScanJob> RunScan(string folder, IMetadataReader? reader = null)
     {
         await using var db = NewContext();
         var job = new ScanJob
@@ -52,7 +52,7 @@ public class LibraryScannerTests : IDisposable
             db,
             new FileScanner(),
             new FileFingerprint(),
-            new MetadataReader(),
+            reader ?? new MetadataReader(),
             new ScanProgressBus(),
             NullLogger<LibraryScanner>.Instance);
 
@@ -201,5 +201,62 @@ public class LibraryScannerTests : IDisposable
         Assert.Equal(1, result.TotalFiles);
         Assert.Equal(1, result.SkippedFiles);
         Assert.Equal(0, result.AddedTracks);
+    }
+
+    private sealed class TestMetadata : IMetadataReader
+    {
+        public TrackMetadata Read(string path) => new() { Artist = "Artist", Title = "Track", Duration = TimeSpan.FromSeconds(300), MusicalKey = "8A", Bpm = 123 };
+    }
+
+    [Fact]
+    public async Task Renamed_and_retagged_file_preserves_prep_and_does_not_import_duplicate()
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_dir, "retagged")).FullName;
+        var oldPath = Path.Combine(folder, "Artist - Track.mp3");
+        var newPath = Path.Combine(folder, "Artist - Track - 8A - 123.mp3");
+        await File.WriteAllBytesAsync(oldPath, [1, 2, 3]);
+        await RunScan(folder, new TestMetadata());
+        Guid id;
+        await using (var db = NewContext())
+        {
+            var track = await db.Tracks.SingleAsync(); id = track.Id;
+            track.Notes = "Do not lose this";
+            db.CuePoints.Add(new() { Id = Guid.NewGuid(), TrackId = id, TimeSeconds = 35 });
+            db.DeviceCues.Add(new() { Id = Guid.NewGuid(), TrackId = id, StartSeconds = 35 });
+            db.Playlists.Add(new() { Id = Guid.NewGuid(), Name = "Set", Tracks = [new() { Id = Guid.NewGuid(), TrackId = id, AddedAt = new DateTime(2020, 1, 1) }] });
+            db.MixPlans.Add(new() { Id = Guid.NewGuid(), Name = "Plan", Tracks = [new() { Id = Guid.NewGuid(), TrackId = id, Order = 3 }] });
+            db.MetadataAuditLogs.Add(new() { Id = Guid.NewGuid(), TrackId = id, Status = Wisp.Core.Cleanup.CleanupStatus.Applied });
+            await db.SaveChangesAsync();
+        }
+        File.Move(oldPath, newPath); await File.WriteAllBytesAsync(newPath, [4, 5, 6]);
+        var result = await RunScan(folder, new TestMetadata());
+        Assert.Equal(ScanStatus.Completed, result.Status);
+        Assert.Equal(0, result.AddedTracks); Assert.Equal(1, result.UpdatedTracks); Assert.Equal(0, result.RemovedTracks);
+        await using var verify = NewContext();
+        var recovered = Assert.Single(await verify.Tracks.ToListAsync());
+        Assert.Equal(id, recovered.Id); Assert.Equal(newPath, recovered.FilePath); Assert.Equal("Do not lose this", recovered.Notes);
+        Assert.False(recovered.IsUnavailable);
+        Assert.Equal(35, (await verify.CuePoints.SingleAsync()).TimeSeconds);
+        Assert.Equal(35, (await verify.DeviceCues.SingleAsync()).StartSeconds);
+        Assert.Equal(2020, (await verify.PlaylistTracks.SingleAsync()).AddedAt.Year);
+        Assert.Equal(3, (await verify.MixPlanTracks.SingleAsync()).Order);
+        Assert.Equal(Wisp.Core.Cleanup.CleanupStatus.Superseded, (await verify.MetadataAuditLogs.SingleAsync()).Status);
+        var repeated = await RunScan(folder, new TestMetadata());
+        Assert.Equal(0, repeated.AddedTracks); Assert.Equal(0, repeated.UpdatedTracks);
+    }
+
+    [Fact]
+    public async Task Ambiguous_renames_are_skipped_without_creating_duplicate_rows()
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_dir, "ambiguous")).FullName;
+        var original = Path.Combine(folder, "Artist - Track.mp3");
+        await File.WriteAllBytesAsync(original, [1, 2, 3]);
+        await RunScan(folder);
+        File.Move(original, Path.Combine(folder, "one.mp3"));
+        File.Copy(Path.Combine(folder, "one.mp3"), Path.Combine(folder, "two.mp3"));
+        var scan = await RunScan(folder);
+        Assert.Equal(0, scan.AddedTracks); Assert.Equal(2, scan.SkippedFiles);
+        await using var db = NewContext();
+        Assert.True((await db.Tracks.SingleAsync()).IsUnavailable);
     }
 }
