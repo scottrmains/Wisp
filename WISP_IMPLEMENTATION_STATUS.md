@@ -2,6 +2,36 @@
 
 Last reviewed: 2026-09-30
 
+## 2026-09-30: UI 1 shell and Library approval preview
+
+- **Started:** isolated interactive design prototype in `design/ui-redesign`,
+  representing the visual gate before UI 1 application migration. No application
+  source, profile, audio, cue data, USB or production site is changed.
+- **Visual proposal:** marketing-inspired dark surfaces, DM Sans and condensed
+  headings, clearer navigation icons/groups, separately scrolling playlists,
+  compact-navigation playlist drawer, compact bottom transport and one right
+  pane for preparation or active plan. Shared selection tools replace search
+  tools instead of adding another permanent toolbar.
+- **Prototype only:** fictional Library/playlists, selection, cue feedback,
+  column controls, tooltip behaviour and native Settings dialog focus. Audio,
+  downloads, export, maintenance and other page destinations are not connected;
+  demo controls explicitly disclose this. The real Settings focus repair and
+  shared application foundations are still pending.
+- **Verified prototype:** browser checks for Browse/Prepare/Selected with plan
+  at 1024 by 768, 1366 by 768 and 1920 by 1080, retaining at least eight complete
+  track rows at the two laptop sizes. Long labels, search/empty state, Select all,
+  optional date column, playlist filtering and compact drawer, Settings focus
+  containment/return, keyboard tooltips/Escape and illustrative cue feedback
+  passed. Reduced-motion mode and equivalent 125/150 percent CSS viewport checks
+  passed; the latter are not physical Windows display-scaling evidence.
+- **Safety and limits:** browser reported no script/console errors or requests
+  to WISP APIs/external services. Fonts/icons reuse existing dependency assets;
+  no new package or generated asset is added to Git. Static prototype tables
+  do not validate real-library virtualisation, Windows OLE dragging, playback,
+  capture or CDJ hardware. These remain later implementation regression gates.
+- **Next gate:** owner approval of the visual example. The two prototype delivery
+  checkboxes are checked; UI 1 implementation and all later phases remain open.
+
 ## 2026-09-30: Application UI redesign audit and phased plan
 
 - **Planning implemented:** tracked

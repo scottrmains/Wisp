@@ -2,9 +2,9 @@
 
 Updated: 2026-09-30
 
-Status: planning only. The owner approved creating this plan following the UI
-audit; no redesign phase is implemented by this documentation PR. The proposed
-visual direction still needs approval through a shell and Library example.
+Status: shell and Library prototype ready for visual approval. No redesign phase
+is implemented in the application yet. The owner approved starting UI 1; its
+visual gate remains open before migrating the real application.
 
 ## Product outcome
 
@@ -86,12 +86,27 @@ Proposed navigation groups are Workspace (Library, Mix Plans, Mixes), Find music
 (Discover, Crate Digger, Wanted, configured Soulseek), and a separate playlist
 area. Group names, icon choices and exact dimensions remain design proposals.
 
-- [ ] Produce a visual shell and Library example using fictional tracks, with
+- [x] Produce a visual shell and Library example using fictional tracks, with
   ordinary browsing, playback/preparation and multi-selection states.
-- [ ] Show a narrow-window variation and the plan drawer behaviour, not just a
+- [x] Show a narrow-window variation and the plan drawer behaviour, not just a
   wide empty page. Include long playlist and track names.
 - [ ] Obtain owner approval before broad page migration. Record the accepted
   example and any requested adjustments in the status document and PR.
+
+The isolated prototype is in `design/ui-redesign`. Install the existing client
+and marketing dependencies with `npm ci --prefix src/Wisp.Client` and
+`npm ci --prefix src/Wisp.Marketing`, then run
+`node design/ui-redesign/serve.mjs` and open `http://127.0.0.1:19710`.
+Use Browse, Prepare and Selected + plan at the top to review the three states.
+`node design/ui-redesign/test-preview.mjs` runs prototype browser checks and
+saves ignored screenshots/metrics under `artifacts/ui-redesign`.
+
+The prototype has no WISP API, native bridge, storage or audio connections.
+Selection, playlist filtering, cue feedback and playback presentation are
+fictional demonstrations, not implemented app features. Settings in the actual
+application is unchanged; only the prototype demonstrates proper modal focus.
+Its Library/player/preparation layout proposes UI 2 direction for approval, not
+an early implementation of UI 2. No installer or production asset includes it.
 
 ## Delivery workflow
 
