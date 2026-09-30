@@ -35,6 +35,9 @@ interface UiPrefsState {
   /// Whether the App-level sidebar is collapsed to icons-only.
   sidebarCollapsed: boolean
   toggleSidebarCollapsed: () => void
+  /// Independent narrow-window override; no existing preference is reset.
+  sidebarCompactExpanded: boolean
+  setSidebarCompactExpanded: (expanded: boolean) => void
 
   /// Discover "Anywhere" search source toggles. Persisted so power users
   /// who want Spotify-only (saves YouTube quota) keep that pref across
@@ -92,6 +95,8 @@ export const useUiPrefs = create<UiPrefsState>()(
       sidebarCollapsed: false,
       toggleSidebarCollapsed: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      sidebarCompactExpanded: false,
+      setSidebarCompactExpanded: (expanded) => set({ sidebarCompactExpanded: expanded }),
 
       // YouTube default-on per Phase 22 decision; quota meter signals when
       // it's running low so the user knows whether to flip it off.
@@ -115,6 +120,13 @@ export const useUiPrefs = create<UiPrefsState>()(
     }),
     {
       name: 'wisp.uiPrefs',
+      merge: (persisted, current) => {
+        const saved = persisted && typeof persisted === 'object' ? persisted as Partial<UiPrefsState> : {}
+        return { ...current, ...saved,
+          sidebarCollapsed: typeof saved.sidebarCollapsed === 'boolean' ? saved.sidebarCollapsed : current.sidebarCollapsed,
+          sidebarCompactExpanded: typeof saved.sidebarCompactExpanded === 'boolean' ? saved.sidebarCompactExpanded : false,
+        }
+      },
       // Only the persistent width + collapsed toggle should hit localStorage —
       // the last-used tab is intentionally session-y, but persisting it is harmless and small.
     },

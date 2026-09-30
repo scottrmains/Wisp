@@ -10,6 +10,7 @@ import { SoulseekTransferList } from './SoulseekTransferList'
 import { useSoulseekTransfers } from './useSoulseekTransfers'
 import { transferState } from './transferState'
 import { useSearchSession } from './searchSession'
+import { SectionTabs } from '../../components/ui/SectionTabs'
 
 export function SoulseekPage({ onOpenSettings }: { onOpenSettings: () => void }) {
   const tab = useSearchSession(s => s.tab)
@@ -55,13 +56,11 @@ export function SoulseekPage({ onOpenSettings }: { onOpenSettings: () => void })
       </p>}
       {reconnect.error && <p role="alert" className="mt-2 text-xs text-red-300">{reconnect.error.message}</p>}
     </header>
-    <nav aria-label="Soulseek sections" className="flex shrink-0 gap-1 border-b border-[var(--color-border)] px-5 lg:px-7">
-      {([{ id: 'search', label: 'Search', icon: Search }, { id: 'downloads', label: `Downloads${active ? ` (${active})` : ''}`, icon: Download },
-        { id: 'sharing', label: 'Sharing', icon: Upload }] as const).map(({ id, label, icon: Icon }) =>
-        <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); if (id === 'downloads') void refresh() }}
-          className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm ${tab === id ? 'border-[var(--color-accent)] text-[var(--color-text)]' : 'border-transparent text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}>
-          <Icon size={15} />{label}</button>)}
-    </nav>
+    <div className="shrink-0 px-5 lg:px-7"><SectionTabs label="Soulseek sections" active={tab}
+      items={[{ id: 'search', label: 'Search', icon: <Search aria-hidden="true" /> },
+        { id: 'downloads', label: `Downloads${active ? ` (${active})` : ''}`, icon: <Download aria-hidden="true" /> },
+        { id: 'sharing', label: 'Sharing', icon: <Upload aria-hidden="true" /> }]}
+      onSelect={id => { setTab(id); if (id === 'downloads') void refresh() }} /></div>
     <div className={tab === 'search' ? 'min-h-0 flex-1' : 'hidden'}>
       <SoulseekDialog embedded initialArtist={null} initialTitle={null} onClose={() => {}} networkReady={!!online} />
     </div>

@@ -2,10 +2,10 @@
 
 Updated: 2026-10-01
 
-Status: owner approved the shell direction with a wide, resizable top preparation
-waveform and compact bottom playback overview. The isolated prototype reflects
-that adjustment. No redesign phase is implemented in the application yet;
-shared foundations and navigation are the next application work.
+Status: UI 1 shared foundations and navigation are implemented in PR #42,
+with automated verification complete. Owner review and native acceptance remain
+pending. UI 2 is next: migrate the approved wide, resizable top preparation
+waveform and compact bottom playback overview from the isolated prototype.
 
 ## Product outcome
 
@@ -114,7 +114,7 @@ saves ignored screenshots/metrics under `artifacts/ui-redesign`.
 The prototype has no WISP API, native bridge, storage or audio connections.
 Selection, playlist filtering, cue feedback and playback presentation are
 fictional demonstrations, not implemented app features. Settings in the actual
-application is unchanged; only the prototype demonstrates proper modal focus.
+application now uses the shared native modal and contains/restores focus.
 Its Library/player/preparation layout proposes UI 2 direction for approval, not
 an early implementation of UI 2. No installer or production asset includes it.
 
@@ -138,29 +138,37 @@ accessibility issue open solely to match the cosmetic page sequence.
 
 ## Phase UI 1 Shared foundations and navigation
 
-- [ ] Define reusable colour, typography, spacing, border, radius, control-size
+- [x] Define reusable colour, typography, spacing, border, radius, control-size
   and focus tokens; replace inconsistent shared-shell styling first.
-- [ ] Establish shared buttons, icon buttons, tabs, menus, status messages and
+- [x] Establish shared buttons, icon buttons, tabs, menus, status messages and
   dialog presentation. Retain suitable existing native dialog semantics.
-- [ ] Choose clearer Lucide metaphors, consistent strokes and 18 to 20px main
+- [x] Choose clearer Lucide metaphors, consistent strokes and 18 to 20px main
   navigation icons. Aim for 36 to 40px navigation rows and comfortably padded
   desktop actions; do not inflate every dense table control to touch size.
-- [ ] Implement tooltips for hover and keyboard focus, Escape dismissal, actual
+- [x] Implement tooltips for hover and keyboard focus, Escape dismissal, actual
   shortcut hints, truncated labels and unavailable-action explanations. Give
   icon controls accessible names independent of tooltips. Essential warnings
   and instructions stay visible.
-- [ ] Group primary navigation; give playlists a separately scrolling area,
+- [x] Group primary navigation; give playlists a separately scrolling area,
   search and visible management menu with keyboard access. Preserve playlist
   drop targets and duplicate confirmation when navigating/searching.
-- [ ] Keep playlist access possible in compact navigation through an explicit
+- [x] Keep playlist access possible in compact navigation through an explicit
   accessible drawer. Make compact-window behaviour consistent across pages.
-- [ ] Standardise page headers, current-page semantics and global actions.
+- [x] Standardise page headers, current-page semantics and global actions.
   Keep transfer/capture status available without duplicate page controls.
-- [ ] Contain Settings focus, restore focus on close and prevent background
+- [x] Contain Settings focus, restore focus on close and prevent background
   interaction. Validate other shared menus/dialogs rather than assuming every
   custom overlay has the same fault.
-- [ ] Persist compatible layout preferences with safe defaults and bounds;
+- [x] Persist compatible layout preferences with safe defaults and bounds;
   avoid resetting existing preferences or storing sensitive data in new caches.
+
+Implementation scope: global shell/header and reusable foundations are migrated;
+feature-specific headers, tables and specialised dialogs follow in UI 2 to UI 4.
+No new keyboard shortcuts are invented or advertised. Wide and compact-window
+sidebar preferences are additive; existing panel dimensions remain unchanged.
+The compact playlist drawer is deliberately non-modal so background Library
+selection and internal dragging remain available. Settings and confirmations
+remain modal. These implementation checks do not close the native acceptance gate.
 
 Acceptance: all existing destinations remain reachable with mouse and keyboard,
 including configured/unconfigured Soulseek and playlists in compact navigation.
@@ -288,7 +296,7 @@ working library. Keep screenshots, music, credentials and databases out of Git.
 
 - [x] Review current pages and navigation using isolated fictional fixtures.
 - [x] Record the proposed phased delivery and acceptance checklists.
-- [ ] Approve the shell and Library visual example.
+- [x] Approve the shell and Library visual example.
 - [ ] Complete and accept UI 1.
 - [ ] Complete and accept UI 2.
 - [ ] Complete and accept UI 3.

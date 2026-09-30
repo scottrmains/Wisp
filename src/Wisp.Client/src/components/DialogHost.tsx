@@ -1,207 +1,130 @@
 import { useEffect, useRef, useState } from 'react'
-import { useDialogStore, type AlertOptions, type ConfirmOptions, type PromptOptions, type ChoiceOptions } from './dialog'
+import { useDialogStore, type Pending, type PromptOptions } from './dialog'
+import { Modal } from './ui/Modal'
+import { Button } from './ui/Button'
 
-/// Renders the modal for whichever dialog is currently pending. Mounted once
-/// at App root via main.tsx. Listens to the dialog store and routes to the
-/// right body. Click-outside / Escape resolves with cancel; Enter inside the
-/// confirm or prompt body resolves with confirm.
+// Native modal cancellation and focus handling; no global Escape handler can
+// accidentally close a different dialog or Settings behind this one.
 export function DialogHost() {
   const current = useDialogStore((s) => s.current)
+  return current ? <DialogBody key={current.id} current={current} /> : null
+}
 
-  // Esc-to-cancel — bound globally while a dialog is open. Doesn't fire when
-  // the user is mid-typing in a form field outside (ours captures inside).
-  useEffect(() => {
-    if (!current) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (current.kind === 'confirm') current.resolve(false)
-        else if (current.kind === 'prompt' || current.kind === 'choice') current.resolve(null)
-        else current.resolve()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [current])
-
-  if (!current) return null
-
+function DialogBody({ current }: { current: Pending }) {
   const cancel = () => {
     if (current.kind === 'confirm') current.resolve(false)
     else if (current.kind === 'prompt' || current.kind === 'choice') current.resolve(null)
     else current.resolve()
   }
-
-  return (
-    <div
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 p-6"
-      onClick={(e) => { if (e.target === e.currentTarget) cancel() }}
-    >
-      {current.kind === 'confirm' && <ConfirmBody opts={current.opts} resolve={current.resolve} />}
-      {current.kind === 'prompt' && <PromptBody opts={current.opts} resolve={current.resolve} />}
-      {current.kind === 'alert' && <AlertBody opts={current.opts} resolve={current.resolve} />}
-      {current.kind === 'choice' && <ChoiceBody key={current.opts.title + current.opts.message} opts={current.opts} resolve={current.resolve} />}
-    </div>
-  )
-}
-
-function ChoiceBody({ opts, resolve }: { opts: ChoiceOptions; resolve: (v: string | null) => void }) {
-  const ref = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null
-    const dialog = ref.current!
-    dialog.showModal()
-    return () => { dialog.close(); previous?.focus() }
-  }, [])
-  return <dialog ref={ref} aria-labelledby="playlist-choice-title"
-    onCancel={e => { e.preventDefault(); resolve(null) }} onKeyDown={e => e.stopPropagation()}
-    className="m-auto w-[min(32rem,calc(100vw-2rem))] max-h-[85vh] overflow-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-text)] shadow-2xl backdrop:bg-black/70">
-    <h2 id="playlist-choice-title" className="text-base font-semibold">{opts.title}</h2>
-    <p className="mt-3 whitespace-pre-line break-words text-sm text-[var(--color-muted)]">{opts.message}</p>
-    <div className="mt-5 flex flex-wrap justify-end gap-2">
-      <button onClick={() => resolve(null)} className="rounded border border-[var(--color-border)] px-3 py-2 text-sm">Cancel</button>
-      {opts.choices.map(choice => <button key={choice.value} onClick={() => resolve(choice.value)}
-        className="rounded bg-[var(--color-accent)]/20 px-3 py-2 text-sm hover:bg-[var(--color-accent)]/40">{choice.label}</button>)}
-    </div>
-  </dialog>
-}
-
-function ConfirmBody({ opts, resolve }: { opts: ConfirmOptions; resolve: (v: boolean) => void }) {
   const cancelRef = useRef<HTMLButtonElement>(null)
-  const dialogRef = useRef<HTMLDialogElement>(null)
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null
-    const dialog = dialogRef.current!
-    dialog.showModal()
-    cancelRef.current?.focus()
-    return () => { dialog.close(); previous?.focus() }
-  }, [])
-
+    if (current.kind !== 'prompt') cancelRef.current?.focus()
+  }, [current.kind])
   return (
-    <dialog ref={dialogRef} aria-labelledby="confirmation-title"
-      onCancel={e => { e.preventDefault(); resolve(false) }} onKeyDown={e => e.stopPropagation()}
-      onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) resolve(false) } }}
-      className="m-auto w-[min(24rem,calc(100vw-2rem))] max-h-[85vh] overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 text-[var(--color-text)] shadow-2xl backdrop:bg-black/70">
-      <h2 id="confirmation-title" className="text-base font-semibold">{opts.title}</h2>
-      {opts.message && (
-        <p className="mt-2 text-sm whitespace-pre-line text-[var(--color-muted)]">{opts.message}</p>
+    <Modal
+      labelledBy="wisp-dialog-title"
+      onClose={cancel}
+      dismissOnBackdrop
+      role={current.kind === 'alert' && current.opts.tone === 'error' ? 'alertdialog' : 'dialog'}
+      className="w-[min(32rem,calc(100vw-2rem))] p-5"
+    >
+      <h2 id="wisp-dialog-title" className="ui-dialog-heading">
+        {current.opts.title}
+      </h2>
+      {current.opts.message && (
+        <p className="mt-3 whitespace-pre-line break-words text-sm text-[var(--color-muted)]">
+          {current.opts.message}
+        </p>
       )}
-      {opts.body}
-      <div className="mt-5 flex justify-end gap-2">
-        <button
-          ref={cancelRef}
-          onClick={() => resolve(false)}
-          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white"
-        >
-          {opts.cancelLabel ?? 'Cancel'}
-        </button>
-        <button
-          onClick={() => resolve(true)}
-          className={
-            opts.danger
-              ? 'rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600'
-              : 'rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white'
-          }
-        >
-          {opts.confirmLabel ?? (opts.danger ? 'Delete' : 'Confirm')}
-        </button>
-      </div>
-    </dialog>
+      {current.kind === 'confirm' && current.opts.body}
+      {current.kind === 'prompt' ? (
+        <PromptBody opts={current.opts} resolve={current.resolve} />
+      ) : (
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button ref={cancelRef} onClick={cancel}>
+            {current.kind === 'alert'
+              ? (current.opts.confirmLabel ?? 'Close')
+              : current.kind === 'confirm'
+                ? (current.opts.cancelLabel ?? 'Cancel')
+                : 'Cancel'}
+          </Button>
+          {current.kind === 'confirm' && (
+            <Button
+              variant={current.opts.danger ? 'danger' : 'primary'}
+              onClick={() => current.resolve(true)}
+            >
+              {current.opts.confirmLabel ?? (current.opts.danger ? 'Delete' : 'Confirm')}
+            </Button>
+          )}
+          {current.kind === 'choice' &&
+            current.opts.choices.map((choice) => (
+              <Button key={choice.value} onClick={() => current.resolve(choice.value)}>
+                {choice.label}
+              </Button>
+            ))}
+        </div>
+      )}
+    </Modal>
   )
 }
 
-function PromptBody({ opts, resolve }: { opts: PromptOptions; resolve: (v: string | null) => void }) {
+function PromptBody({
+  opts,
+  resolve,
+}: {
+  opts: PromptOptions
+  resolve: (value: string | null) => void
+}) {
   const [value, setValue] = useState(opts.defaultValue ?? '')
   const [error, setError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const dialogRef = useRef<HTMLDialogElement>(null)
+  const input = useRef<HTMLInputElement>(null)
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null
-    const dialog = dialogRef.current!
-    dialog.showModal()
-    inputRef.current?.focus()
-    inputRef.current?.select()
-    return () => { dialog.close(); previous?.focus() }
+    input.current?.focus()
+    input.current?.select()
   }, [])
-
   const submit = () => {
     const trimmed = value.trim()
     if (!trimmed) {
-      setError('Required')
+      setError('Please enter a value.')
       return
     }
-    if (opts.validate) {
-      const v = opts.validate(trimmed)
-      if (v) {
-        setError(v)
-        return
-      }
+    const message = opts.validate?.(trimmed)
+    if (message) {
+      setError(message)
+      return
     }
     resolve(trimmed)
   }
-
   return (
-    <dialog ref={dialogRef} aria-labelledby="prompt-title"
-      onCancel={e => { e.preventDefault(); resolve(null) }} onKeyDown={e => e.stopPropagation()}
-      onClick={e => { if (e.target === e.currentTarget) { const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) resolve(null) } }}
-      className="m-auto w-[min(24rem,calc(100vw-2rem))] max-h-[85vh] overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 text-[var(--color-text)] shadow-2xl backdrop:bg-black/70">
-      <h2 id="prompt-title" className="text-base font-semibold">{opts.title}</h2>
-      {opts.message && (
-        <p className="mt-1 text-xs text-[var(--color-muted)]">{opts.message}</p>
-      )}
+    <>
       <input
-        ref={inputRef}
-        aria-labelledby="prompt-title"
+        ref={input}
+        aria-labelledby="wisp-dialog-title"
         aria-invalid={!!error}
         aria-describedby={error ? 'prompt-error' : undefined}
         value={value}
-        onChange={(e) => { setValue(e.target.value); setError(null) }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') submit()
+        onChange={(event) => {
+          setValue(event.target.value)
+          setError(null)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') submit()
         }}
         maxLength={opts.maxLength ?? 200}
         placeholder={opts.placeholder}
-        className="mt-3 w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
+        className="mt-3 w-full rounded border border-[var(--ui-control-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
       />
-      {error && <p id="prompt-error" role="alert" className="mt-2 text-xs text-red-400">{error}</p>}
+      {error && (
+        <p id="prompt-error" role="alert" className="mt-2 text-xs text-[var(--ui-danger)]">
+          {error}
+        </p>
+      )}
       <div className="mt-4 flex justify-end gap-2">
-        <button
-          onClick={() => resolve(null)}
-          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:text-white"
-        >
-          {opts.cancelLabel ?? 'Cancel'}
-        </button>
-        <button
-          onClick={submit}
-          disabled={!value.trim()}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {opts.confirmLabel ?? 'OK'}
-        </button>
+        <Button onClick={() => resolve(null)}>{opts.cancelLabel ?? 'Cancel'}</Button>
+        <Button variant="primary" onClick={submit} disabled={!value.trim()}>
+          {opts.confirmLabel ?? 'Save'}
+        </Button>
       </div>
-    </dialog>
-  )
-}
-
-function AlertBody({ opts, resolve }: { opts: AlertOptions; resolve: () => void }) {
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => { buttonRef.current?.focus() }, [])
-
-  const isError = opts.tone === 'error'
-
-  return (
-    <div className="w-full max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5 shadow-2xl">
-      <h2 className={`text-base font-semibold ${isError ? 'text-red-300' : ''}`}>{opts.title}</h2>
-      <p className="mt-2 text-sm whitespace-pre-line text-[var(--color-muted)]">{opts.message}</p>
-      <div className="mt-5 flex justify-end">
-        <button
-          ref={buttonRef}
-          onClick={() => resolve()}
-          onKeyDown={(e) => { if (e.key === 'Enter') resolve() }}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white"
-        >
-          {opts.confirmLabel ?? 'OK'}
-        </button>
-      </div>
-    </div>
+    </>
   )
 }

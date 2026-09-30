@@ -2,6 +2,47 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: UI 1 application foundations and navigation implemented
+
+- **Implemented in PR #42:** approved dark editorial direction in the actual
+  client, with shared colour/type/spacing/focus tokens, self-hosted DM Sans and
+  Barlow Condensed fonts, reusable buttons, section navigation, native menus,
+  status messages, dialogs and hover/keyboard tooltips. Font licence downloads
+  are included in About and emitted with static-server-compatible `.txt` names.
+- **Navigation:** Workspace and Find music groups with consistent Lucide icons
+  and 38px rows; independently scrolling/searchable playlists, visible keyboard
+  management menus, current-page breadcrumbs and bounded global plan controls.
+  Compact navigation defaults consistently at 1100px, with additive saved
+  preferences and an explicit searchable playlist drawer. The drawer is non-modal
+  so Library selection and internal drops remain usable. Existing duplicate
+  confirmations, occurrence identities and native drag contracts are preserved.
+- **Accessibility:** Settings now uses a native modal, contains Tab/Shift+Tab
+  focus, prevents background interaction and returns focus on close. Common
+  confirmations/prompts/alerts and playlist creation use the same foundation;
+  queued prompts retain separate drafts. Playlist menus handle keyboard navigation,
+  errors and retry. Unavailable scan actions have focus-accessible explanations.
+- **Verified:** 56 unit tests and all 95 browser tests passed; client build and
+  browser-test TypeScript checks passed. Lint has zero errors and 12 existing
+  warnings. Browser renders cover 1024 by 768, 1366 by 768 and 1920 by 1080,
+  long names/55 playlists, all destinations, empty/error states, contrast,
+  reduced motion and equivalent 125/150 percent CSS viewports. Screenshots use
+  fictional fixtures under ignored `artifacts/ui-phase-one`.
+- **Regression evidence:** the existing internal/external drag-contract,
+  duplicate/removal, CDJ-export UI, recording, Mixes, loudness and Soulseek browser
+  suites pass. A real browser audio element/WAV fixture keeps playing across
+  navigation, sidebar changes and Settings; mocked active capture stays visible
+  without a stop/restart request. Native bridge mocks do not verify Windows OLE,
+  rekordbox dragging, WebView2 focus, Xone capture or CDJ hardware. Physical
+  Windows display scaling and owner visual/native acceptance remain outstanding.
+- **Limits and safety:** build emits a roughly 505 KB initial-chunk warning;
+  existing lazy feature loading is retained. No backend, user library/profile,
+  audio/cue data, USB, website or release pipeline changes; no installer/publish
+  was run. The actual Library/player/preparation layout is unchanged, including
+  existing waveform/beat-grid/cue behaviour. Its migration belongs to UI 2.
+- **Next gate:** owner reviews/merges PR #42 into develop and checks the native
+  interactions before UI 1 acceptance is marked complete. UI 2 then implements
+  the approved Library/preparation layout; production promotion remains owner-led.
+
 ## 2026-10-01: Accepted UI direction and precision preparation preview
 
 - **Owner decision:** approved the shell direction with the adjustment that

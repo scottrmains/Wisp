@@ -6,6 +6,7 @@ import { transferPercent, transferState } from './transferState'
 import { useCurrentPage } from '../../state/currentPage'
 import { useSearchSession } from './searchSession'
 import { useIsMutating } from '@tanstack/react-query'
+import { Button } from '../../components/ui/Button'
 
 /** Keep history reachable even when no transfers are active or a batch is cleared. */
 export function SoulseekStatusIndicator() {
@@ -44,11 +45,10 @@ export function SoulseekStatusIndicator() {
     : failed.length ? 'border-amber-500/40 text-amber-200' : 'border-[var(--color-border)] text-[var(--color-text)]'
 
   return <div className="relative" ref={popoverRef}>
-    <button ref={triggerRef} onClick={() => { if (!open) void refresh(); setOpen(o => !o) }}
-      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs tabular-nums focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] ${tone}`}
-      title="Soulseek transfers" aria-label="Soulseek transfers" aria-expanded={open} aria-controls="soulseek-transfers-panel">
-      <Icon size={12} strokeWidth={1.75} />{label}
-    </button>
+    <Button ref={triggerRef} onClick={() => { if (!open) void refresh(); setOpen(o => !o) }}
+      className={`tabular-nums ${tone}`} tooltip="Soulseek transfers" aria-label="Soulseek transfers" aria-expanded={open} aria-controls="soulseek-transfers-panel">
+      <Icon aria-hidden="true" />{label}
+    </Button>
     {open && <div id="soulseek-transfers-panel" className="fixed right-4 top-12 z-50 mt-1 w-[30rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl lg:absolute lg:right-0 lg:top-full">
       <header className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2">
         <span className="text-xs font-semibold">Soulseek transfers</span>

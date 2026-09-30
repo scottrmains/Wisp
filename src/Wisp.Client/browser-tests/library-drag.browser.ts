@@ -239,7 +239,7 @@ test('Modern Windows rows start one dual-format drag; the same payload is accept
   await unifiedDrop(page)
   await page.mouse.up()
   await expect.poll(() => additions).toEqual([tracks.map(t => t.id)])
-  await expect(page.getByRole('status')).toContainText('Track selection dropped')
+  await expect(page.getByRole('status').filter({ hasText: 'Track selection dropped' })).toContainText('Track selection dropped')
   await selectAll(page)
   await page.getByRole('button', { name: 'Next page' }).click()
   await rowDrag(page, 'Track 0500')
@@ -287,7 +287,7 @@ test('Missing files still allow internal organisation without claiming a partial
   await unifiedDrop(page, false)
   await page.mouse.up()
   await expect.poll(() => additions).toEqual([tracks.map(t => t.id)])
-  await expect(page.getByRole('status')).toContainText('Some audio files are missing')
+  await expect(page.getByRole('status').filter({ hasText: 'Track selection dropped' })).toContainText('Some audio files are missing')
   expect(downloads).toEqual([])
 })
 
