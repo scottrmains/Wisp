@@ -18,7 +18,7 @@ public class PipelinePolicyTests
     public void Packaging_requires_validated_main_push_not_pr_or_manual_dispatch()
     {
         var installer = Map(Map(Workflow(), "jobs"), "installer");
-        Assert.Equal("validate", Scalar(installer, "needs"));
+        Assert.Equal(new[] { "validate", "validate-marketing" }, Strings(installer, "needs"));
         // Both checks are essential: branch alone permits manual releases, while
         // event alone permits packaging develop. The default success() condition
         // also prevents packaging if the validation dependency fails.
@@ -34,7 +34,7 @@ public class PipelinePolicyTests
     public void Validation_tests_and_builds_without_publishing_or_uploading_executables()
     {
         var jobs = Map(Workflow(), "jobs");
-        Assert.Equal(new[] { "installer", "validate" }, jobs.Children.Keys
+        Assert.Equal(new[] { "deploy-marketing", "installer", "release", "validate", "validate-marketing" }, jobs.Children.Keys
             .Select(k => ((YamlScalarNode)k).Value!).Order().ToArray());
         var validate = Map(jobs, "validate");
         Assert.False(validate.Children.ContainsKey(new YamlScalarNode("if")));
@@ -47,6 +47,39 @@ public class PipelinePolicyTests
         Assert.DoesNotContain("publish", commands, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("installer.ps1", commands, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(steps, s => Scalar(s, "uses").StartsWith("actions/upload-artifact@"));
+        var marketing = Map(jobs, "validate-marketing");
+        Assert.False(marketing.Children.ContainsKey(new YamlScalarNode("if")));
+        var marketingSteps = Steps(marketing);
+        Assert.Contains(marketingSteps, s => Scalar(s, "run") == "npm run test:browser");
+        Assert.DoesNotContain(marketingSteps, s => Scalar(s, "uses").StartsWith("actions/upload-artifact@"));
+        Assert.DoesNotContain(marketingSteps, s => Scalar(s, "run").Contains("deploy", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Public_release_and_deployment_are_main_only_and_depend_on_smoke_tested_installer()
+    {
+        var workflow = Workflow();
+        Assert.Equal("read", Scalar(Map(workflow, "permissions"), "contents"));
+        Assert.Equal("${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}",
+            Scalar(Map(workflow, "concurrency"), "cancel-in-progress"));
+        var jobs = Map(workflow, "jobs");
+        var release = Map(jobs, "release");
+        var deploy = Map(jobs, "deploy-marketing");
+        Assert.Equal("installer", Scalar(release, "needs"));
+        Assert.Equal("release", Scalar(deploy, "needs"));
+        foreach (var job in new[] { release, deploy })
+            Assert.Equal("${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}", Scalar(job, "if"));
+        Assert.Equal("write", Scalar(Map(release, "permissions"), "contents"));
+        Assert.Equal("read", Scalar(Map(deploy, "permissions"), "contents"));
+        Assert.Equal("write", Scalar(Map(deploy, "permissions"), "id-token"));
+        Assert.Equal("production", Scalar(Map(deploy, "environment"), "name"));
+        var releaseSteps = Steps(release);
+        Assert.Contains(releaseSteps, s => Scalar(s, "run").Contains("publish-release.mjs"));
+        Assert.Contains(releaseSteps, s => Scalar(s, "run").Contains("verify-production.mjs"));
+        var deploySteps = Steps(deploy);
+        Assert.Contains(deploySteps, s => Scalar(s, "run").Contains("assertCurrentMain"));
+        Assert.Contains(deploySteps, s => Scalar(s, "run").Contains("--env production"));
+        Assert.Contains(deploySteps, s => Scalar(s, "run").Contains("verify-production.mjs"));
     }
 
     private static YamlMappingNode Workflow()

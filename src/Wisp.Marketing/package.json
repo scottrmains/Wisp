@@ -1,0 +1,18 @@
+{
+  "name": "wisp-marketing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "capture:app": "node scripts/capture-app.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/barlow-condensed": "5.3.0",
+    "@fontsource/dm-sans": "5.3.0",
+    "@playwright/test": "1.63.0"
+  }
+}
