@@ -95,7 +95,8 @@ public sealed class SlskdSidecar(
         Directory.CreateDirectory(incomplete);
 
         var yaml = SlskdConfig.GenerateSlskdYaml(
-            apiKey, options.Username!, options.Password!, SlskdPort, downloads, incomplete);
+            apiKey, options.Username!, options.Password!, SlskdPort, downloads, incomplete,
+            settings.Current.SoulseekSharing, settings.Current.RecordingFolder);
         File.WriteAllText(WispPaths.SlskdConfigPath, yaml);
 
         // Push the URL + API key back into Wisp settings so the SoulseekClient picks them up
@@ -129,6 +130,8 @@ public sealed class SlskdSidecar(
         proc.Exited += (_, _) => log.LogInformation("[slskd] process exited (code {Code})", proc.HasExited ? proc.ExitCode : -1);
 
         proc.Start();
+        options.OwnsDaemon = true;
+        options.ActiveSharingSignature = SoulseekSharingEndpoints.Signature(settings.Current.SoulseekSharing ?? new());
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 

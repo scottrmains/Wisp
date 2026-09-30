@@ -18,7 +18,11 @@ public sealed record WispSettings
     public string? NormalizationMusicFolder { get; init; }
     public string? RecordingInputEndpointId { get; init; }
     public string? RecordingFolder { get; init; }
+    public SoulseekSharingSettings? SoulseekSharing { get; init; }
 }
+
+public sealed record SoulseekSharingSettings(bool Enabled = false, string[]? Folders = null,
+    int UploadSlots = 2, int UploadSpeedLimit = 1024);
 
 public sealed record WindowState(int Width, int Height, int? X, int? Y);
 

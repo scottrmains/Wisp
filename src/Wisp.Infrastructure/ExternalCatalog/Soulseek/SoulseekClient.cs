@@ -20,6 +20,60 @@ public sealed class SoulseekClient(
 
     public bool IsConfigured => options.IsConfigured;
 
+    // Do not persist URLs (which may contain credentials) in import receipts.
+    public string SourceKey => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+        System.Text.Encoding.UTF8.GetBytes((options.Url ?? "").TrimEnd('/'))));
+
+    public async Task<SoulseekConnection> GetConnectionAsync(CancellationToken ct)
+    {
+        if (!IsConfigured) return new(false, false, false, false, false, null, "Set up Soulseek in Settings.");
+        try
+        {
+            var state = await RequestAsync<ServerStatus>(HttpMethod.Get, "server", null, ct);
+            return new(true, true, state?.IsConnected ?? false, state?.IsLoggedIn ?? false,
+                state?.IsTransitioning ?? false, state?.Username,
+                state?.IsLoggedIn == true ? null : "Soulseek is not logged in. Check your login in Settings or reconnect.");
+        }
+        catch (Exception ex) when (ex is SoulseekUnreachableException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return new(true, false, false, false, false, null, ex.Message);
+        }
+    }
+
+    public Task ReconnectAsync(CancellationToken ct) => RequestAsync<object>(HttpMethod.Put, "server", null, ct);
+    public Task StopSearchAsync(string id, CancellationToken ct) =>
+        RequestAsync<object>(HttpMethod.Put, $"searches/{Uri.EscapeDataString(id)}", null, ct, allowMissing: true);
+    public Task DeleteSearchAsync(string id, CancellationToken ct) =>
+        RequestAsync<object>(HttpMethod.Delete, $"searches/{Uri.EscapeDataString(id)}", null, ct, allowMissing: true);
+    public Task RescanSharesAsync(CancellationToken ct) => RequestAsync<object>(HttpMethod.Put, "shares", null, ct);
+
+    public async Task<IReadOnlyList<SoulseekShare>> ListSharesAsync(CancellationToken ct)
+    {
+        var hosts = await RequestAsync<Dictionary<string, SoulseekShare[]>>(HttpMethod.Get, "shares", null, ct);
+        return hosts?.Values.SelectMany(x => x).ToArray() ?? [];
+    }
+
+    public async Task<SoulseekShareScan?> GetShareScanAsync(CancellationToken ct) =>
+        (await RequestAsync<ApplicationShares>(HttpMethod.Get, "application", null, ct))?.Shares;
+
+    private async Task<T?> RequestAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct, bool allowMissing = false)
+    {
+        if (!IsConfigured) throw new SoulseekNotConfiguredException();
+        try
+        {
+            using var request = new HttpRequestMessage(method, Url(path));
+            if (body is not null) request.Content = JsonContent.Create(body);
+            using var response = await Client().SendAsync(request, ct);
+            if (allowMissing && response.StatusCode == System.Net.HttpStatusCode.NotFound) return default;
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Soulseek operation failed (HTTP {(int)response.StatusCode}). Refresh or check your connection.");
+            if (typeof(T) == typeof(object) || response.StatusCode == System.Net.HttpStatusCode.NoContent) return default;
+            return await response.Content.ReadFromJsonAsync<T>(ct);
+        }
+        catch (HttpRequestException ex) { throw MapHttp(ex); }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
+    }
+
     /// Probe `GET /api/v0/application` — cheap and always available.
     public async Task<string?> TestConnectionAsync(CancellationToken ct)
     {
@@ -91,6 +145,7 @@ public sealed class SoulseekClient(
             var hits = responses
                 .SelectMany(r => (r.Files ?? []).Select(f => Flatten(r, f, locked: false))
                     .Concat((r.LockedFiles ?? []).Select(f => Flatten(r, f, locked: true))))
+                .DistinctBy(h => (h.Username, h.Filename))
                 .OrderByDescending(h => h.HasFreeUploadSlot)
                 .ThenByDescending(h => h.UploadSpeed)
                 .ThenByDescending(h => h.BitRate ?? 0)
@@ -113,7 +168,7 @@ public sealed class SoulseekClient(
         var body = new[] { new { filename, size } };
         try
         {
-            using var resp = await Client().PostAsJsonAsync(
+            using var resp = await Client("Wisp.Soulseek.Queue").PostAsJsonAsync(
                 Url($"transfers/downloads/{Uri.EscapeDataString(username)}"), body, ct);
             if (!resp.IsSuccessStatusCode)
             {
@@ -121,9 +176,19 @@ public sealed class SoulseekClient(
                 throw new InvalidOperationException(
                     $"slskd refused download ({(int)resp.StatusCode}): {Truncate(error, 200)}");
             }
+            // slskd can return HTTP 201 with an empty Enqueued list and a Failed
+            // list (e.g. an already-active download). HTTP success alone is not
+            // evidence that the file was queued.
+            if (resp.StatusCode == System.Net.HttpStatusCode.Created)
+            {
+                var acknowledgement = await resp.Content.ReadFromJsonAsync<QueueAcknowledgement>(ct);
+                if (acknowledgement?.Enqueued?.Any(file => file.Filename == filename) != true)
+                    throw new InvalidOperationException("Soulseek did not queue this file. It may already be downloading; refresh transfers or try another result.");
+            }
         }
         catch (HttpRequestException ex) { throw MapHttp(ex); }
-        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        { throw new SoulseekUnreachableException("The peer took too long to acknowledge this download. Check transfers before retrying: slskd may still finish queueing it.", ex); }
     }
 
     /// Asks slskd for its currently-configured download folder via `/api/v0/options`.
@@ -167,12 +232,15 @@ public sealed class SoulseekClient(
     private string? _downloadFolderCacheUrl;
     private DateTime _downloadFolderCacheUntil;
 
-    public async Task<IReadOnlyList<SoulseekTransfer>> ListDownloadsAsync(CancellationToken ct)
+    public Task<IReadOnlyList<SoulseekTransfer>> ListDownloadsAsync(CancellationToken ct) => ListTransfersAsync("downloads", ct);
+    public Task<IReadOnlyList<SoulseekTransfer>> ListUploadsAsync(CancellationToken ct) => ListTransfersAsync("uploads", ct);
+
+    private async Task<IReadOnlyList<SoulseekTransfer>> ListTransfersAsync(string direction, CancellationToken ct)
     {
         if (!options.IsConfigured) throw new SoulseekNotConfiguredException();
         try
         {
-            using var resp = await Client().GetAsync(Url("transfers/downloads"), ct);
+            using var resp = await Client().GetAsync(Url($"transfers/{direction}"), ct);
             resp.EnsureSuccessStatusCode();
             var users = await resp.Content.ReadFromJsonAsync<UserDownloads[]>(ct) ?? [];
 
@@ -191,7 +259,12 @@ public sealed class SoulseekClient(
                     Percentage: x.File.PercentComplete,
                     State: x.File.State ?? "",
                     StartedAt: x.File.StartedAt,
-                    EndedAt: x.File.EndedAt))
+                    EndedAt: x.File.EndedAt)
+                {
+                    AverageSpeed = x.File.AverageSpeed,
+                    PlaceInQueue = x.File.PlaceInQueue,
+                    Error = x.File.Exception,
+                })
                 .ToArray();
         }
         catch (HttpRequestException ex) { throw MapHttp(ex); }
@@ -218,9 +291,12 @@ public sealed class SoulseekClient(
         catch (TaskCanceledException ex) when (!ct.IsCancellationRequested) { throw MapTimeout(ex); }
     }
 
-    private HttpClient Client()
+    public Task CancelUploadAsync(string username, string id, CancellationToken ct) => RequestAsync<object>(HttpMethod.Delete,
+        $"transfers/uploads/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(id)}", null, ct);
+
+    private HttpClient Client(string name = "Wisp.Soulseek")
     {
-        var http = httpFactory.CreateClient("Wisp.Soulseek");
+        var http = httpFactory.CreateClient(name);
         http.DefaultRequestHeaders.Remove("X-API-Key");
         http.DefaultRequestHeaders.Add("X-API-Key", options.ApiKey!);
         return http;
@@ -248,6 +324,11 @@ public sealed class SoulseekClient(
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
 
     // ─── DTOs ────────────────────────────────────────────────────────
+
+    private sealed record ServerStatus(bool IsConnected, bool IsLoggedIn, bool IsTransitioning, string? Username);
+    private sealed record ApplicationShares(SoulseekShareScan? Shares);
+    private sealed record QueueAcknowledgement(QueuedFile[]? Enqueued);
+    private sealed record QueuedFile(string Filename);
 
     private sealed record SearchStatus(
         [property: JsonPropertyName("isComplete")] bool IsComplete,
@@ -285,5 +366,8 @@ public sealed class SoulseekClient(
         [property: JsonPropertyName("percentComplete")] double PercentComplete,
         [property: JsonPropertyName("state")] string? State,
         [property: JsonPropertyName("startedAt")] DateTimeOffset? StartedAt,
-        [property: JsonPropertyName("endedAt")] DateTimeOffset? EndedAt);
+        [property: JsonPropertyName("endedAt")] DateTimeOffset? EndedAt,
+        [property: JsonPropertyName("averageSpeed")] double AverageSpeed,
+        [property: JsonPropertyName("placeInQueue")] int? PlaceInQueue,
+        [property: JsonPropertyName("exception")] string? Exception);
 }

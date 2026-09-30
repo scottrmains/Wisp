@@ -21,6 +21,7 @@ const DiscoverPage = lazy(() => import('./features/discover/DiscoverPage').then(
 const WantedPage = lazy(() => import('./features/wanted/WantedPage').then((m) => ({ default: m.WantedPage })))
 const SettingsPanel = lazy(() => import('./features/settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel })))
 const RecordingsWorkspace = lazy(() => import('./features/recordings/RecordingsWorkspace').then(m => ({ default: m.RecordingsWorkspace })))
+const SoulseekPage = lazy(() => import('./features/soulseek/SoulseekPage').then(m => ({ default: m.SoulseekPage })))
 
 /// App-level shell. Layout is:
 ///
@@ -60,7 +61,7 @@ function App() {
 
   // Mix Plans has its own full chain workspace; showing the compact dock there too
   // would render the same plan twice. Hide it on that page only.
-  const showChainDock = !!activePlanId && page !== 'mix-plans' && page !== 'recordings'
+  const showChainDock = !!activePlanId && page !== 'mix-plans' && page !== 'recordings' && page !== 'soulseek'
   // Hide the bottom MiniPlayer (visually) whenever the Library workspace is in
   // front — the workspace already shows playback controls + waveform for the
   // loaded track, so two strips would just duplicate.
@@ -106,6 +107,7 @@ function App() {
           {page === 'wanted' && <WantedPage />}
           {page === 'crate-digger' && <CrateDiggerPage />}
           {page === 'recordings' && <RecordingsWorkspace />}
+          {page === 'soulseek' && <SoulseekPage onOpenSettings={() => setSettingsOpen(true)} />}
           </Suspense>
         </main>
 
