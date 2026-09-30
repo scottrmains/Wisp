@@ -2,6 +2,74 @@
 
 Last reviewed: 2026-09-30
 
+## 2026-09-30: Production marketing/release pipeline (deployment acceptance pending)
+
+- **Implemented:** main-only installer → smoke test → verified draft/public GitHub
+  Release → anonymous EXE/checksum verification → static site build → Azure
+  production deployment. PR/develop/manual jobs validate only. Draft uploads are
+  verified by digest/size; published assets are immutable to retries. Main runs
+  are not interrupted by newer pushes, and main-tip guards reject obsolete runs.
+- **Production download:** baked-in public installer link, version and signing
+  disclosure. No visitor GitHub API call or sign-in is needed, including with JS
+  disabled. A no-store `release.json` records commit/version/installer SHA-256.
+- **Azure provisioned:** WISP-only `rg-wisp-prod`, Free `wisp-web-prod` at
+  `https://zealous-smoke-0124a0503.4.azurestaticapps.net`, managed identity with
+  Contributor scoped to this site, production-only OIDC federation and a
+  main-only GitHub environment. No DNS, custom domain, paid SKU, permanent secret
+  or Pulse/Physiqo resource was changed. Bootstrap/runbook are committed.
+- **Validation repaired:** workflow-policy tests now cover marketing validation,
+  release/deploy dependency chain and main-only permissions rather than assuming
+  the original two-job workflow. Local: 23 release/production tests, 17 browser
+  checks and four workflow-policy tests pass, including API-outage/no-JS
+  production downloads. Live release/deployment evidence will be recorded after
+  the authorized promotion, not inferred from local tests.
+- **Release hardening:** explicit same-major security pins for Microsoft.OpenApi
+  2.7.5 and SQLitePCLRaw bundle 2.1.12 (native SQLite 3.53.3); an in-memory test
+  guards the runtime SQLite security baseline. All 488 backend tests pass; the
+  application NuGet vulnerability audit reports no known vulnerable packages
+  against the current configured advisory sources.
+- **Limits:** unsigned Windows installer (SmartScreen may warn); Free Azure
+  hosting has quotas/no SLA; no custom domain or automatic post-deployment
+  rollback. Failed-job retry retains tested artifacts; rebuilding an already
+  published version with different bytes is intentionally refused. App redesign
+  is deferred; no new CDJ hardware compatibility claim is made.
+
+## 2026-09-30: Design-first marketing homepage prototype
+
+- **Implemented:** independent static site in `src/Wisp.Marketing`, with warm
+  paper/ink/flat-purple styling, condensed typography, square edges, sparse hard
+  button shadows, editorial feature sections and the existing Wispa mark. No
+  gradient decoration, status badges, fabricated testimonials or feature-card
+  grid. Desktop application source and installer packaging steps are unchanged;
+  production packaging also waits for the new marketing validation job.
+- **Visual evidence:** four screenshots of the real WISP client captured against
+  fictional browser-only API fixtures. No user database, credentials or music
+  are accessed; screenshots are labelled as a demo collection. Self-hosted fonts
+  include their licence files in the site output.
+- **Download discovery:** anonymous latest-stable GitHub Release lookup, own-repo
+  HTTPS Windows installer selection, canonical/versioned names, safe text-only
+  version display and six-second timeout. Missing releases, network failures and
+  rate limits have useful GitHub fallbacks; no fake version or broken download is
+  presented as ready. The page remains navigable with JavaScript disabled.
+- **Scope:** a working local prototype for design approval. Azure/DNS/domain
+  provisioning and public release publishing are deliberately deferred. Existing
+  Actions installers are not made publicly downloadable by this change. Azure
+  Static Web Apps security headers and independent validation are prepared.
+- **Hardware claims:** homepage USB wording is limited to the documented owner
+  CDJ-900 playback/overview/Memory Cue test, with player/format caveats. No new
+  hardware acceptance is claimed.
+- **Verification:** static site build and 10 release-selection tests pass, as do
+  15 browser checks covering 360/390/768/1440/1920px, enlarged text, keyboard
+  focus, reduced motion, no-JavaScript fallback, release success/missing/error/
+  timeout states, assets and hosting headers. Desktop/mobile renders and all four
+  source screenshots were reviewed. The unchanged desktop client build passes
+  with its existing chunk-size warning. Physical mobile, Azure deployment and
+  public installer-download acceptance remain untested at this prototype stage.
+- **Dependency audit:** the isolated marketing package reports zero known
+  vulnerabilities. The existing root development toolchain separately reports
+  critical `concurrently`/`shell-quote` advisories; it is not included in the
+  static site's output and is left unchanged for a dedicated dependency fix.
+
 ## 2026-09-30: Dedicated Soulseek workspace, resilient transfers and opt-in sharing
 
 - **Implemented:** a profile-gated Soulseek sidebar page with separate Search,
