@@ -1,4 +1,47 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { renderProductionPage } from "../scripts/production.mjs";
+
+for (const javascriptEnabled of [true, false]) {
+  test(`production download survives unavailable GitHub API (JavaScript ${javascriptEnabled})`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      javaScriptEnabled: javascriptEnabled,
+    });
+    const page = await context.newPage();
+    const url =
+      "https://github.com/scottrmains/Wisp/releases/download/v0.1.42/Wisp-Setup-0.1.42-win-x64.exe";
+    const html = renderProductionPage(
+      await readFile(new URL("../index.html", import.meta.url), "utf8"),
+      {
+        version: "0.1.42",
+        commit: "a".repeat(40),
+        sha256: "b".repeat(64),
+        size: 104857600,
+        installerUrl: url,
+        checksumUrl: `${url}.sha256`,
+        notesUrl: "https://github.com/scottrmains/Wisp/releases/tag/v0.1.42",
+      },
+    );
+    let apiRequests = 0;
+    await page.route("https://api.github.com/**", (route) => {
+      apiRequests++;
+      return route.abort();
+    });
+    await page.route("http://127.0.0.1:19600/", (route) =>
+      route.fulfill({ contentType: "text/html", body: html }),
+    );
+    await page.goto("/");
+    await expect(page.locator("#installer-link")).toHaveAttribute("href", url);
+    await expect(page.locator("#installer-link")).toContainText(
+      "Download for Windows",
+    );
+    await expect(page.getByRole("status")).toContainText("v0.1.42");
+    expect(apiRequests).toBe(0);
+    await context.close();
+  });
+}
 
 async function setup(
   page,

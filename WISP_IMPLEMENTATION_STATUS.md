@@ -2,6 +2,38 @@
 
 Last reviewed: 2026-09-30
 
+## 2026-09-30: Production marketing/release pipeline (deployment acceptance pending)
+
+- **Implemented:** main-only installer → smoke test → verified draft/public GitHub
+  Release → anonymous EXE/checksum verification → static site build → Azure
+  production deployment. PR/develop/manual jobs validate only. Draft uploads are
+  verified by digest/size; published assets are immutable to retries. Main runs
+  are not interrupted by newer pushes, and main-tip guards reject obsolete runs.
+- **Production download:** baked-in public installer link, version and signing
+  disclosure. No visitor GitHub API call or sign-in is needed, including with JS
+  disabled. A no-store `release.json` records commit/version/installer SHA-256.
+- **Azure provisioned:** WISP-only `rg-wisp-prod`, Free `wisp-web-prod` at
+  `https://zealous-smoke-0124a0503.4.azurestaticapps.net`, managed identity with
+  Contributor scoped to this site, production-only OIDC federation and a
+  main-only GitHub environment. No DNS, custom domain, paid SKU, permanent secret
+  or Pulse/Physiqo resource was changed. Bootstrap/runbook are committed.
+- **Validation repaired:** workflow-policy tests now cover marketing validation,
+  release/deploy dependency chain and main-only permissions rather than assuming
+  the original two-job workflow. Local: 23 release/production tests, 17 browser
+  checks and four workflow-policy tests pass, including API-outage/no-JS
+  production downloads. Live release/deployment evidence will be recorded after
+  the authorized promotion, not inferred from local tests.
+- **Release hardening:** explicit same-major security pins for Microsoft.OpenApi
+  2.7.5 and SQLitePCLRaw bundle 2.1.12 (native SQLite 3.53.3); an in-memory test
+  guards the runtime SQLite security baseline. All 488 backend tests pass; the
+  application NuGet vulnerability audit reports no known vulnerable packages
+  against the current configured advisory sources.
+- **Limits:** unsigned Windows installer (SmartScreen may warn); Free Azure
+  hosting has quotas/no SLA; no custom domain or automatic post-deployment
+  rollback. Failed-job retry retains tested artifacts; rebuilding an already
+  published version with different bytes is intentionally refused. App redesign
+  is deferred; no new CDJ hardware compatibility claim is made.
+
 ## 2026-09-30: Design-first marketing homepage prototype
 
 - **Implemented:** independent static site in `src/Wisp.Marketing`, with warm

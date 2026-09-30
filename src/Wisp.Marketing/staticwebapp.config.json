@@ -6,6 +6,14 @@
   },
   "routes": [
     {
+      "route": "/release.json",
+      "headers": { "Cache-Control": "no-store" }
+    },
+    {
+      "route": "/",
+      "headers": { "Cache-Control": "no-cache" }
+    },
+    {
       "route": "/assets/*",
       "headers": { "Cache-Control": "public, max-age=3600" }
     }

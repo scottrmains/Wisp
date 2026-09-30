@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, stat } from "node:fs/promises";
+import { cp, mkdir, readFile, stat, writeFile, rm } from "node:fs/promises";
+import { renderProductionPage, validateManifest } from "./production.mjs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
@@ -27,6 +28,8 @@ for (const name of ["library", "search", "plan", "mix"]) {
     );
   });
 }
+// Only remove this generated site output, never desktop output or user data.
+await rm(join(root, "dist"), { recursive: true, force: true });
 await mkdir(join(root, "dist"), { recursive: true });
 for (const name of [
   "index.html",
@@ -47,6 +50,19 @@ for (const family of ["barlow-condensed", "dm-sans"]) {
 const html = await readFile(join(root, "dist/index.html"), "utf8");
 if (/http:\/\//.test(html))
   throw new Error("Insecure link in marketing output");
+if (process.env.WISP_RELEASE_MANIFEST) {
+  const manifest = validateManifest(
+    JSON.parse(await readFile(process.env.WISP_RELEASE_MANIFEST, "utf8")),
+  );
+  await writeFile(
+    join(root, "dist/index.html"),
+    renderProductionPage(html, manifest),
+  );
+  await writeFile(
+    join(root, "dist/release.json"),
+    JSON.stringify(manifest, null, 2) + "\n",
+  );
+}
 console.log(
   "Built static marketing site in src/Wisp.Marketing/dist. No desktop app or installer was built.",
 );
