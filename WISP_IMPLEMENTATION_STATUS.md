@@ -2,6 +2,35 @@
 
 Last reviewed: 2026-09-17
 
+## 2026-09-30: Recover library links after external filename analysis
+
+- **Incident confirmed:** Mixed In Key was configured with `RenameAfterProcessing=True`
+  and `FileNameFormat=Name_Key_Tempo`. It renamed files such as `Alton Miller -
+  Eggun.mp3` to `Alton Miller - Eggun - 9A - 123.mp3`; WISP retained the old
+  path, causing playback to return `file_missing` (HTTP 410). The audio remained
+  on disk.
+- **Owner library repaired:** 149 unique, one-to-one renamed paths were linked
+  back to their existing WISP rows. Track IDs, cues, device cues, playlists,
+  mix plans, tags, notes and dates were preserved. The confirmed accidentally
+  removed `Forces Of Nature - Jessie's Song Tell Me (Miami Vocal Mix)` was
+  re-added as a new row; its previously deleted cues and playlist memberships
+  could not be recovered from the available data.
+- **Recovery safety:** Before the live repair, a SQLite backup was made at
+  `C:\Users\scott\AppData\Local\Wisp\backups\rename-recovery-applied-20260930\wisp-before-recovery.db`.
+  The repair was hash-gated and did not move, rename, delete or rewrite audio.
+  The post-repair database passes SQLite integrity and foreign-key checks; 42
+  older unavailable rows remain deliberately retained.
+- **Implemented in WISP:** scanner recovery runs before importing new paths;
+  unique same-folder analysis-suffix matches retain the existing row, while
+  ambiguous candidates are skipped for explicit relink. Playback and download
+  attempt bounded same-folder recovery. Curated metadata and preparation are
+  preserved while fresh key/BPM/energy tags are accepted.
+- **Recovery tooling:** `tools/Wisp.LibraryRecovery` creates a non-destructive
+  plan report by default and requires explicit `--apply` with WISP and Mixed In
+  Key closed. It never deletes unresolved rows or files.
+- **Verification:** full solution tests pass (115 Core, 168 Infrastructure,
+  168 API). The known NU1903 dependency warnings remain unrelated.
+
 ## 2026-09-17: Resilient, consistent FFmpeg acquisition in CI
 
 - **Failure confirmed:** main push run `35227109392` failed during Validate's

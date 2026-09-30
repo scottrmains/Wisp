@@ -12,6 +12,8 @@ public class FileScanner : IFileScanner
         ".mp3", ".flac", ".wav", ".aiff", ".aif", ".m4a", ".ogg", ".opus"
     };
 
+    public static bool IsAudioFile(string path) => AudioExtensions.Contains(Path.GetExtension(path));
+
     public IEnumerable<string> EnumerateAudioFiles(string root)
     {
         if (!Directory.Exists(root))
@@ -27,7 +29,7 @@ public class FileScanner : IFileScanner
 
         foreach (var path in Directory.EnumerateFiles(root, "*", options))
         {
-            if (AudioExtensions.Contains(Path.GetExtension(path)) && !Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path)
+            if (IsAudioFile(path) && !Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path)
                 && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                     .Contains("recording-input-tests", StringComparer.OrdinalIgnoreCase)
                 && !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)

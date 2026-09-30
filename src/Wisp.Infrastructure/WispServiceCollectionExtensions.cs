@@ -28,6 +28,7 @@ public static class WispServiceCollectionExtensions
         services.AddSingleton<ScanProgressBus>();
 
         services.AddScoped<LibraryScanner>();
+        services.AddScoped<TrackRenameRecoveryService>();
         services.AddHostedService<ScanWorker>();
         services.AddHostedService<TrackFileDateBackfill>();
 

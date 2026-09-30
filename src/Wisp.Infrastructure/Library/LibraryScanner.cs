@@ -47,9 +47,9 @@ public class LibraryScanner(
 
             // 2. Index existing tracks under this root by FilePath.
             var rootPrefix = NormalizeRoot(request.FolderPath);
-            var existingByPath = await db.Tracks
-                .Where(t => EF.Functions.Like(t.FilePath, rootPrefix + "%"))
-                .ToDictionaryAsync(t => t.FilePath, StringComparer.OrdinalIgnoreCase, cancellationToken);
+            var allTracks = await db.Tracks.ToListAsync(cancellationToken);
+            var existingByPath = allTracks.Where(t => t.FilePath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(t => t.FilePath, StringComparer.OrdinalIgnoreCase);
             var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var versions = await db.Tracks.Where(t => t.OriginalFilePath != null || t.NormalizedFilePath != null)
                 .Select(t => new { t.FilePath, t.OriginalFilePath, t.NormalizedFilePath }).ToListAsync(cancellationToken);
@@ -62,12 +62,42 @@ public class LibraryScanner(
                 if (Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path) && File.Exists(path))
                 { seenPaths.Add(path); track.IsUnavailable = false; track.UnavailableSince = null; }
 
+            // Recover renamed/retagged files BEFORE importing new paths. A new
+            // filename must not orphan the original row's cues and playlist entries.
+            var recovery = new TrackRenameRecoveryService(db, fingerprint, metadata,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<TrackRenameRecoveryService>.Instance);
+            var recoveryPlan = await recovery.PlanAsync(allTracks, existingByPath.Values, files, cancellationToken);
+            var deferredPaths = recoveryPlan.AmbiguousPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var match in recoveryPlan.Matches)
+            {
+                var oldPath = match.Track.FilePath;
+                try
+                {
+                    if (!await recovery.ApplyAsync(match, cancellationToken))
+                    { deferredPaths.Add(match.File.Path); continue; }
+                    existingByPath.Remove(oldPath);
+                    existingByPath.Add(match.File.Path, match.Track);
+                    job.UpdatedTracks++;
+                    log.LogInformation("Recovered renamed track {Id}: {OldPath} -> {Path} ({Reason})",
+                        match.Track.Id, oldPath, match.File.Path, match.Reason);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                { deferredPaths.Add(match.File.Path); log.LogWarning(ex, "Rename recovery deferred for {Path}", match.File.Path); }
+            }
             // 3. Process each file.
             var stopwatch = Stopwatch.StartNew();
             foreach (var path in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 seenPaths.Add(path);
+                if (deferredPaths.Contains(path))
+                {
+                    // Neither guess at the identity nor import a duplicate of a
+                    // prepared missing track. Explicit relink remains available.
+                    job.SkippedFiles++;
+                    log.LogWarning("Ambiguous rename: use Relink audio file to resolve {Path}", path);
+                    continue;
+                }
                 if (inactivePaths.Contains(path) || Wisp.Infrastructure.Audio.LoudnessNormalizer.IsGeneratedPath(path))
                 { job.SkippedFiles++; continue; }
 

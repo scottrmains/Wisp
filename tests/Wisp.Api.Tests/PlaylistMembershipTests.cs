@@ -41,6 +41,9 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         builder.Services.AddSingleton<ScanQueue>(); builder.Services.AddSingleton<ScanProgressBus>();
         builder.Services.AddSingleton<RecommendationService>(); builder.Services.AddSingleton<AiffTranscoder>();
         builder.Services.AddSingleton<PioneerUsbExportService>();
+        builder.Services.AddSingleton<Wisp.Infrastructure.FileSystem.IFileFingerprint, Wisp.Infrastructure.FileSystem.FileFingerprint>();
+        builder.Services.AddSingleton<Wisp.Infrastructure.Tagging.IMetadataReader, Wisp.Infrastructure.Tagging.MetadataReader>();
+        builder.Services.AddScoped<Wisp.Infrastructure.Library.TrackRenameRecoveryService>();
         _app = builder.Build(); _app.MapLibrary(); _app.MapPlaylists();
         await using var scope = _app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
