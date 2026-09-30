@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f3f0e7" />
+    <meta
+      name="description"
+      content="WISP is a Windows workspace for your music library, mix plans, USB preparation and recorded mixes. Less admin. More mixing."
+    />
+    <meta property="og:title" content="WISP — Less admin. More mixing." />
+    <meta
+      property="og:description"
+      content="A home for your next set. Organise your tracks, prepare your USB and learn from every mix."
+    />
+    <meta property="og:type" content="website" />
+    <title>WISP — Less admin. More mixing.</title>
+    <link rel="icon" href="./assets/wispa.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href="./assets/fonts/barlow-condensed-latin-900-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="./site.css" />
+    <script type="module" src="./site.mjs"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header wrap">
+      <a class="brand" href="#top" aria-label="WISP home"
+        ><img src="./assets/wispa.svg" width="40" height="40" alt="" /><span
+          >WISP</span
+        ></a
+      >
+      <nav aria-label="Main navigation">
+        <a href="#workflow">The workflow</a><a href="#usb">USB prep</a
+        ><a href="https://github.com/scottrmains/Wisp">GitHub ↗</a>
+      </nav>
+      <a class="header-download" href="#download"
+        >Get WISP <span aria-hidden="true">↓</span></a
+      >
+    </header>
+    <main id="main">
+      <section class="hero wrap" id="top" aria-labelledby="hero-title">
+        <p class="eyebrow">A home for your next set.</p>
+        <div class="hero-copy">
+          <h1 id="hero-title">LESS ADMIN.<br /><span>MORE MIXING.</span></h1>
+          <div class="hero-aside">
+            <p>
+              For the digging, the planning<br class="desktop-break" />
+              and everything after the mix.
+            </p>
+            <p class="body-copy">
+              Your music library, set preparation and recorded mixes. Together
+              in one Windows app.
+            </p>
+            <a class="button primary" href="#download"
+              >Download for Windows <span aria-hidden="true">↓</span></a
+            ><a class="quiet-link" href="#workflow"
+              >Take a look inside <span aria-hidden="true">↘</span></a
+            >
+          </div>
+        </div>
+        <figure class="hero-shot">
+          <img
+            src="./assets/screenshots/library.png"
+            width="1680"
+            height="1050"
+            fetchpriority="high"
+            alt="WISP’s music library with track titles, BPM, musical keys and playlists in its sidebar."
+          />
+          <figcaption>
+            <span>Your collection. A little more together.</span
+            ><span>WISP / Library</span>
+          </figcaption>
+        </figure>
+      </section>
+      <section
+        class="workflow wrap"
+        id="workflow"
+        aria-labelledby="workflow-title"
+      >
+        <div class="section-intro">
+          <p class="eyebrow">The workflow</p>
+          <h2 id="workflow-title">GOOD SETS START<br />BEFORE YOU PLAY.</h2>
+          <p>
+            That tune you just found. The next track that fits.<br />The
+            transition you want to try again. Keep it all here.
+          </p>
+        </div>
+        <article class="feature feature-find">
+          <div class="feature-copy">
+            <p class="section-number">01 / Find &amp; file</p>
+            <h3>LESS LOST.<br />MORE FOUND.</h3>
+            <p>
+              Give your collection a home. Browse by BPM, key and date added.
+              Build playlists that make sense to you.
+            </p>
+            <p>
+              Still digging? Search Soulseek from WISP, follow your downloads
+              and bring new finds into your library.
+            </p>
+          </div>
+          <figure>
+            <img
+              src="./assets/screenshots/search.png"
+              width="1680"
+              height="1050"
+              loading="lazy"
+              alt="WISP Soulseek search displaying downloadable files with format, bitrate, user and queue information."
+            />
+            <figcaption>Find a track. Keep the good version.</figcaption>
+          </figure>
+        </article>
+        <article class="feature feature-plan">
+          <div class="feature-copy">
+            <p class="section-number">02 / Build the set</p>
+            <h3>A PLAN.<br />NOT A RULEBOOK.</h3>
+            <p>
+              Try a running order, mark your cues and leave yourself transition
+              notes. Make room for the track you hadn’t planned on playing.
+            </p>
+            <p>
+              Keep the blueprint separate from what you actually played. A
+              better next set starts with knowing the difference.
+            </p>
+          </div>
+          <figure>
+            <img
+              src="./assets/screenshots/plan.png"
+              width="1680"
+              height="1050"
+              loading="lazy"
+              alt="A WISP mix plan showing a running order of tracks, BPM, key and transition notes."
+            />
+            <figcaption>
+              A little preparation. Plenty of room to improvise.
+            </figcaption>
+          </figure>
+        </article>
+        <article class="feature feature-mix">
+          <div class="feature-copy">
+            <p class="section-number">03 / Keep the take</p>
+            <h3>LISTEN BACK.<br />GET BETTER.</h3>
+            <p>
+              Record from your mixer’s audio input. Save a lossless master, then
+              export a 320 kbps MP3 when it’s time to share.
+            </p>
+            <p>
+              Rate the mix, leave timestamped notes and build the actual
+              tracklist. Take what worked into your next plan.
+            </p>
+          </div>
+          <figure>
+            <img
+              src="./assets/screenshots/mix.png"
+              width="1680"
+              height="1050"
+              loading="lazy"
+              alt="WISP’s mix review workspace with a recorded waveform, rating and timestamped listening notes."
+            />
+            <figcaption>
+              The good bits. The rough bits. The next idea.
+            </figcaption>
+          </figure>
+        </article>
+      </section>
+      <section class="usb-section" id="usb" aria-labelledby="usb-title">
+        <div class="wrap usb-inner">
+          <div>
+            <p class="eyebrow">From library to USB</p>
+            <h2 id="usb-title">TAKE THE SET<br />WITH YOU.</h2>
+          </div>
+          <div class="usb-copy">
+            <p>
+              Pick a playlist. Choose your USB. Take your tracks, running order
+              and memory cues to the decks.
+            </p>
+            <p>
+              WISP exports legacy CDJ playlists and analysis data, including
+              overview waveforms. Playback, overview waveforms and memory cues
+              have been confirmed by the owner on a CDJ-900.
+            </p>
+            <p class="compatibility-note">
+              That is one tested setup, not a guarantee for every player or
+              format. Test your export on your own decks before relying on it
+              for a gig. WISP is independent software, not affiliated with
+              Pioneer DJ or rekordbox.
+            </p>
+            <a
+              href="https://github.com/scottrmains/Wisp/issues"
+              class="quiet-link"
+              >Questions about your setup? <span aria-hidden="true">↗</span></a
+            >
+          </div>
+        </div>
+      </section>
+      <section
+        class="download-section wrap"
+        id="download"
+        aria-labelledby="download-title"
+      >
+        <div>
+          <p class="eyebrow">Make room for the music.</p>
+          <h2 id="download-title">YOUR NEXT SET<br />STARTS HERE.</h2>
+        </div>
+        <div class="download-copy">
+          <p>
+            A desktop workspace for your own collection.<br />No browser tab
+            required to use the app.
+          </p>
+          <a
+            id="installer-link"
+            class="button primary"
+            href="https://github.com/scottrmains/Wisp/actions/workflows/windows-installer.yml"
+            >View current builds <span aria-hidden="true">↗</span></a
+          >
+          <p id="release-message" class="release-message" role="status">
+            Public releases are being set up. Current builds are available
+            through GitHub Actions and require GitHub sign-in.
+          </p>
+          <dl class="requirements">
+            <div>
+              <dt>Platform</dt>
+              <dd>Windows 10 / 11 · 64-bit</dd>
+            </div>
+            <div>
+              <dt>For recording</dt>
+              <dd>A compatible audio input</dd>
+            </div>
+            <div>
+              <dt>For Soulseek</dt>
+              <dd>Your Soulseek account + internet</dd>
+            </div>
+          </dl>
+          <div class="download-links">
+            <a
+              id="release-notes"
+              href="https://github.com/scottrmains/Wisp/releases"
+              >Release notes ↗</a
+            ><a href="https://github.com/scottrmains/Wisp/issues"
+              >Report an issue ↗</a
+            >
+          </div>
+          <noscript
+            ><p>
+              Open GitHub Releases to check for the latest installer. This page
+              works without JavaScript; automatic version detection needs
+              JavaScript.
+            </p></noscript
+          >
+        </div>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <a href="#top" class="brand footer-brand" aria-label="Back to WISP home"
+          ><img src="./assets/wispa.svg" width="64" height="64" alt="" /><span
+            >WISP</span
+          ></a
+        >
+        <p>Named after Wispa.<br />A very good Labrador.</p>
+        <div>
+          <a href="https://github.com/scottrmains/Wisp"
+            >Made by Scott. Built for the collection. ↗</a
+          ><span>Screenshots show a demo collection.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

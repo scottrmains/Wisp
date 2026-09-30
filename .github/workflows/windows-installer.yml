@@ -16,6 +16,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate-marketing:
+    name: Validate marketing site
+    runs-on: windows-2022
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: src/Wisp.Marketing
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/Wisp.Marketing/package-lock.json
+      - name: Install marketing dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Test release selection
+        run: npm test
+      - name: Build static marketing site
+        run: npm run build
+      - name: Install marketing test browser
+        run: npx playwright install chromium
+      - name: Test marketing layout and download states
+        run: npm run test:browser
+
   validate:
     name: Validate
     runs-on: windows-2022
@@ -62,7 +88,7 @@ jobs:
 
   installer:
     name: Production installer
-    needs: validate
+    needs: [validate, validate-marketing]
     # Neither PRs (including develop -> main), develop pushes nor manual runs
     # may package/upload an executable. main is the production release boundary.
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
