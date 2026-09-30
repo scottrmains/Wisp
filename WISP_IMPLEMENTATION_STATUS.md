@@ -1,6 +1,46 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-17
+Last reviewed: 2026-09-30
+
+## 2026-09-30: Portable track identity beyond filenames
+
+- **Implemented:** the existing track GUID is stored as `WISP_TRACK_ID` in MP3
+  ID3, FLAC Vorbis comments, M4A custom metadata and AIFF ID3. WAV, Ogg and Opus
+  use adjacent `.wisp-id.json` sidecars. A read-only folder can retain identity
+  in the database even when neither embedded tags nor a sidecar can be written.
+- **Verification independent of tags:** a versioned SHA-256 fingerprint of
+  demuxed audio packets plus audio format information is stored separately from
+  the existing file/cache hash. A matching GUID is accepted for relocation only
+  with matching audio identity and duration. If an editor strips the GUID, the
+  audio fingerprint can still recover the track. Different audio carrying a
+  copied GUID and multiple matching replacement files are not automatically linked.
+- **Integration:** rescans initialise existing tracks without changing their
+  GUIDs or relationships, identify moved files across the scanned root, and
+  refresh key/BPM/energy while preserving curated text. Playback/download can
+  recover a renamed file within its previous directory; moving folders requires
+  a rescan of the destination. The previous conservative name-based recovery is
+  retained only for legacy rows that have no audio identity yet.
+- **Safe writes:** embedding stages a copy, verifies readable metadata, artwork,
+  identity read-back and unchanged audio, then atomically replaces the original.
+  Failed embedding falls back to a sidecar. Existing normalisation/loudness
+  source validators are protected by using sidecars for those tracks. Explicit
+  relink and active-version changes invalidate the old identity cache. Generated
+  normalisation files remain excluded from ordinary discovery/backfill.
+- **Rollout:** the additive database migration has nullable fields; it does not
+  rewrite music at startup. Run a rescan once in the updated application to
+  initialise identities before external renaming. Initialisation needs FFmpeg;
+  if unavailable, ordinary metadata scanning continues and identity work is
+  deferred. Recovery does not promise to identify re-encoded/edited audio.
+- **Evidence:** synthetic fixtures cover all eight supported extensions,
+  arbitrary renames/moves, key/BPM/title changes, stripped identifiers, copied
+  identifiers, duplicate ambiguity, sidecars left behind, read-only sources,
+  preservation of custom tags, and existing playlist/cue identity. These are
+  format/integration tests, not a claim that every Mixed In Key version preserves
+  custom tags; fingerprint fallback is independently tested. No live user music
+  was tagged or migrated during this implementation.
+- **Verified:** 115 Core, 184 Infrastructure and 168 API tests pass with the
+  bundled FFmpeg enabled. The offline recovery tool builds, and EF reports no
+  pending model changes. Existing dependency advisory warnings remain.
 
 ## 2026-09-30: Recover library links after external filename analysis
 

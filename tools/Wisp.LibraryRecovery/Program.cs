@@ -7,6 +7,7 @@ using Wisp.Infrastructure.FileSystem;
 using Wisp.Infrastructure.Library;
 using Wisp.Infrastructure.Persistence;
 using Wisp.Infrastructure.Tagging;
+using Wisp.Infrastructure.Audio;
 
 // Offline operator tool. No migrations, imports, removals or audio writes.
 // Reports/backups must be outside the repository; --apply is explicit.
@@ -28,7 +29,9 @@ var all = await db.Tracks.ToListAsync();
 var prefix = root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 var scoped = all.Where(t => t.FilePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToArray();
 var files = new FileScanner().EnumerateAudioFiles(root).ToArray();
-var recovery = new TrackRenameRecoveryService(db, new FileFingerprint(), new MetadataReader(), NullLogger<TrackRenameRecoveryService>.Instance);
+var portableIdentity = new PortableTrackIdentity(new AudioContentFingerprint(
+    new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance, () => Environment.GetEnvironmentVariable("WISP_FFMPEG_PATH"))), new FileFingerprint());
+var recovery = new TrackRenameRecoveryService(db, new FileFingerprint(), new MetadataReader(), NullLogger<TrackRenameRecoveryService>.Instance, portableIdentity);
 var plan = await recovery.PlanAsync(all, scoped, files, CancellationToken.None);
 var matchedIds = plan.Matches.Select(m => m.Track.Id).ToHashSet();
 var report = new

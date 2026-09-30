@@ -9,7 +9,7 @@ using Wisp.Infrastructure.Tagging;
 namespace Wisp.Infrastructure.Library;
 
 public sealed class TrackRenameRecoveryService(WispDbContext db, IFileFingerprint fingerprint,
-    IMetadataReader metadata, ILogger<TrackRenameRecoveryService> log)
+    IMetadataReader metadata, ILogger<TrackRenameRecoveryService> log, PortableTrackIdentity? identity = null)
 {
     /// Bounded playback recovery: look only beside the old file, not across all drives.
     /// Rescan provides the broader, library-root search for unchanged files moved elsewhere.
@@ -52,7 +52,9 @@ public sealed class TrackRenameRecoveryService(WispDbContext db, IFileFingerprin
             {
                 // Do not inspect a moving target while another application writes tags.
                 using var handle = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                candidates.Add(new(path, await fingerprint.ComputeAsync(path, ct), metadata.Read(path)));
+                var portable = identity?.IsAvailable == true ? await identity.ReadAsync(path, ct) : null;
+                candidates.Add(new(path, await fingerprint.ComputeAsync(path, ct), metadata.Read(path),
+                    portable?.TrackId, portable?.AudioHash, portable?.Conflict ?? false));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             { log.LogWarning(ex, "Could not inspect rename recovery candidate {Path}", path); }

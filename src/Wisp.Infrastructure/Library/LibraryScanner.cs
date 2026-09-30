@@ -15,7 +15,8 @@ public class LibraryScanner(
     IFileFingerprint fingerprint,
     IMetadataReader metadata,
     ScanProgressBus progress,
-    ILogger<LibraryScanner> log)
+    ILogger<LibraryScanner> log,
+    PortableTrackIdentity? identity = null)
 {
     /// Scan throttling — emit progress at most this often during scanning.
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
@@ -39,6 +40,9 @@ public class LibraryScanner(
 
         try
         {
+            var activeIdentity = identity?.IsAvailable == true ? identity : null;
+            if (identity is not null && activeIdentity is null)
+                log.LogWarning("Portable identity initialisation deferred: FFmpeg is unavailable. Scanning metadata only.");
             // 1. Enumerate.
             var files = fileScanner.EnumerateAudioFiles(request.FolderPath).ToList();
             job.TotalFiles = files.Count;
@@ -65,8 +69,8 @@ public class LibraryScanner(
             // Recover renamed/retagged files BEFORE importing new paths. A new
             // filename must not orphan the original row's cues and playlist entries.
             var recovery = new TrackRenameRecoveryService(db, fingerprint, metadata,
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<TrackRenameRecoveryService>.Instance);
-            var recoveryPlan = await recovery.PlanAsync(allTracks, existingByPath.Values, files, cancellationToken);
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<TrackRenameRecoveryService>.Instance, activeIdentity);
+            var recoveryPlan = await recovery.PlanAsync(allTracks, allTracks, files, cancellationToken);
             var deferredPaths = recoveryPlan.AmbiguousPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var match in recoveryPlan.Matches)
             {
@@ -107,34 +111,55 @@ public class LibraryScanner(
 
                     if (existingByPath.TryGetValue(path, out var existing))
                     {
+                        // Verify/stamp the established row before a tag refresh can
+                        // replace curated metadata or bind different audio at this path.
+                        var previousHash = existing.FileHash;
+                        if (activeIdentity is not null) await activeIdentity.EnsureAsync(existing, cancellationToken);
+                        var refreshedHash = await fingerprint.ComputeAsync(path, cancellationToken);
                         existing.FileModifiedAt = File.GetLastWriteTimeUtc(path);
                         // The file is back after being unavailable (for example, an
                         // external drive was reconnected). Preserve its stable Wisp
                         // identity and all associated prep work.
                         existing.IsUnavailable = false;
                         existing.UnavailableSince = null;
-                        if (existing.FileHash == hash)
+                        if (previousHash == hash && hash == refreshedHash)
                         {
                             existing.LastScannedAt = DateTime.UtcNow;
                         }
                         else
                         {
-                            ApplyMetadata(existing, path, hash);
+                            // Tag-only identity writes must not overwrite curated text.
+                            var analysis = metadata.Read(path);
+                            existing.Bpm = analysis.Bpm ?? existing.Bpm;
+                            existing.MusicalKey = analysis.MusicalKey ?? existing.MusicalKey;
+                            existing.Energy = analysis.Energy ?? existing.Energy;
+                            existing.FileHash = refreshedHash;
+                            existing.LastScannedAt = DateTime.UtcNow;
                             job.UpdatedTracks++;
                         }
                     }
                     else
                     {
+                        var portable = activeIdentity is null ? null : await activeIdentity.ReadAsync(path, cancellationToken);
+                        if (portable?.Conflict == true || portable?.TrackId is { } owner && allTracks.Any(t => t.Id == owner))
+                        {
+                            job.SkippedFiles++;
+                            log.LogWarning("Copied or conflicting WISP identity; review file {Path}", path);
+                            continue;
+                        }
                         var track = new Track
                         {
-                            Id = Guid.NewGuid(),
+                            Id = portable?.TrackId ?? Guid.NewGuid(),
                             FilePath = path,
                             FileName = Path.GetFileName(path),
                             FileHash = hash,
                             AddedAt = DateTime.UtcNow,
                         };
                         ApplyMetadata(track, path, hash);
+                        if (activeIdentity is not null) await activeIdentity.EnsureAsync(track, cancellationToken);
                         db.Tracks.Add(track);
+                        allTracks.Add(track);
+                        existingByPath.Add(path, track);
                         job.AddedTracks++;
                     }
 

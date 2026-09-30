@@ -5,7 +5,8 @@ using Wisp.Infrastructure.Tagging;
 
 namespace Wisp.Infrastructure.Library;
 
-public sealed record RecoveryFile(string Path, string Hash, TrackMetadata Metadata);
+public sealed record RecoveryFile(string Path, string Hash, TrackMetadata Metadata,
+    Guid? PortableId = null, string? AudioHash = null, bool IdentityConflict = false);
 public sealed record TrackRenameMatch(Track Track, RecoveryFile File, string Reason);
 public sealed record TrackRenamePlan(IReadOnlyList<TrackRenameMatch> Matches, IReadOnlySet<string> AmbiguousPaths);
 
@@ -39,11 +40,24 @@ public static partial class TrackRenameRecovery
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
         var matches = edges.Where(e => byTrack[e.Track.Id] == 1 && byPath[e.File.Path] == 1).ToArray();
         var ambiguous = edges.Except(matches).Select(e => e.File.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+            if (file.IdentityConflict || file.PortableId is { } id && missing.Any(t => t.Id == id)
+                && !matches.Any(m => m.File.Path == file.Path)) ambiguous.Add(file.Path);
         return new(matches, ambiguous);
     }
 
     private static string? MatchReason(Track track, RecoveryFile file)
     {
+        if (file.IdentityConflict) return null;
+        if (track.AudioContentHash is { } audioHash)
+        {
+            if (file.AudioHash != audioHash || file.PortableId is { } id && id != track.Id) return null;
+            if (track.Duration <= TimeSpan.Zero || file.Metadata.Duration <= TimeSpan.Zero
+                || Math.Abs((track.Duration - file.Metadata.Duration).TotalSeconds) > .15) return null;
+            return file.PortableId == track.Id ? "verified-portable-id" : "verified-audio-content";
+        }
+        // A portable marker without its original fingerprint is not proof of identity.
+        if (file.PortableId is not null) return null;
         if (!string.Equals(Path.GetExtension(track.FilePath), Path.GetExtension(file.Path), StringComparison.OrdinalIgnoreCase)) return null;
         if (!string.IsNullOrEmpty(track.FileHash) && track.FileHash == file.Hash) return "unchanged-file-fingerprint";
         // Retagged matches are confined to the original directory and require valid,
@@ -94,6 +108,8 @@ public static partial class TrackRenameRecovery
         track.FilePath = match.File.Path;
         track.FileName = Path.GetFileName(match.File.Path);
         track.FileHash = match.File.Hash;
+        track.AudioContentHash = match.File.AudioHash ?? track.AudioContentHash;
+        track.IdentityFileHash = null; // Recheck storage at the new location on the next scan.
         track.FileModifiedAt = File.GetLastWriteTimeUtc(match.File.Path);
         track.LastScannedAt = DateTime.UtcNow;
         track.IsUnavailable = false;

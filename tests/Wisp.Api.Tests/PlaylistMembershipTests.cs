@@ -284,7 +284,8 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         {
             base.OnModelCreating(builder);
             builder.Entity<Track>().Ignore(t => t.OriginalFilePath).Ignore(t => t.NormalizedFilePath)
-                .Ignore(t => t.LoudnessAnalysisJson).Ignore(t => t.NormalizationJson);
+                .Ignore(t => t.LoudnessAnalysisJson).Ignore(t => t.NormalizationJson)
+                .Ignore(t => t.AudioContentHash).Ignore(t => t.IdentityFileHash).Ignore(t => t.IdentityStorage);
         }
     }
 
