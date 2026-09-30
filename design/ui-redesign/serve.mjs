@@ -93,6 +93,7 @@ const names = [
   "Folder",
   "ArrowUpDown",
   "Music2",
+  "PanelTopClose",
 ];
 const icons = Object.fromEntries(
   names.map((name) => [

@@ -77,9 +77,21 @@ try {
       await page.locator(`[data-state="${state}"]`).click();
       const metrics = await capture(`${state}-${width}`);
       assert.ok(
-        metrics.fullRows >= 8,
-        `${state} at ${width} needs eight full visible rows, got ${metrics.fullRows}`,
+        metrics.fullRows >= (state === "prepare" ? 3 : 8),
+        `${state} at ${width} needs ${state === "prepare" ? "three" : "eight"} full visible rows, got ${metrics.fullRows}`,
       );
+      if (state === "prepare") {
+        const wave = await page.locator("#prep-wave").boundingBox();
+        const list = await page.locator(".table-scroll").boundingBox();
+        assert.ok(
+          wave.width >= 580 && wave.height >= 80,
+          "Preparation needs a wide, usable waveform",
+        );
+        assert.ok(
+          wave.y + wave.height < list.y,
+          "Preparation waveform must sit above the track list",
+        );
+      }
       assert.ok(
         await page
           .locator(".table-scroll")
@@ -187,13 +199,71 @@ try {
   await page.keyboard.press("Escape");
   assert.ok(await page.getByRole("tooltip").isHidden());
   await page.locator('[data-state="prepare"]').click();
+  await page.locator("#wave-zoom").selectOption("2");
+  await page.locator("#nudge-forward").click();
+  assert.equal(
+    await page.locator("#precise-position").textContent(),
+    "0:30.010",
+  );
+  await page.locator("#prep-wave").focus();
+  await page.keyboard.press("ArrowRight");
+  assert.equal(await page.locator("#position").inputValue(), "30.02");
+  await page.keyboard.press("ArrowLeft");
   await page
     .getByRole("button", { name: "Save memory cue here", exact: true })
     .click();
   assert.equal(await page.locator(".cue-row").count(), 3);
   assert.ok(await page.getByText("3 / 10", { exact: true }).isVisible());
-  await page.getByRole("button", { name: "0:30", exact: true }).click();
+  await page.getByRole("button", { name: "0:30.000", exact: true }).click();
   assert.equal(await page.locator("#position").inputValue(), "30");
+  assert.equal(
+    await page.locator("#prep-wave").getAttribute("aria-valuetext"),
+    "0:30.000",
+  );
+  const waveform = await page.locator("#prep-wave").boundingBox();
+  await page.mouse.click(
+    waveform.x + waveform.width * 0.75,
+    waveform.y + waveform.height / 2,
+  );
+  assert.equal(await page.locator("#position").inputValue(), "30.5");
+  await page.locator("#prep-resize").focus();
+  await page.keyboard.press("Home");
+  assert.equal(
+    await page.locator("#prep-resize").getAttribute("aria-valuenow"),
+    "210",
+  );
+  await page.keyboard.press("ArrowDown");
+  assert.equal(
+    await page.locator("#prep-resize").getAttribute("aria-valuenow"),
+    "226",
+  );
+  const handle = await page.locator("#prep-resize").boundingBox();
+  await page.mouse.move(
+    handle.x + handle.width / 2,
+    handle.y + handle.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    handle.x + handle.width / 2,
+    handle.y + handle.height / 2 + 12,
+  );
+  await page.mouse.up();
+  assert.equal(
+    await page.locator("#prep-resize").getAttribute("aria-valuenow"),
+    "238",
+  );
+  await capture("prepare-precision-1366");
+  await page.locator("#focus-list").click();
+  assert.ok(await page.locator("#preparation-dock").isHidden());
+  const focusedList = await capture("prepare-focus-list-1366");
+  assert.ok(focusedList.fullRows >= 8);
+  assert.equal(await page.locator("#position").inputValue(), "30.5");
+  await page.locator("#player-prep").click();
+  assert.equal(
+    await page.locator("#prep-resize").getAttribute("aria-valuenow"),
+    "238",
+  );
+  assert.equal(await page.locator("#position").inputValue(), "30.5");
   await page
     .getByRole("button", {
       name: "Close preparation without stopping playback",
@@ -244,6 +314,8 @@ try {
           "Settings focus containment and return",
           "tooltip focus and Escape",
           "illustrative cue feedback",
+          "wide top preparation waveform with click seek, zoom and 10 ms nudges",
+          "pointer and keyboard resizing retained through Focus list",
           "equivalent zoom",
           "reduced motion",
           "no WISP API or external requests",

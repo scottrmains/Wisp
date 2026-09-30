@@ -1,6 +1,30 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-30
+Last reviewed: 2026-10-01
+
+## 2026-10-01: Accepted UI direction and precision preparation preview
+
+- **Owner decision:** approved the shell direction with the adjustment that
+  compact bottom playback must not replace a usable cue editor. The design
+  approval gate is checked; application UI 1 and UI 2 remain unimplemented.
+- **Prototype revised:** wide top waveform above the track list, Memory Cue
+  bank on the right, whole-track through two-second zoom, centred playhead,
+  visible cue markers, click/keyboard seeking, millisecond timestamp display
+  and 10 ms adjustments. Pointer/keyboard resizing is bounded; Focus list
+  collapses preparation and reopening restores the session's chosen height
+  without resetting the position. Production preferences are still pending.
+- **Verified prototype:** Browse and Selected + plan retain eight full rows
+  at 1366 by 768 and 1024 by 768; expanded preparation retains four with the
+  waveform taking priority. All three states also passed at 1920 by 1080.
+  Browser checks passed for zoom, cue seeking, click seeking, fine positioning,
+  pointer and keyboard resize, height/position retention and Focus list, plus
+  existing search, selection, modal focus, tooltips and equivalent-zoom checks.
+- **Limits:** waveform samples and cues are fictional, not real audio analysis
+  or a detected beat grid. This verifies the layout and interaction proposal,
+  not audio-accurate cue placement in WISP. No application code, audio controller,
+  user profile, music, database, USB or release pipeline was changed.
+- **Next:** migrate the accepted shared foundations/navigation into WISP for
+  UI 1; implement the actual preparation layout and precision controls in UI 2.
 
 ## 2026-09-30: UI 1 shell and Library approval preview
 

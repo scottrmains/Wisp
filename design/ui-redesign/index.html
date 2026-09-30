@@ -171,6 +171,90 @@
         </header>
         <main>
           <div class="library-body">
+            <section
+              id="preparation-dock"
+              class="preparation-dock"
+              aria-label="Precision preparation preview"
+              hidden
+            >
+              <header class="wave-tools">
+                <div>
+                  <strong>Prepare track</strong
+                  ><span class="wave-demo-label"
+                    >Illustrative waveform · no audio</span
+                  >
+                </div>
+                <button
+                  id="focus-list"
+                  class="quiet"
+                  data-tip="Collapse preparation without stopping playback"
+                >
+                  <i data-icon="PanelTopClose"></i>Focus list
+                </button>
+              </header>
+              <div class="wave-navigation">
+                <label for="wave-zoom">View</label>
+                <select id="wave-zoom" aria-label="Waveform zoom">
+                  <option value="330">Whole track</option>
+                  <option value="32">32 seconds</option>
+                  <option value="16" selected>16 seconds</option>
+                  <option value="8">8 seconds</option>
+                  <option value="2">2 seconds</option>
+                </select>
+                <button
+                  id="centre-wave"
+                  class="quiet"
+                  data-tip="Centre the waveform on the demo playhead"
+                >
+                  Centre playhead
+                </button>
+                <output id="precise-position" aria-live="off">2:18.000</output>
+              </div>
+              <div id="wave-ruler" class="wave-ruler" aria-hidden="true"></div>
+              <div
+                id="prep-wave"
+                class="precision-wave"
+                role="slider"
+                tabindex="0"
+                aria-label="Illustrative waveform position"
+                aria-valuemin="0"
+                aria-valuemax="330"
+                aria-valuenow="138"
+                aria-describedby="wave-instructions"
+              ></div>
+              <footer class="wave-fine-controls">
+                <span id="wave-instructions">Click to seek · ← / → 10 ms</span>
+                <div>
+                  <button
+                    id="nudge-back"
+                    class="secondary"
+                    aria-label="Move demo playhead back 10 milliseconds"
+                  >
+                    −10 ms</button
+                  ><button
+                    id="nudge-forward"
+                    class="secondary"
+                    aria-label="Move demo playhead forward 10 milliseconds"
+                  >
+                    +10 ms
+                  </button>
+                </div>
+              </footer>
+              <div
+                id="prep-resize"
+                class="prep-resize"
+                role="separator"
+                tabindex="0"
+                aria-label="Resize preparation waveform"
+                aria-orientation="horizontal"
+                aria-valuemin="210"
+                aria-valuemax="360"
+                aria-valuenow="236"
+                data-tip="Drag to resize · Up/Down adjusts height · double-click resets"
+              >
+                <span></span>
+              </div>
+            </section>
             <section class="collection" aria-labelledby="library-heading">
               <header class="page-header">
                 <div>
@@ -342,14 +426,9 @@
               <p id="inspector-artist" class="muted">Sunday Club</p>
               <div class="track-facts">
                 <span id="inspector-bpm">124 BPM</span
-                ><span id="inspector-key" class="key">8A</span><span>5:30</span>
+                ><span id="inspector-key" class="key">8A</span
+                ><span id="inspector-duration">5:30</span>
               </div>
-              <div
-                class="prep-wave"
-                id="prep-wave"
-                aria-label="Illustrative waveform, not audio analysis"
-              ></div>
-              <div class="wave-caption"><span>0:00</span><span>5:30</span></div>
               <div
                 class="prep-tabs"
                 role="group"
@@ -469,11 +548,13 @@ Let the intro breathe. Bring the bass in after the first phrase.</textarea
                 type="range"
                 min="0"
                 max="330"
+                step="0.01"
                 value="138"
                 aria-label="Demo playback position"
               />
               <div class="times">
-                <span id="position-label">2:18</span><span>5:30</span>
+                <span id="position-label">2:18</span
+                ><span id="player-duration">5:30</span>
               </div>
             </div>
             <div class="player-actions">

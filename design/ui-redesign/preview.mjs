@@ -53,6 +53,21 @@ let activePlaylist = null;
 let compactOverride = null;
 let noticeTimer;
 let lastDialogTrigger;
+let preferredPrepHeight = 236; // Retained only for this preview session.
+let waveStart = 130;
+const demoCues = new Map(
+  tracks.map((t) => [
+    t.id,
+    [
+      { seconds: 30, label: "Intro" },
+      { seconds: duration(t) - 50, label: "Mix out" },
+    ],
+  ]),
+);
+function duration(t = currentTrack) {
+  const [minutes, seconds] = t.length.split(":").map(Number);
+  return minutes * 60 + seconds;
+}
 
 function fillIcons(root = document) {
   root.querySelectorAll("[data-icon]").forEach((node) => {
@@ -352,8 +367,15 @@ for (const id of ["show-dates", "show-genre"])
 
 function setInspector(show) {
   $("inspector").hidden = !show;
+  $("preparation-dock").hidden = !show;
+  document.querySelector(".library-body").classList.toggle("preparing", show);
   $("prepare-toggle").setAttribute("aria-expanded", show);
-  if (show) setPlan(false);
+  $("player-prep").setAttribute("aria-expanded", show);
+  if (show) {
+    setPlan(false);
+    resizePrep(preferredPrepHeight);
+    renderPrecisionWave();
+  }
 }
 function setPlan(show) {
   $("plan").hidden = !show;
@@ -370,6 +392,10 @@ $("close-inspector").addEventListener("click", () => {
   setInspector(false);
   $("prepare-toggle").focus();
 });
+$("focus-list").addEventListener("click", () => {
+  setInspector(false);
+  $("library-heading").focus();
+});
 $("plan-toggle").addEventListener("click", () => setPlan($("plan").hidden));
 $("close-plan").addEventListener("click", () => {
   setPlan(false);
@@ -382,12 +408,18 @@ function updateTrack() {
     $(id).textContent = currentTrack.artist;
   $("inspector-bpm").textContent = `${currentTrack.bpm} BPM`;
   $("inspector-key").textContent = currentTrack.key;
+  $("inspector-duration").textContent = currentTrack.length;
+  $("player-duration").textContent = currentTrack.length;
+  $("position").max = duration();
+  $("wave-zoom").options[0].value = duration();
+  renderCues();
+  setPosition(30, true);
 }
 function time(seconds) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 $("position").addEventListener("input", () => {
-  $("position-label").textContent = time(Number($("position").value));
+  setPosition(Number($("position").value));
 });
 $("play").addEventListener("click", () => {
   const playing = $("play").getAttribute("aria-pressed") === "true";
@@ -422,19 +454,158 @@ function wave(width, height, muted = false) {
   }).join("");
   return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="${muted ? "#a18cac" : "#b493d4"}" stroke-width="2">${lines}</g></svg>`;
 }
-$("prep-wave").innerHTML = wave(280, 64);
 $("mini-wave").innerHTML = wave(600, 27, true);
-let cueCount = 2;
-function addCue(seconds, label) {
+function preciseTime(seconds) {
+  const milliseconds = Math.round(seconds * 1000);
+  return `${time(Math.floor(milliseconds / 1000))}.${String(milliseconds % 1000).padStart(3, "0")}`;
+}
+function setPosition(seconds, centre = false) {
+  const position = Math.max(
+    0,
+    Math.min(duration(), Math.round(seconds * 100) / 100),
+  );
+  $("position").value = position;
+  $("position-label").textContent = time(position);
+  $("precise-position").textContent = preciseTime(position);
+  const span = Number($("wave-zoom").value);
+  if (centre || position < waveStart || position > waveStart + span)
+    waveStart = Math.max(0, Math.min(duration() - span, position - span / 2));
+  renderPrecisionWave();
+}
+function renderPrecisionWave() {
+  const span = Number($("wave-zoom").value);
+  waveStart = Math.max(0, Math.min(duration() - span, waveStart));
+  const position = Number($("position").value);
+  const xAt = (seconds) => ((seconds - waveStart) / span) * 1000;
+  const lines = Array.from({ length: 700 }, (_, i) => {
+    const seconds = waveStart + (i / 700) * span;
+    const envelope =
+      0.25 +
+      0.48 * Math.abs(Math.sin(seconds * 0.37)) +
+      0.15 * Math.abs(Math.sin(seconds * 3.17));
+    const amplitude =
+      48 * envelope * (0.4 + 0.6 * Math.abs(Math.sin(seconds * 57.1)));
+    return `<path d="M ${(i / 700) * 1000} ${50 - amplitude} v ${amplitude * 2}"/>`;
+  }).join("");
+  const marks = demoCues
+    .get(currentTrack.id)
+    .filter(
+      (cue) => cue.seconds >= waveStart && cue.seconds <= waveStart + span,
+    )
+    .map(
+      (cue, i) =>
+        `<line x1="${xAt(cue.seconds)}" x2="${xAt(cue.seconds)}" y1="0" y2="100" stroke="#abd4b7" stroke-width="2"/><text class="wave-cue-label" x="${Math.min(940, xAt(cue.seconds) + 6)}" y="${14 + (i % 3) * 16}">M${demoCues.get(currentTrack.id).indexOf(cue) + 1}</text>`,
+    )
+    .join("");
+  $("prep-wave").innerHTML =
+    `<svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true"><path d="M 0 50 H 1000" stroke="#3c3743"/><g fill="none" stroke="#b493d4" stroke-width="1.2">${lines}</g>${marks}<line x1="${xAt(position)}" x2="${xAt(position)}" y1="0" y2="100" stroke="#f3f0e7" stroke-width="2"/></svg>`;
+  $("prep-wave").setAttribute("aria-valuemax", duration());
+  $("prep-wave").setAttribute("aria-valuenow", position);
+  $("prep-wave").setAttribute("aria-valuetext", preciseTime(position));
+  $("wave-ruler").replaceChildren(
+    ...Array.from({ length: 5 }, (_, i) => {
+      const label = document.createElement("span");
+      label.textContent = preciseTime(waveStart + (span * i) / 4);
+      return label;
+    }),
+  );
+}
+$("wave-zoom").addEventListener("change", () =>
+  setPosition(Number($("position").value), true),
+);
+$("centre-wave").addEventListener("click", () =>
+  setPosition(Number($("position").value), true),
+);
+for (const [id, delta] of [
+  ["nudge-back", -0.01],
+  ["nudge-forward", 0.01],
+])
+  $(id).addEventListener("click", () =>
+    setPosition(Number($("position").value) + delta),
+  );
+$("prep-wave").addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
+  const bounds = $("prep-wave").getBoundingClientRect();
+  setPosition(
+    waveStart +
+      Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)) *
+        Number($("wave-zoom").value),
+  );
+  $("prep-wave").focus();
+});
+$("prep-wave").addEventListener("keydown", (event) => {
+  const steps = {
+    ArrowLeft: -0.01,
+    ArrowRight: 0.01,
+    ArrowDown: -1,
+    ArrowUp: 1,
+  };
+  if (!(event.key in steps) && !["Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  setPosition(
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? duration()
+        : Number($("position").value) + steps[event.key],
+  );
+});
+function prepMaximum() {
+  return Math.max(
+    210,
+    Math.min(360, document.querySelector(".library-body").clientHeight - 320),
+  );
+}
+function resizePrep(height, remember = false) {
+  const clamped = Math.max(210, Math.min(prepMaximum(), height));
+  $("preparation-dock").style.setProperty("--prep-height", `${clamped}px`);
+  $("prep-resize").setAttribute("aria-valuenow", clamped);
+  $("prep-resize").setAttribute("aria-valuemax", prepMaximum());
+  if (remember) preferredPrepHeight = clamped;
+}
+let resizeDrag;
+$("prep-resize").addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
+  resizeDrag = {
+    y: event.clientY,
+    height: $("preparation-dock").getBoundingClientRect().height,
+  };
+  $("prep-resize").setPointerCapture(event.pointerId);
+});
+$("prep-resize").addEventListener("pointermove", (event) => {
+  if (resizeDrag)
+    resizePrep(resizeDrag.height + event.clientY - resizeDrag.y, true);
+});
+for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
+  $("prep-resize").addEventListener(event, () => {
+    resizeDrag = null;
+  });
+$("prep-resize").addEventListener("dblclick", () => resizePrep(236, true));
+$("prep-resize").addEventListener("keydown", (event) => {
+  if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const height = Number($("prep-resize").getAttribute("aria-valuenow"));
+  resizePrep(
+    event.key === "Home"
+      ? 210
+      : event.key === "End"
+        ? prepMaximum()
+        : height + (event.key === "ArrowUp" ? -16 : 16),
+    true,
+  );
+});
+window.addEventListener("resize", () => {
+  if (!$("inspector").hidden) resizePrep(preferredPrepHeight);
+});
+function addCueRow(seconds, label) {
   const row = document.createElement("div");
   row.className = "cue-row";
   const button = document.createElement("button");
   button.className = "cue-time";
-  button.textContent = time(seconds);
+  button.textContent = preciseTime(seconds);
   button.dataset.tip = `Seek demo playhead to ${time(seconds)}`;
   button.addEventListener("click", () => {
-    $("position").value = seconds;
-    $("position-label").textContent = time(seconds);
+    setPosition(seconds, true);
   });
   const name = document.createElement("span");
   name.textContent = label;
@@ -443,18 +614,33 @@ function addCue(seconds, label) {
   row.append(button, name, check);
   $("memory-cues").append(row);
 }
-addCue(30, "Intro");
-addCue(280, "Mix out");
+function renderCues() {
+  $("memory-cues").replaceChildren();
+  const cues = demoCues.get(currentTrack.id);
+  for (const cue of cues) addCueRow(cue.seconds, cue.label);
+  $("cue-count").textContent = `${cues.length} / 10`;
+}
+renderCues();
+setPosition(30, true);
 $("add-cue").addEventListener("click", () => {
-  if (cueCount >= 10) {
+  const cues = demoCues.get(currentTrack.id);
+  if (cues.length >= 10) {
     notice(
       "The illustrated Memory Cue bank is full. No real cues were changed.",
     );
     return;
   }
-  addCue(Number($("position").value), "New demo cue");
-  cueCount++;
-  $("cue-count").textContent = `${cueCount} / 10`;
+  const seconds = Number($("position").value);
+  if (cues.some((cue) => cue.seconds === seconds)) {
+    notice(
+      "A demo Memory Cue already exists here. Move the playhead to another position.",
+    );
+    return;
+  }
+  cues.push({ seconds, label: "New demo cue" });
+  cues.sort((a, b) => a.seconds - b.seconds);
+  renderCues();
+  renderPrecisionWave();
   notice(
     "Added an illustrative Memory Cue in this preview only. No audio metadata or USB was written.",
   );

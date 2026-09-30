@@ -1,10 +1,11 @@
 # WISP application UI redesign implementation plan
 
-Updated: 2026-09-30
+Updated: 2026-10-01
 
-Status: shell and Library prototype ready for visual approval. No redesign phase
-is implemented in the application yet. The owner approved starting UI 1; its
-visual gate remains open before migrating the real application.
+Status: owner approved the shell direction with a wide, resizable top preparation
+waveform and compact bottom playback overview. The isolated prototype reflects
+that adjustment. No redesign phase is implemented in the application yet;
+shared foundations and navigation are the next application work.
 
 ## Product outcome
 
@@ -90,8 +91,17 @@ area. Group names, icon choices and exact dimensions remain design proposals.
   ordinary browsing, playback/preparation and multi-selection states.
 - [x] Show a narrow-window variation and the plan drawer behaviour, not just a
   wide empty page. Include long playlist and track names.
-- [ ] Obtain owner approval before broad page migration. Record the accepted
+- [x] Obtain owner approval before broad page migration. Record the accepted
   example and any requested adjustments in the status document and PR.
+
+Accepted adjustment: the compact bottom waveform is a playback overview, not a
+cue editor. Deliberate preparation opens a wide, resizable waveform above the
+track list, with the cue bank on the right. Include playhead-centred zoom,
+visible cue markers, accurate seeking and fine position adjustment. Focus list
+collapses preparation without stopping playback; reopening restores the chosen
+height. The eight-row target applies to compact browsing, not expanded cue
+editing, where precision takes priority. Production height preferences must be
+saved using existing UI preferences; the prototype remembers only in-session.
 
 The isolated prototype is in `design/ui-redesign`. Install the existing client
 and marketing dependencies with `npm ci --prefix src/Wisp.Client` and
@@ -164,8 +174,10 @@ activate content behind the modal.
   header, primary search, optional advanced filters and one selection toolbar.
   Replace scope jargon with ordinary playlist and All tracks labels.
 - [ ] Create a compact persistent playback presentation and deliberately opened
-  preparation workspace. Preserve resizing, focus-list behaviour, cue seeking,
-  playback position and the application-level audio controller.
+  top preparation waveform with the cue bank on the right. Support zoom around
+  the playhead, clear cue markers, precise seeking and fine position adjustment.
+  Preserve resizing and remember the preferred dock height, focus-list behaviour,
+  cue seeking, playback position and the application-level audio controller.
 - [ ] Make the active plan a compact summary/drawer by default, retaining an
   explicit expanded view. Its presence must not reduce browsing to one row.
 - [ ] Offer selectable, resizable columns and remembered presets for DJ
@@ -185,6 +197,9 @@ activate content behind the modal.
 Acceptance: at 1366 by 768, the compact browsing layout with playback, active
 plan and multi-selection shows at least eight full track rows plus the header.
 Expanded preparation is an explicit choice with a clear return to browsing.
+Its waveform precision takes priority over eight visible rows; measure and
+record the remaining list space rather than shrinking the cue editor to meet
+the compact browsing target.
 At 1024px wide, core DJ columns remain usable without forcing the complete file
 management grid onto the screen. Record actual dimensions and screenshots.
 
