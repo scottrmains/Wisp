@@ -54,6 +54,9 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
         builder.Services.AddSingleton<ScanProgressBus>();
         builder.Services.AddSingleton<RecommendationService>();
         builder.Services.AddSingleton<AiffTranscoder>();
+        builder.Services.AddSingleton<Wisp.Infrastructure.FileSystem.IFileFingerprint, Wisp.Infrastructure.FileSystem.FileFingerprint>();
+        builder.Services.AddSingleton<Wisp.Infrastructure.Tagging.IMetadataReader, Wisp.Infrastructure.Tagging.MetadataReader>();
+        builder.Services.AddScoped<TrackRenameRecoveryService>();
         _app = builder.Build();
         _app.MapLibrary();
         _app.MapSoulseek();
@@ -99,6 +102,33 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
         Assert.Equal(expected.Split(','), page!.Items.Select(t => t.Title));
         Assert.All(page.Items, t => Assert.Equal(DateTimeKind.Utc, t.AddedAt.Kind));
         Assert.All(page.Items.Where(t => t.FileModifiedAt.HasValue), t => Assert.Equal(DateTimeKind.Utc, t.FileModifiedAt!.Value.Kind));
+    }
+
+    [Theory]
+    [InlineData("audio")]
+    [InlineData("download")]
+    public async Task Playback_and_download_recover_renamed_file_without_reimport(string endpoint)
+    {
+        var oldPath = Path.Combine(Music, "original.mp3");
+        var newPath = Path.Combine(Music, "renamed.mp3");
+        await File.WriteAllBytesAsync(oldPath, [1, 2, 3, 4]);
+        var hash = await new Wisp.Infrastructure.FileSystem.FileFingerprint().ComputeAsync(oldPath);
+        var id = Guid.NewGuid();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
+            db.Tracks.Add(new() { Id = id, FilePath = oldPath, FileName = "original.mp3", FileHash = hash, Notes = "Keep" });
+            await db.SaveChangesAsync();
+        }
+        File.Move(oldPath, newPath);
+        var response = await _app.GetTestClient().GetAsync($"/api/tracks/{id}/{endpoint}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, await response.Content.ReadAsByteArrayAsync());
+        using var verifyScope = _app.Services.CreateScope();
+        var verify = verifyScope.ServiceProvider.GetRequiredService<WispDbContext>();
+        var track = await verify.Tracks.SingleAsync(t => t.Id == id);
+        Assert.Equal(newPath, track.FilePath); Assert.Equal("Keep", track.Notes);
+        Assert.Equal(4, await verify.Tracks.CountAsync());
     }
 
     [Fact]

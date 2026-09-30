@@ -42,10 +42,11 @@ public static class LibraryEndpoints
         return app;
     }
 
-    private static async Task<IResult> DownloadOriginal(Guid id, WispDbContext db, CancellationToken ct)
+    private static async Task<IResult> DownloadOriginal(Guid id, WispDbContext db, TrackRenameRecoveryService recovery, CancellationToken ct)
     {
         var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (track is null) return Results.NotFound();
+        if (!File.Exists(track.FilePath)) track = await recovery.TryRecoverForPlaybackAsync(id, ct) ?? track;
         if (!File.Exists(track.FilePath))
             return Results.Json(new { code = "file_missing", message = "Audio file not found. Connect its drive or use Relink audio file to choose a replacement." }, statusCode: 410);
 
@@ -112,11 +113,13 @@ public static class LibraryEndpoints
         Guid id,
         WispDbContext db,
         AiffTranscoder transcoder,
+        TrackRenameRecoveryService recovery,
         ILogger<AiffTranscoder> log,
         CancellationToken ct)
     {
         var track = await db.Tracks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (track is null) return Results.Json(new { code = "track_removed", message = "This track has been removed from WISP." }, statusCode: 404);
+        if (!File.Exists(track.FilePath)) track = await recovery.TryRecoverForPlaybackAsync(id, ct) ?? track;
         return await StreamTrackAudio(track, transcoder, log, ct);
     }
 

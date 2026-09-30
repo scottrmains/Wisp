@@ -210,6 +210,7 @@ public static class LoudnessEndpoints
         var duration = await validator.ValidateAsync(path, ct);
         track.FilePath = path; track.FileName = Path.GetFileName(path);
         track.FileHash = await fingerprint.ComputeAsync(path, ct);
+        track.AudioContentHash = null; track.IdentityFileHash = null; track.IdentityStorage = null;
         track.FileModifiedAt = File.GetLastWriteTimeUtc(path); track.Duration = duration;
         track.IsUnavailable = false; track.UnavailableSince = null;
         await using var transaction = await db.Database.BeginTransactionAsync(ct);

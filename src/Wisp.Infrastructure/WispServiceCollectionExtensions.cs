@@ -23,11 +23,14 @@ public static class WispServiceCollectionExtensions
         services.AddSingleton<IFileScanner, FileScanner>();
         services.AddSingleton<IFileFingerprint, FileFingerprint>();
         services.AddSingleton<IMetadataReader, MetadataReader>();
+        services.AddSingleton<AudioContentFingerprint>();
+        services.AddSingleton<PortableTrackIdentity>();
 
         services.AddSingleton<ScanQueue>();
         services.AddSingleton<ScanProgressBus>();
 
         services.AddScoped<LibraryScanner>();
+        services.AddScoped<TrackRenameRecoveryService>();
         services.AddHostedService<ScanWorker>();
         services.AddHostedService<TrackFileDateBackfill>();
 
