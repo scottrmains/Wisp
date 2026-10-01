@@ -102,10 +102,12 @@ export function RecordingInputPage() {
           </button>
         </div>
         {devices.data?.devices.length === 0 && <p className="text-sm">No recording inputs found. Connect the mixer and refresh inputs.</p>}
-        {selected && <p className="text-xs text-[var(--color-muted)]">
-          Windows shared format: {selected.mixFormat ?? 'Unavailable'} · {selected.channels} channels.
-          {selected.unavailableReason ?? ' The test uses stereo 32-bit float WAV at this sample rate. Float describes the capture format, not hardware bit depth.'}
-        </p>}
+        {selected?.unavailableReason && <p role="alert">{selected.unavailableReason}</p>}
+        {selected && <details className="text-xs text-[var(--color-muted)]">
+          <summary className="cursor-pointer py-2">Capture format</summary>
+          <p>Windows shared format: {selected.mixFormat ?? 'Unavailable'} · {selected.channels} channels.
+          The test uses stereo 32-bit float WAV at this sample rate. Float describes the capture format, not hardware bit depth.</p>
+        </details>}
         <details className="text-sm text-[var(--color-muted)]">
           <summary className="cursor-pointer py-2">Xone:24C routing guide</summary>
           <p>In STREAM mode, MIX L/R goes to USB channels 1/2; in DVS PRO or DAW mode it goes to 5/6.
@@ -116,6 +118,7 @@ export function RecordingInputPage() {
       </section>
 
       <MixRecorderPanel endpointId={selected?.canTest ? selectedId : ''} inputTestBusy={active(test.data)} />
+      {error && <p role="alert" className="text-sm text-red-400">{error.message}</p>}
 
       <details className="wm-input-diagnostics" open={diagnosticsOpen || active(test.data)} onToggle={e => setDiagnosticsOpen(e.currentTarget.open)} hidden={!!mix.data?.busy}><summary>Test input & routing</summary>
       <section aria-label="Input test" className="space-y-4 border-y border-[var(--color-border)] py-5">
@@ -139,7 +142,7 @@ export function RecordingInputPage() {
         <p className="text-xs text-[var(--color-muted)]">Short diagnostic clips only. This test does not use the full recorder’s checkpoint recovery. Keep WISP open until the test finishes.</p>
       </section>
 
-      {(error || test.data?.message) && <p role="alert" className="text-sm text-red-400">{error?.message ?? test.data?.message}</p>}
+      {test.data?.message && !error && <p role="alert" className="text-sm text-red-400">{test.data.message}</p>}
       {test.data?.hasAudio && !busy && <section aria-label="Test playback" className="space-y-3">
         <h2 className="text-lg font-medium">Listen back before confirming the input</h2>
         <p className="text-sm">{test.data.deviceName} · {test.data.sampleRate.toLocaleString()} Hz · stereo float WAV</p>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mkdir } from 'node:fs/promises'
 
 async function setup(page: Page, interrupted = false, repeatCloseOnCancel = false) {
   let session = { id: '11111111-1111-1111-1111-111111111111', title: 'Practice mix', directoryPath: 'D:/Music/WISP Recordings/take',
@@ -135,4 +136,36 @@ test('entry removal and audio deletion use distinct explicit confirmations', asy
   await page.getByRole('button', { name: 'Remove entry', exact: true }).click()
   await page.getByRole('dialog', { name: 'Remove this entry?' }).getByRole('button', { name: 'Remove entry', exact: true }).click()
   expect(fixture.removals).toEqual([{ deleteAudio: false, confirmed: true }])
+})
+
+test('UI4 recording desk keeps setup explicit and technical help secondary at laptop sizes', async ({
+  page,
+}) => {
+  const fixture = await setup(page)
+  await mkdir('../../artifacts/ui-phase-four', { recursive: true })
+  for (const size of [
+    { width: 1024, height: 768 },
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(size)
+    for (const label of [
+      'Stereo recording input',
+      'Mix title',
+      'Recordings folder',
+      'Planned set (optional)',
+    ]) {
+      await expect(page.getByLabel(label, { exact: true })).toBeVisible()
+    }
+    const start = await page
+      .getByRole('button', { name: 'Start mix recording', exact: true })
+      .boundingBox()
+    expect(start!.y + start!.height).toBeLessThan(size.height)
+    await expect(page.getByText('Windows shared format:', { exact: false })).toBeHidden()
+    await page.screenshot({ path: `../../artifacts/ui-phase-four/record-${size.width}.png` })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      size.width,
+    )
+  }
+  expect(fixture.starts).toEqual([])
 })

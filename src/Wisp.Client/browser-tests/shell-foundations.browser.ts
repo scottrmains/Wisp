@@ -328,6 +328,7 @@ test('Settings traps focus, is inert behind, restores focus and tooltip describe
   const dialog = page.getByRole('dialog', { name: 'WISP settings', exact: true })
   await expect(dialog).toBeVisible()
   await page.screenshot({ path: '../../artifacts/ui-phase-one/app-settings.png' })
+  await dialog.getByRole('button', { name: 'About & diagnostics', exact: true }).click()
   for (const link of ['DM Sans', 'Barlow Condensed']) {
     const href = await dialog.getByRole('link', { name: link, exact: true }).getAttribute('href')
     expect(href).toMatch(/\.txt$/)
@@ -362,6 +363,106 @@ test('Settings traps focus, is inert behind, restores focus and tooltip describe
   await expect(page.getByRole('tooltip')).toBeHidden()
   await expect(page.getByRole('button', { name: 'Scan folder', exact: true })).toBeDisabled()
   expect(fixture.errors).toEqual([])
+})
+
+test('UI4 Settings categories retain masked credential drafts, fail safely and retry', async ({
+  page,
+}) => {
+  const fixture = await setup(page, { configured: false })
+  let fail = true
+  await page.route('**/api/settings/discogs', (route) =>
+    route.fulfill(
+      fail
+        ? { status: 503, json: { message: 'Demo settings offline' } }
+        : { json: { isConfigured: false } },
+    ),
+  )
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'WISP settings' })
+  await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  const spotify = dialog.getByRole('heading', { name: 'Spotify · artist releases' }).locator('..')
+  await spotify.getByRole('textbox', { name: 'Spotify Client ID' }).fill('fictional-client')
+  await spotify.getByLabel('Spotify Client Secret', { exact: true }).fill('fictional-secret')
+  await expect(spotify.getByLabel('Spotify Client Secret', { exact: true })).toHaveAttribute(
+    'type',
+    'password',
+  )
+  const discogs = dialog
+    .getByRole('heading', { name: 'Discogs · vinyl and older releases' })
+    .locator('..')
+  await expect(discogs.getByRole('alert')).toContainText('Demo settings offline')
+  await expect(discogs.getByRole('button', { name: 'Save personal access token' })).toBeDisabled()
+  fail = false
+  await discogs.getByRole('button', { name: 'Retry', exact: true }).click()
+  await expect(discogs.getByRole('alert')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Audio tools', exact: true }).click()
+  await expect(spotify).toBeHidden()
+  await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  await expect(spotify.getByLabel('Spotify Client Secret', { exact: true })).toHaveValue(
+    'fictional-secret',
+  )
+  await expect(spotify.getByRole('textbox', { name: 'Spotify Client ID' })).toHaveValue(
+    'fictional-client',
+  )
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('fictional-secret')
+  await mkdir('../../artifacts/ui-phase-four', { recursive: true })
+  await spotify.getByLabel('Spotify Client Secret', { exact: true }).fill('')
+  for (const section of ['Connections', 'Library', 'Audio tools', 'About & diagnostics']) {
+    await dialog.getByRole('button', { name: section, exact: true }).click()
+    await page.screenshot({
+      path: `../../artifacts/ui-phase-four/settings-${section.split(' ')[0].toLowerCase()}.png`,
+    })
+  }
+  await page.setViewportSize({ width: 800, height: 600 })
+  await page.screenshot({ path: '../../artifacts/ui-phase-four/settings-800.png' })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(800)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  expect(fixture.mutations).toEqual([])
+  expect(fixture.errors).toEqual([])
+})
+
+test('UI4 failed credential saves retain drafts and compact categories remain keyboard accessible', async ({
+  page,
+}) => {
+  await setup(page, { configured: false })
+  await page.route('**/api/settings/spotify', (route) =>
+    route.fulfill(
+      route.request().method() === 'POST'
+        ? { status: 503, json: { message: 'Demo save unavailable' } }
+        : { json: { isConfigured: false } },
+    ),
+  )
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'WISP settings' })
+  await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  const spotify = dialog.getByRole('heading', { name: 'Spotify · artist releases' }).locator('..')
+  await spotify.getByLabel('Spotify Client ID').fill('demo-client')
+  await spotify.getByLabel('Spotify Client Secret', { exact: true }).fill('demo-secret')
+  await spotify.getByRole('button', { name: 'Save credentials' }).click()
+  await expect(spotify.getByRole('alert')).toContainText('Demo save unavailable')
+  await expect(spotify.getByLabel('Spotify Client Secret', { exact: true })).toHaveValue(
+    'demo-secret',
+  )
+  for (const scale of [1.25, 1.5]) {
+    await page.setViewportSize({ width: Math.floor(1366 / scale), height: Math.floor(768 / scale) })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    for (const name of ['Library', 'Connections', 'Audio tools', 'About & diagnostics']) {
+      const button = dialog
+        .getByRole('navigation', { name: 'Settings sections' })
+        .getByRole('button', { name, exact: true })
+      await button.focus()
+      await button.press('Enter')
+      await expect(button).toHaveAttribute('aria-current', 'page')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        Math.floor(1366 / scale),
+      )
+    }
+  }
+  await page.keyboard.press('Escape')
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  await expect(spotify.getByLabel('Spotify Client Secret', { exact: true })).toHaveValue('')
 })
 
 test('compact playlist drawer keeps Library usable for internal drops and restores focus on Escape', async ({

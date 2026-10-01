@@ -740,6 +740,55 @@ test('Wanted search/sort/status/removal never deletes local audio and failed rem
   expect(state.errors).toEqual([])
 })
 
+test('UI4 contextual Soulseek search contains modal focus and restores its handoff', async ({
+  page,
+}) => {
+  const state = await setup(page)
+  await navigate(page, 'Wanted')
+  const trigger = page
+    .getByLabel('Wanted tracks')
+    .getByRole('button', { name: 'Soulseek', exact: true })
+    .first()
+  await trigger.click()
+  const dialog = page.getByRole('dialog', { name: 'Search Soulseek', exact: true })
+  await expect(dialog).toBeVisible()
+  await dialog
+    .getByRole('textbox', { name: 'Soulseek search query' })
+    .fill('Fictional practice track')
+  for (let i = 0; i < 20; i++) {
+    await page.keyboard.press('Tab')
+    expect(await page.evaluate(() => !!document.activeElement?.closest('dialog'))).toBe(true)
+  }
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  expect(state.calls.filter((c) => c.path.startsWith('/api/soulseek/searches'))).toEqual([])
+  expect(state.errors).toEqual([])
+})
+
+test('UI4 Soulseek modal cannot dismiss while its search request is starting', async ({ page }) => {
+  await setup(page)
+  await navigate(page, 'Wanted')
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/api/soulseek/searches', async route => {
+    await pending
+    await route.fulfill({ json: { id: 'pending-search' } })
+  })
+  await page.route('**/api/soulseek/searches/pending-search', route => route.fulfill({ json: { hits: [], responseCount: 0, isComplete: true } }))
+  await page.getByLabel('Wanted tracks').getByRole('button', { name: 'Soulseek', exact: true }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'Search Soulseek', exact: true })
+  await dialog.getByRole('textbox', { name: 'Soulseek search query' }).fill('Fictional practice track')
+  await dialog.getByRole('button', { name: 'Search Soulseek', exact: true }).click()
+  await expect(dialog.getByRole('button', { name: 'Close Soulseek search', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeVisible()
+  release()
+  await expect(dialog.getByRole('button', { name: 'Close Soulseek search', exact: true })).toBeEnabled()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+})
+
 for (const [name, path, retry] of [
   ['Mix Plans', '/api/mix-plans/plan', 'Retry plan'],
   ['Discover', '/api/artists', 'Retry artists'],

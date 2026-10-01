@@ -5,9 +5,10 @@ Updated: 2026-10-01
 Status: UI 1 shared foundations/navigation (PR #42) are merged into develop.
 UI 2 Library/playlists/preparation, including the approved full-height right
 inspector, is merged into develop (PR #43) and the owner approved its appearance.
-UI 3 Mix Plans/discovery is implemented on `codex/ui-phase-three-workspaces`.
-Automated evidence is recorded below and in the status log; phase-three owner
-visual review and native acceptance remain separate gates.
+UI 3 Mix Plans/discovery is merged into develop (PR #44); the owner approved its
+appearance. UI 4 is implemented on `codex/ui-phase-four-workspaces`, pending
+owner review. Automated evidence is recorded below and in the status log;
+native acceptance remains a separate gate for every phase.
 
 ## Product outcome
 
@@ -287,25 +288,69 @@ remain owner acceptance checks; no new device compatibility claim is made.
 
 ## Phase UI 4 Remaining pages and final consistency
 
-- [ ] Mixes: preserve the library/record/review separation and Review/Tracklist/
+- [x] Mixes: preserve the library/record/review separation and Review/Tracklist/
   Exports tabs. Use a compact transport on Tracklist and Exports so their main
   actions appear without first scrolling past a full waveform.
-- [ ] Recording: keep endpoint, destination, plan and Start/Stop unmistakable;
+- [x] Recording: keep endpoint, destination, plan and Start/Stop unmistakable;
   place technical format/routing detail in contextual help. Preserve meters,
   recovery, recording lifecycle and no automatic monitoring/gain changes.
-- [ ] Review: preserve ratings, review status, timestamp/range notes, looping,
+- [x] Review: preserve ratings, review status, timestamp/range notes, looping,
   actual tracklist edits and revised-plan workflow. Do not rewrite blueprints.
-- [ ] Soulseek: refine search-table readability and Download actions, transfer
+- [x] Soulseek: refine search-table readability and Download actions, transfer
   versus import state, batch feedback and sharing instructions. Retain search
   state, cancellation/retry, clear history and the header transfer dropdown.
-- [ ] Settings: organise common settings and connections ahead of diagnostics,
+- [x] Settings: organise common settings and connections ahead of diagnostics,
   using clear categories. Keep credentials secure and advanced paths available.
-- [ ] CDJ export: align picker, review, progress, success and error wording with
+- [x] CDJ export: align picker, review, progress, success and error wording with
   current implementation, including overview versus detailed waveforms, cue
   counts, replacement/backups, reference entries and verified player limits.
   Correct the stale waveform wording; do not suppress safety warnings.
-- [ ] Complete shared visual, keyboard, contrast, tooltip and window-size review
+- [x] Complete shared visual, keyboard, contrast, tooltip and window-size review
   across every page, menu, dialog and relevant busy/error/empty state.
+
+### UI 4 implementation evidence and limits
+
+- Shared typography, tokens, section navigation and controls carry the approved
+  design through Mixes, Soulseek, Settings and USB selection. No theme, native
+  API, export format, provider budget or database migration changed.
+- Review owns the full waveform and tools. Tracklist/Exports hide presentation
+  only and retain the same audio element, position, waveform preferences and
+  mounted editors. The compact player plus primary copy/create actions fit the
+  initial 1024x768 fixture viewport. Existing ratings/comments/loop/blueprint/
+  revision/export lifecycle suites remain the behaviour evidence.
+- Recording input format and routing help are contextual; unavailable-input and
+  request errors remain visible outside collapsed diagnostics. Endpoint identity,
+  meters, recovery, saved input and no monitoring/gain processing are unchanged.
+- Soulseek results scroll locally, have readable Download actions and sortable
+  column semantics. Transfer/import states, retries, safe history clearing and
+  optional sharing remain distinct. Contextual search uses a shared native
+  modal with contained/restored focus and blocks dismissal during search/queue
+  operations, including the initial request. Embedded search remains mounted.
+- Settings categories are Library, Connections, Audio tools and About &
+  diagnostics. Category changes keep forms mounted; credentials remain masked
+  by default and drafts are not persisted in browser storage. Failed reads
+  disable writes and expose Retry; failed saves keep drafts. Explorer errors no
+  longer disappear silently. Existing plain-JSON credential storage is unchanged
+  and remains a security limitation, not an encryption claim.
+- USB selector now accurately describes overview waveforms and Memory Cues,
+  with existing reference entries, replacement/backups and device-layout checks
+  intact. Original CDJ-900 evidence is historical owner hardware confirmation;
+  the full CDJ-850 profile remains unverified. No physical USB was written here.
+- After-renders: `artifacts/ui-phase-four` (ignored), including 1024/1366x768 and
+  1920x1080 recording/Soulseek, compact Mixes, Settings categories and USB picker.
+  The prior audit is the before baseline; this phase does not contain a fresh
+  paired before capture for every state. 125/150% equivalent Settings viewport
+  and reduced-motion checks are browser evidence, not native Windows scaling.
+- Final automated evidence covers all app destinations, existing virtualised
+  library/selection/dual drag/cues/loudness and feature busy/error/empty flows.
+  Browser focus and bridge fixtures do not establish Photino/WebView2 focus,
+  Windows OLE/folder/rekordbox drag, Xone capture or hardware playback acceptance.
+  Feature-local sharing drafts still follow their existing tab lifecycle; no
+  cross-page draft persistence was added. Owner UI/native acceptance is open.
+- Verified: 61 unit tests, 136 browser tests (eight UI 4 additions), client
+  build and browser-test TypeScript checks pass. Lint has no errors and the
+  same 12 existing warnings; the approximately 511KB initial-chunk warning
+  remains. Backend/native tests and local packaging were not needed or run.
 
 Acceptance: Tracklist and Exports expose their primary work in the initial laptop
 viewport; recording and music playback remain stable across navigation. USB UI

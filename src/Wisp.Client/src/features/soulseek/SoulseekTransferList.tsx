@@ -7,7 +7,7 @@ import { transferPercent, transferState } from './transferState'
 
 type Action = { type: 'cancel' | 'retry' | 'import'; transfer: SoulseekTransfer } | { type: 'clear'; transfer?: SoulseekTransfer }
 const actionKey = ['soulseek-transfer-action']
-const buttonClass = 'min-h-8 shrink-0 rounded border border-[var(--color-border)] px-2 text-[11px] text-[var(--color-text)] hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40'
+const buttonClass = 'ui-button ui-button--small shrink-0'
 
 /** Shared by the header transfers window and the search dialog. */
 export function SoulseekTransferList({ transfers, error, full = false }: { transfers: SoulseekTransfer[]; error?: Error | null; full?: boolean }) {
@@ -56,7 +56,7 @@ export function SoulseekTransferList({ transfers, error, full = false }: { trans
       && `${t.filename} ${t.username}`.toLowerCase().includes(query.toLowerCase())
   }).sort((a, b) => (b.endedAt ?? b.startedAt ?? '').localeCompare(a.endedAt ?? a.startedAt ?? ''))
 
-  return <section aria-label="Download transfers" className={full ? 'flex h-full min-h-0 flex-col' : ''}>
+  return <section aria-label="Download transfers" className={full ? 'soulseek-transfers--full flex h-full min-h-0 flex-col' : ''}>
     {full && <div className="flex flex-wrap gap-3 border-b border-[var(--color-border)] px-5 py-3">
       <div role="group" aria-label="Filter downloads" className="flex flex-wrap gap-1">
         {(['all', 'active', 'completed', 'failed'] as const).map(value => <button key={value} aria-pressed={filter === value}
