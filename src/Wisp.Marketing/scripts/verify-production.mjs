@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { validateManifest } from "./production.mjs";
+import { mediaFiles } from "./media.mjs";
 
 const expected = validateManifest(
   JSON.parse(await readFile(process.argv[2], "utf8")),
@@ -58,12 +59,13 @@ if (siteUrl) {
   for (const [path, mime] of [
     ["/site.css", "text/css"],
     ["/site.mjs", "javascript"],
+    ["/motion.mjs", "javascript"],
     ["/release.mjs", "javascript"],
     ["/assets/wispa.svg", "image/svg+xml"],
-    ["/assets/screenshots/library.png", "image/png"],
-    ["/assets/screenshots/search.png", "image/png"],
-    ["/assets/screenshots/plan.png", "image/png"],
-    ["/assets/screenshots/mix.png", "image/png"],
+    ...mediaFiles.map((file) => [
+      `/assets/${file}`,
+      file.endsWith(".webp") ? "image/webp" : "video/mp4",
+    ]),
     ["/assets/fonts/dm-sans-latin-400-normal.woff2", "font/woff2"],
     ["/assets/fonts/dm-sans-latin-600-normal.woff2", "font/woff2"],
     ["/assets/fonts/barlow-condensed-latin-900-normal.woff2", "font/woff2"],

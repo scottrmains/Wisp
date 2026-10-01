@@ -1,4 +1,7 @@
 import { latestInstaller, buildsUrl, releasesUrl } from "./release.mjs";
+import { enhanceMotion } from "./motion.mjs";
+
+enhanceMotion();
 
 // Production has a verified, build-time link. No visitor API request/rate limit
 // can replace that link with a sign-in-only Actions page.
