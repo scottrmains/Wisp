@@ -29,6 +29,30 @@ Last reviewed: 2026-10-01
   screenshots and all four decoded demo frames were inspected. Actual posters
   are 2x lossless; clips remain native CSS-pixel video (not falsely upscaled).
 
+## 2026-10-01: production homepage readiness verification
+
+- **Cause:** main run 36892858038 built/tested/published installer 0.1.121 and
+  deployed Azure successfully, but final verification failed because the expected
+  version marker was not in the homepage HTML. The matching release manifest was
+  already visible. Subsequent read-only checks found the correct HTML, installer
+  link and assets; this is consistent with independent Azure edge propagation.
+- **Implemented:** the verifier now rechecks the manifest and ordinary homepage
+  together on every attempt. The existing 60-check budget and 5-second intervals
+  remain, with useful retry diagnostics and the last mismatch in the final error.
+  A previously matching manifest is not assumed to stay current at every edge.
+- **Fail-closed safeguards preserved:** exact expected manifest/commit/digest,
+  matching HTML version and installer URL, no-store manifest, nosniff/CSP headers,
+  configured HTTPS Azure hostname and subsequent asset checks. Installer integrity,
+  main-only publishing, obsolete-main guard, Azure credentials and permissions
+  are unchanged. There is no fallback that accepts an old release as success.
+- **Verified:** 34 marketing Node cases and 30 browser cases pass; static site
+  builds. Eight new injected-request/clock cases cover the observed race, stale
+  manifest regression, wrong download link, endpoint failures, exhausted retries,
+  security/identity checks and invalid destinations. The exact patched CLI also
+  passed a read-only verification against the live 0.1.121 site and its assets.
+  No installer was built and no release/deployment was triggered. The historical
+  run remains failed; the fix takes effect after owner merge/promotion to main.
+
 ## 2026-10-01: marketing workflow, focused media and purposeful motion
 
 - **Implemented on the marketing feature branch:** retained the approved paper,
