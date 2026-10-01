@@ -13,6 +13,10 @@ import { DiscoveredTrackList } from './DiscoveredTrackList'
 import { DiscoveredTrackDetail } from './DiscoveredTrackDetail'
 import { useDiscoveryScans } from './useDiscoveryScans'
 import { useUiPrefs } from '../../state/uiPrefs'
+import { Button, IconButton } from '../../components/ui/Button'
+import { StatusMessage } from '../../components/ui/StatusMessage'
+import { WorkspaceNavigation, NavigationToggle } from '../../components/ui/WorkspaceNavigation'
+import { Plus, Search, RefreshCw, Info, Trash2 } from 'lucide-react'
 
 const STATUS_FILTERS: { label: string; value: DiscoveryStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -27,8 +31,7 @@ const STATUS_FILTERS: { label: string; value: DiscoveryStatus | 'all' }[] = [
 ]
 
 /// Crate Digger as a routed peer page — no `fixed inset-0`, no onClose.
-/// Top-nav handles back-out; the only Esc handler that remains is inside
-/// the per-track detail modal, which closes that modal not the page.
+/// Per-track inspection is non-modal; Escape closes details, not the page.
 export function CrateDiggerPage() {
   const qc = useQueryClient()
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
@@ -38,6 +41,7 @@ export function CrateDiggerPage() {
   const sort = useUiPrefs((s) => s.discoverySort)
   const setSort = useUiPrefs((s) => s.setDiscoverySort)
   const [selectedTrack, setSelectedTrack] = useState<DiscoveredTrack | null>(null)
+  const [inspectionDirty, setInspectionDirty] = useState(false)
   const scans = useDiscoveryScans()
 
   const sources = useQuery({
@@ -47,8 +51,11 @@ export function CrateDiggerPage() {
 
   // Auto-select first source on load.
   useEffect(() => {
-    if (!activeSourceId && sources.data && sources.data.length > 0) {
-      setActiveSourceId(sources.data[0].id)
+    if (sources.data && !sources.data.some((s) => s.id === activeSourceId)) {
+      setActiveSourceId(sources.data[0]?.id ?? null)
+      setPage(1)
+      setSelectedTrack(null)
+      setInspectionDirty(false)
     }
   }, [activeSourceId, sources.data])
 
@@ -76,6 +83,8 @@ export function CrateDiggerPage() {
       qc.invalidateQueries({ queryKey: ['discovery-sources'] })
       setActiveSourceId(created.id)
       setPage(1)
+      setSelectedTrack(null)
+      setInspectionDirty(false)
       // The backend auto-queues an initial scan on create — start tracking its progress
       // immediately so the user sees a spinner instead of an empty source row.
       scans.trackScan(created.id)
@@ -83,9 +92,11 @@ export function CrateDiggerPage() {
   })
 
   const handleAddSource = async () => {
+    if (!(await canLeaveInspector())) return
     const url = await promptDialog({
       title: 'Add discovery source',
-      message: 'Paste a YouTube channel URL (or @handle) or a playlist URL.\n\nExamples:\n  https://www.youtube.com/@RokTorkar\n  https://www.youtube.com/playlist?list=PL…',
+      message:
+        'Paste a YouTube channel URL (or @handle) or a playlist URL.\n\nExamples:\n  https://www.youtube.com/@RokTorkar\n  https://www.youtube.com/playlist?list=PL…',
       placeholder: 'https://www.youtube.com/...',
       confirmLabel: 'Add',
       maxLength: 1000,
@@ -102,68 +113,201 @@ export function CrateDiggerPage() {
     }
   }
 
+  const canLeaveInspector = async () =>
+    !inspectionDirty ||
+    (await confirmDialog({
+      title: 'Discard metadata correction?',
+      message: 'Save the correction first to keep it, or discard the unsaved fields.',
+      confirmLabel: 'Discard correction',
+      danger: true,
+    }))
+  const closeInspector = async () => {
+    if (!(await canLeaveInspector())) return
+    if (selectedTrack)
+      document
+        .querySelector<HTMLButtonElement>(
+          `[data-discovery-track="${CSS.escape(selectedTrack.id)}"] button`,
+        )
+        ?.focus()
+    setSelectedTrack(null)
+    setInspectionDirty(false)
+  }
+  const selectTrack = async (track: DiscoveredTrack) => {
+    if (track.id === selectedTrack?.id || !(await canLeaveInspector())) return
+    setSelectedTrack(track)
+    setInspectionDirty(false)
+  }
+  const activeSource = sources.data?.find((s) => s.id === activeSourceId)
+
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Crate Digger</h1>
-          <p className="text-xs text-[var(--color-muted)]">
-            Import metadata from curated YouTube channels. Discovery + audition only — no downloads.
-          </p>
+    <div className="feature-workspace crate-workspace">
+      <header className="workspace-heading">
+        <NavigationToggle navigation="sources" label="sources" />
+        <div className="min-w-0 flex-1">
+          <h1>Crate Digger</h1>
+          <p>Dig through curated YouTube channels and playlists.</p>
         </div>
+        <Button
+          variant="primary"
+          onClick={() => void handleAddSource()}
+          disabled={addSource.isPending}
+        >
+          <Plus /> Add YouTube source
+        </Button>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <SourceSidebar
-          sources={sources.data ?? []}
-          activeId={activeSourceId}
-          progress={scans.progress}
-          onSelect={(id) => { setActiveSourceId(id); setPage(1) }}
-          onAdd={handleAddSource}
-          onTrackScan={scans.trackScan}
-          adding={addSource.isPending}
-        />
+        <WorkspaceNavigation navigation="sources" label="Sources">
+          {sources.isError ? (
+            <StatusMessage tone="error">
+              Could not load sources: {sources.error.message}.{' '}
+              <Button small onClick={() => void sources.refetch()}>
+                Retry sources
+              </Button>
+            </StatusMessage>
+          ) : sources.isLoading ? (
+            <p className="workspace-empty" role="status">
+              Loading sources…
+            </p>
+          ) : (
+            <SourceSidebar
+              sources={sources.data ?? []}
+              activeId={activeSourceId}
+              progress={scans.progress}
+              onSelect={(id) => {
+                void (async () => {
+                  if (!(await canLeaveInspector())) return
+                  setActiveSourceId(id)
+                  setPage(1)
+                  setSelectedTrack(null)
+                  setInspectionDirty(false)
+                })()
+              }}
+              onTrackScan={scans.trackScan}
+            />
+          )}
+        </WorkspaceNavigation>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-[var(--color-border)]">
           {activeSourceId ? (
             <>
+              <div className="workspace-source-heading">
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate" title={activeSource?.name}>
+                    {activeSource?.name ?? 'Source'}
+                  </h2>
+                  <p data-ui-tooltip="Sources import YouTube metadata for discovery and audition. They do not download audio.">
+                    {activeSource?.sourceType === 'YouTubeChannel'
+                      ? 'YouTube channel'
+                      : 'YouTube playlist'}{' '}
+                    · {(tracks.data?.total ?? 0).toLocaleString()} discoveries
+                  </p>
+                </div>
+                <Button
+                  small
+                  onClick={() => rescan.mutate(activeSourceId)}
+                  disabled={rescan.isPending || activeSourceId in scans.progress}
+                >
+                  <RefreshCw />
+                  {rescan.isPending
+                    ? 'Queuing…'
+                    : activeSourceId in scans.progress
+                      ? 'Scanning…'
+                      : 'Rescan source'}
+                </Button>
+                <IconButton
+                  small
+                  variant="quiet"
+                  label="About upload dates"
+                  tooltip={
+                    (tracks.data?.undatedCount ?? 0) > 0
+                      ? `${tracks.data!.undatedCount.toLocaleString()} videos have no upload date; undated videos sort last. Rescan older imports to fetch dates. Upload date is not release year.`
+                      : 'Upload date is when the video was posted to YouTube, not the track’s release year.'
+                  }
+                >
+                  <Info />
+                </IconButton>
+              </div>
               {activeSourceId in scans.progress && (
-                <ScanBanner progress={scans.progress[activeSourceId]} reconnecting={scans.connectionErrors[activeSourceId]} />
+                <ScanBanner
+                  progress={scans.progress[activeSourceId]}
+                  reconnecting={scans.connectionErrors[activeSourceId]}
+                />
               )}
               {!(activeSourceId in scans.progress) && scans.results[activeSourceId] && (
-                <ScanBanner progress={scans.results[activeSourceId]} onDismiss={() => scans.dismissResult(activeSourceId)} />
+                <ScanBanner
+                  progress={scans.results[activeSourceId]}
+                  onDismiss={() => scans.dismissResult(activeSourceId)}
+                />
               )}
               <FilterBar
                 search={search}
-                onSearch={(value) => { setSearch(value); setPage(1) }}
+                onSearch={(value) => {
+                  setSearch(value)
+                  setPage(1)
+                }}
                 statusFilter={statusFilter}
-                onStatusFilter={(value) => { setStatusFilter(value); setPage(1) }}
+                onStatusFilter={(value) => {
+                  setStatusFilter(value)
+                  setPage(1)
+                }}
                 sort={sort}
-                onSort={(value) => { setSort(value); setPage(1) }}
+                onSort={(value) => {
+                  setSort(value)
+                  setPage(1)
+                }}
                 total={tracks.data?.total ?? 0}
               />
-              <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-muted)]">
-                <span className="flex-1">{(tracks.data?.undatedCount ?? 0) > 0
-                  ? `${tracks.data!.undatedCount.toLocaleString()} ${tracks.data!.undatedCount === 1 ? 'video has' : 'videos have'} no upload date. Rescan older imports to fetch dates; unknown dates sort last.`
-                  : 'Upload date is when the video was posted to YouTube, not the track’s release year.'}</span>
-                <button onClick={() => rescan.mutate(activeSourceId)} disabled={rescan.isPending || activeSourceId in scans.progress}
-                  className="shrink-0 rounded border border-[var(--color-border)] px-3 py-1 hover:text-white disabled:opacity-40">
-                  {rescan.isPending ? 'Queuing…' : activeSourceId in scans.progress ? 'Scanning…' : 'Rescan source'}</button>
+              {rescan.isError && (
+                <StatusMessage tone="error">
+                  Could not start scan: {rescan.error.message}. Try Rescan source again.
+                </StatusMessage>
+              )}
+              {tracks.isError && (
+                <StatusMessage tone="error">
+                  Could not load discoveries: {tracks.error.message}.{' '}
+                  <Button small onClick={() => void tracks.refetch()}>
+                    Retry discoveries
+                  </Button>
+                </StatusMessage>
+              )}
+              <div
+                key={`${activeSourceId}:${sort}:${page}:${statusFilter}:${search}`}
+                className="min-h-0 flex-1 overflow-y-auto"
+              >
+                {!tracks.isError && (
+                  <DiscoveredTrackList
+                    tracks={tracks.data?.items ?? []}
+                    loading={tracks.isLoading}
+                    selectedId={selectedTrack?.id}
+                    onSelect={(track) => void selectTrack(track)}
+                  />
+                )}
               </div>
-              {rescan.isError && <p role="alert" className="px-4 py-2 text-xs text-red-400">{rescan.error.message}</p>}
-              {tracks.isError && <p role="alert" className="px-4 py-2 text-sm text-red-400">{tracks.error.message}</p>}
-              <div key={`${activeSourceId}:${sort}:${page}:${statusFilter}:${search}`} className="min-h-0 flex-1 overflow-y-auto">
-                <DiscoveredTrackList
-                  tracks={tracks.data?.items ?? []}
-                  loading={tracks.isLoading}
-                  onSelect={setSelectedTrack}
-                />
-              </div>
-              {(tracks.data?.total ?? 0) > 500 && <nav aria-label="Discovery pages" className="flex items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-2 text-xs">
-                <button disabled={page === 1 || tracks.isFetching} onClick={() => setPage(p => p - 1)} className="rounded border border-[var(--color-border)] px-3 py-1 disabled:opacity-40">Previous</button>
-                <span>Page {page} of {Math.ceil((tracks.data?.total ?? 0) / 500)}</span>
-                <button disabled={page * 500 >= (tracks.data?.total ?? 0) || tracks.isFetching} onClick={() => setPage(p => p + 1)} className="rounded border border-[var(--color-border)] px-3 py-1 disabled:opacity-40">Next</button>
-              </nav>}
+              {(tracks.data?.total ?? 0) > 500 && (
+                <nav
+                  aria-label="Discovery pages"
+                  className="flex items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-2 text-xs"
+                >
+                  <button
+                    disabled={page === 1 || tracks.isFetching}
+                    onClick={() => setPage((p) => p - 1)}
+                    className="rounded border border-[var(--color-border)] px-3 py-1 disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span>
+                    Page {page} of {Math.ceil((tracks.data?.total ?? 0) / 500)}
+                  </span>
+                  <button
+                    disabled={page * 500 >= (tracks.data?.total ?? 0) || tracks.isFetching}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="rounded border border-[var(--color-border)] px-3 py-1 disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </nav>
+              )}
             </>
           ) : (
             <p className="p-8 text-sm text-[var(--color-muted)]">
@@ -171,14 +315,15 @@ export function CrateDiggerPage() {
             </p>
           )}
         </div>
+        {selectedTrack && (
+          <DiscoveredTrackDetail
+            key={selectedTrack.id}
+            trackId={selectedTrack.id}
+            onDirtyChange={setInspectionDirty}
+            onClose={() => void closeInspector()}
+          />
+        )}
       </div>
-
-      {selectedTrack && (
-        <DiscoveredTrackDetail
-          trackId={selectedTrack.id}
-          onClose={() => setSelectedTrack(null)}
-        />
-      )}
     </div>
   )
 }
@@ -188,29 +333,16 @@ function SourceSidebar({
   activeId,
   progress,
   onSelect,
-  onAdd,
   onTrackScan,
-  adding,
 }: {
   sources: DiscoverySource[]
   activeId: string | null
   progress: Record<string, DiscoveryScanProgress>
   onSelect: (id: string) => void
-  onAdd: () => void
   onTrackScan: (id: string) => void
-  adding: boolean
 }) {
   return (
-    <aside className="flex w-[20rem] shrink-0 flex-col">
-      <div className="border-b border-[var(--color-border)] p-2">
-        <button
-          onClick={onAdd}
-          disabled={adding}
-          className="w-full rounded-md bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          {adding ? 'Adding…' : '+ Add YouTube source'}
-        </button>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col">
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {sources.length === 0 && (
           <p className="p-4 text-sm text-[var(--color-muted)]">No sources yet.</p>
@@ -226,7 +358,7 @@ function SourceSidebar({
           />
         ))}
       </ul>
-    </aside>
+    </div>
   )
 }
 
@@ -258,36 +390,47 @@ function SourceRow({
   const isScanning = scanProgress !== null
 
   return (
-    <li
-      className={[
-        'group cursor-pointer border-b border-[var(--color-border)]/40 px-4 py-2.5 text-sm hover:bg-white/5',
-        active ? 'bg-[var(--color-accent)]/10' : '',
-      ].join(' ')}
-      onClick={onSelect}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate font-medium">{source.name}</span>
-        <div className="flex items-center gap-1.5">
-          {isScanning && <Spinner />}
-          <span className="text-[10px] text-[var(--color-muted)]">
-            {source.sourceType === 'YouTubeChannel' ? 'Ch' : 'PL'}
-          </span>
+    <li className="workspace-source-row" data-active={active}>
+      <button
+        className="workspace-nav-choice"
+        onClick={onSelect}
+        aria-current={active ? 'page' : undefined}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-medium">{source.name}</span>
+          <div className="flex items-center gap-1.5">
+            {isScanning && <Spinner />}
+            <span className="text-[10px] text-[var(--color-muted)]">
+              {source.sourceType === 'YouTubeChannel' ? 'Ch' : 'PL'}
+            </span>
+          </div>
         </div>
-      </div>
-      <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-        {isScanning
-          ? scanProgress.status === 'Pending'
-            ? 'Queued…'
-            : scanProgress.status === 'Running'
-              ? scanProgress.totalImported > 0
-                ? `Scanning · ${scanProgress.newItems} new of ${scanProgress.totalImported}`
-                : 'Scanning YouTube…'
-              : scanProgress.status
-          : `${source.importedCount} imported${source.lastScannedAt ? ` · ${new Date(source.lastScannedAt).toLocaleDateString()}` : ''}`}
-      </div>
-      {startScan.isError && <p role="alert" className="mt-1 text-xs text-red-400">Could not start scan: {startScan.error.message}</p>}
-      <div className="mt-1 flex items-center gap-2 text-[10px] opacity-0 transition-opacity group-hover:opacity-100">
-        <button
+        <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+          {isScanning
+            ? scanProgress.status === 'Pending'
+              ? 'Queued…'
+              : scanProgress.status === 'Running'
+                ? scanProgress.totalImported > 0
+                  ? `Scanning · ${scanProgress.newItems} new of ${scanProgress.totalImported}`
+                  : 'Scanning YouTube…'
+                : scanProgress.status
+            : `${source.importedCount} imported${source.lastScannedAt ? ` · ${new Date(source.lastScannedAt).toLocaleDateString()}` : ''}`}
+        </div>
+      </button>
+      {startScan.isError && (
+        <p role="alert" className="mt-1 text-xs text-red-400">
+          Could not start scan: {startScan.error.message}
+        </p>
+      )}
+      {remove.isError && (
+        <StatusMessage tone="error">
+          Could not remove source: {remove.error.message}. Try Remove again.
+        </StatusMessage>
+      )}
+      <div className="workspace-source-actions">
+        <Button
+          small
+          variant="quiet"
           onClick={(e) => {
             e.stopPropagation()
             startScan.mutate()
@@ -296,13 +439,18 @@ function SourceRow({
           className="text-[var(--color-accent)] hover:underline disabled:opacity-40"
         >
           {startScan.isPending || isScanning ? 'scanning…' : 'rescan'}
-        </button>
-        <button
+        </Button>
+        <IconButton
+          small
+          variant="quiet"
+          label={`Remove source ${source.name}`}
+          disabled={remove.isPending}
           onClick={async (e) => {
             e.stopPropagation()
             const ok = await confirmDialog({
               title: `Remove "${source.name}"?`,
-              message: 'The source and any tracks it discovered will be removed from Crate Digger. The original YouTube content stays untouched.',
+              message:
+                'The source and any tracks it discovered will be removed from Crate Digger. The original YouTube content stays untouched.',
               danger: true,
               confirmLabel: 'Remove',
             })
@@ -310,44 +458,78 @@ function SourceRow({
           }}
           className="ml-auto text-red-400 hover:underline"
         >
-          delete
-        </button>
+          <Trash2 />
+        </IconButton>
       </div>
     </li>
   )
 }
 
-function ScanBanner({ progress, onDismiss, reconnecting }: { progress: DiscoveryScanProgress; onDismiss?: () => void; reconnecting?: boolean }) {
+function ScanBanner({
+  progress,
+  onDismiss,
+  reconnecting,
+}: {
+  progress: DiscoveryScanProgress
+  onDismiss?: () => void
+  reconnecting?: boolean
+}) {
   const active = progress.status === 'Pending' || progress.status === 'Running'
   return (
-    <div role={progress.status === 'Failed' ? 'alert' : 'status'} className="flex items-center gap-3 border-b border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-2.5 text-sm">
+    <div
+      role={progress.status === 'Failed' ? 'alert' : 'status'}
+      className="flex items-center gap-3 border-b border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-2.5 text-sm"
+    >
       {active && <Spinner />}
       <span className="flex-1">
-        {reconnecting && active ? 'Reconnecting to scan progress… the scan may still be running.' : <>
-        {progress.status === 'Pending' && 'Scan queued — waiting to start…'}
-        {progress.status === 'Running' && (
-          progress.totalImported > 0
-            ? `Importing — ${progress.newItems} new of ${progress.totalImported} so far`
-            : 'Fetching from YouTube…'
+        {reconnecting && active ? (
+          'Reconnecting to scan progress… the scan may still be running.'
+        ) : (
+          <>
+            {progress.status === 'Pending' && 'Scan queued — waiting to start…'}
+            {progress.status === 'Running' &&
+              (progress.totalImported > 0
+                ? `Importing — ${progress.newItems} new of ${progress.totalImported} so far`
+                : 'Fetching from YouTube…')}
+            {progress.status === 'Failed' && (
+              <span className="text-red-300">
+                Scan failed{progress.error ? `: ${progress.error}` : ''}
+              </span>
+            )}
+            {progress.status === 'Cancelled' && 'Scan cancelled. Rescan the source to try again.'}
+            {progress.status === 'Completed' && (
+              <>
+                {progress.newItems === 0
+                  ? 'No new tracks found.'
+                  : `Scan complete — ${progress.newItems} new ${progress.newItems === 1 ? 'track' : 'tracks'} added.`}
+                {(progress.updatedDates ?? 0) > 0 &&
+                  ` Updated upload dates for ${progress.updatedDates} ${progress.updatedDates === 1 ? 'track' : 'tracks'}.`}
+                <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
+                  Checked {(progress.checkedItems ?? progress.totalImported).toLocaleString()}{' '}
+                  videos
+                  {progress.finishedAt &&
+                    ` · ${new Date(progress.finishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                  .
+                </span>
+              </>
+            )}
+          </>
         )}
-        {progress.status === 'Failed' && (
-          <span className="text-red-300">Scan failed{progress.error ? `: ${progress.error}` : ''}</span>
-        )}
-        {progress.status === 'Cancelled' && 'Scan cancelled. Rescan the source to try again.'}
-        {progress.status === 'Completed' && <>
-          {progress.newItems === 0 ? 'No new tracks found.' : `Scan complete — ${progress.newItems} new ${progress.newItems === 1 ? 'track' : 'tracks'} added.`}
-          {(progress.updatedDates ?? 0) > 0 && ` Updated upload dates for ${progress.updatedDates} ${progress.updatedDates === 1 ? 'track' : 'tracks'}.`}
-          <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
-            Checked {(progress.checkedItems ?? progress.totalImported).toLocaleString()} videos
-            {progress.finishedAt && ` · ${new Date(progress.finishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}.
-          </span>
-        </>}
-        </>}
       </span>
-      {active && !reconnecting && <span className="text-xs text-[var(--color-muted)]">
-        Tracks will appear automatically when done.
-      </span>}
-      {onDismiss && <button onClick={onDismiss} aria-label="Dismiss scan result" className="shrink-0 rounded border border-[var(--color-border)] px-2 py-1 text-xs hover:bg-white/5">Dismiss</button>}
+      {active && !reconnecting && (
+        <span className="text-xs text-[var(--color-muted)]">
+          Tracks will appear automatically when done.
+        </span>
+      )}
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          aria-label="Dismiss scan result"
+          className="shrink-0 rounded border border-[var(--color-border)] px-2 py-1 text-xs hover:bg-white/5"
+        >
+          Dismiss
+        </button>
+      )}
     </div>
   )
 }
@@ -378,19 +560,28 @@ function FilterBar({
   onSort: (sort: DiscoverySort) => void
   total: number
 }) {
+  const moreActive = !['all', 'New', 'Want', 'AlreadyHave'].includes(statusFilter)
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] px-4 py-2">
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => onSearch(e.target.value)}
-        placeholder="Search title or artist"
-        className="min-w-[14rem] flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
-      />
+    <div className="workspace-toolbar">
+      <label className="workspace-search">
+        <Search size={16} />
+        <span className="sr-only">Search discoveries</span>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          placeholder="Search title or artist"
+          className="min-w-[14rem] flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
+        />
+      </label>
       <label className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
         Sort by
-        <select aria-label="Sort discoveries" value={sort} onChange={(e) => onSort(e.target.value as DiscoverySort)}
-          className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 text-[var(--color-text)] focus:border-[var(--color-accent)] focus:outline-none">
+        <select
+          aria-label="Sort discoveries"
+          value={sort}
+          onChange={(e) => onSort(e.target.value as DiscoverySort)}
+          className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 text-[var(--color-text)] focus:border-[var(--color-accent)] focus:outline-none"
+        >
           <option value="-published">YouTube upload · newest first</option>
           <option value="published">YouTube upload · oldest first</option>
           <option value="-imported">Imported into WISP · newest first</option>
@@ -398,21 +589,33 @@ function FilterBar({
         </select>
       </label>
       <div className="flex flex-wrap gap-1">
-        {STATUS_FILTERS.map((f) => (
-          <button
+        {STATUS_FILTERS.slice(0, 4).map((f) => (
+          <Button
+            small
+            variant={statusFilter === f.value ? 'primary' : 'quiet'}
+            aria-pressed={statusFilter === f.value}
             key={f.value}
             onClick={() => onStatusFilter(f.value)}
-            className={[
-              'rounded-full px-2.5 py-1 text-[11px]',
-              statusFilter === f.value
-                ? 'bg-[var(--color-accent)] text-white'
-                : 'bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white',
-            ].join(' ')}
           >
             {f.label}
-          </button>
+          </Button>
         ))}
       </div>
+      <label className="workspace-select">
+        <span className="sr-only">More discovery filters</span>
+        <select
+          aria-label="More discovery filters"
+          value={moreActive ? statusFilter : ''}
+          onChange={(e) => onStatusFilter((e.target.value || 'all') as DiscoveryStatus | 'all')}
+        >
+          <option value="">More filters</option>
+          {STATUS_FILTERS.slice(4).map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <span className="ml-auto text-xs text-[var(--color-muted)]">
         {total.toLocaleString()} {total === 1 ? 'track' : 'tracks'}
       </span>

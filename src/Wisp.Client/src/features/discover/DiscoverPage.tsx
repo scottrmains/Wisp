@@ -26,6 +26,10 @@ import { SoulseekDialog } from '../soulseek/SoulseekDialog'
 import { useWantedTracks } from '../wanted/useWantedTracks'
 import { ArtistMatchModal } from './ArtistMatchModal'
 import { youtubeLinks } from './youtubeLinks'
+import { Button, IconButton } from '../../components/ui/Button'
+import { SectionTabs } from '../../components/ui/SectionTabs'
+import { StatusMessage } from '../../components/ui/StatusMessage'
+import { WorkspaceNavigation, NavigationToggle } from '../../components/ui/WorkspaceNavigation'
 
 /// Discover (Phase 22) — search-first UI. Replaces the long scroll list with
 /// a search bar + two scopes:
@@ -41,7 +45,10 @@ export function DiscoverPage() {
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState<'my' | 'anywhere'>('my')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [matchTarget, setMatchTarget] = useState<{ artist: ArtistSummary; source: CatalogSource } | null>(null)
+  const [matchTarget, setMatchTarget] = useState<{
+    artist: ArtistSummary
+    source: CatalogSource
+  } | null>(null)
 
   const list = useQuery({
     queryKey: ['artists'],
@@ -71,35 +78,51 @@ export function DiscoverPage() {
   const flipToAnywhere = () => setMode('anywhere')
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="border-b border-[var(--color-border)] px-6 py-3">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">Discover</h1>
-          <p className="text-xs text-[var(--color-muted)]">
-            Search your library or anywhere. Watch on YouTube, find on Soulseek, mark Want.
-          </p>
+    <div className="feature-workspace discover-workspace">
+      <header className="workspace-heading">
+        <div className="min-w-0 flex-1">
+          <h1>Discover</h1>
+          <p>Find a track. Follow an artist. Keep the good stuff.</p>
         </div>
-        <SearchBar query={query} setQuery={setQuery} mode={mode} setMode={setMode} />
+        {mode === 'my' && <NavigationToggle navigation="artists" label="artists" />}
       </header>
+      <SearchBar query={query} setQuery={setQuery} mode={mode} setMode={setMode} />
 
       <div className="flex min-h-0 flex-1">
         {mode === 'my' ? (
           <>
-            <ArtistList
-              artists={filteredArtists}
-              totalCount={list.data?.length ?? 0}
-              loading={list.isLoading}
-              query={query}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onSearchAnywhere={flipToAnywhere}
-            />
-            <div className="min-h-0 flex-1 overflow-y-auto border-l border-[var(--color-border)]">
+            <WorkspaceNavigation navigation="artists" label="Artists">
+              {list.isError ? (
+                <StatusMessage tone="error">
+                  Could not load artists: {list.error.message}.{' '}
+                  <Button small onClick={() => void list.refetch()}>
+                    Retry artists
+                  </Button>
+                </StatusMessage>
+              ) : (
+                <ArtistList
+                  artists={filteredArtists}
+                  totalCount={list.data?.length ?? 0}
+                  loading={list.isLoading}
+                  query={query}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  onSearchAnywhere={flipToAnywhere}
+                />
+              )}
+            </WorkspaceNavigation>
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
               {selected ? (
-                <ArtistDetail artist={selected} onMatch={(source) => setMatchTarget({ artist: selected, source })} />
+                <ArtistDetail
+                  key={selected.id}
+                  artist={selected}
+                  onMatch={(source) => setMatchTarget({ artist: selected, source })}
+                />
               ) : (
                 <p className="p-8 text-sm text-[var(--color-muted)]">
-                  {query ? 'Pick an artist on the left to see what they\'ve released.' : 'Search above or pick an artist on the left.'}
+                  {query
+                    ? "Pick an artist on the left to see what they've released."
+                    : 'Search above or pick an artist on the left.'}
                 </p>
               )}
             </div>
@@ -133,43 +156,36 @@ function SearchBar({
   setMode: (m: 'my' | 'anywhere') => void
 }) {
   return (
-    <div className="mt-3 flex items-center gap-3">
-      <div className="relative min-w-0 flex-1">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]">
-          <SearchIcon size={14} strokeWidth={1.75} />
+    <div>
+      <SectionTabs
+        label="Discover search scope"
+        active={mode}
+        onSelect={setMode}
+        items={[
+          { id: 'my', label: 'My artists' },
+          { id: 'anywhere', label: 'Search anywhere' },
+        ]}
+      />
+      <div className="workspace-toolbar">
+        <label className="workspace-search">
+          <SearchIcon size={16} />
+          <span className="sr-only">Discover search</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Discover search"
+            placeholder={
+              mode === 'my'
+                ? 'Filter your library artists…'
+                : 'Artist, track title, or YouTube video link…'
+            }
+          />
+        </label>
+        <span className="text-xs text-[var(--color-muted)]">
+          {mode === 'my'
+            ? 'Filters library and followed artist names — not track titles'
+            : 'Searches YouTube tracks and Spotify artists'}
         </span>
-        <input
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Discover search"
-          placeholder={mode === 'my' ? 'Filter your library artists…' : 'Artist, track title, or YouTube video link…'}
-          className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] py-2 pl-9 pr-3 text-sm focus:border-[var(--color-accent)] focus:outline-none"
-        />
-      </div>
-      <div className="flex shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-0.5 text-xs">
-        <button
-          onClick={() => setMode('my')}
-          className={[
-            'rounded px-3 py-1.5 transition-colors',
-            mode === 'my'
-              ? 'bg-[var(--color-accent)] text-white'
-              : 'text-[var(--color-muted)] hover:text-white',
-          ].join(' ')}
-        >
-          My artists
-        </button>
-        <button
-          onClick={() => setMode('anywhere')}
-          className={[
-            'rounded px-3 py-1.5 transition-colors',
-            mode === 'anywhere'
-              ? 'bg-[var(--color-accent)] text-white'
-              : 'text-[var(--color-muted)] hover:text-white',
-          ].join(' ')}
-        >
-          Anywhere
-        </button>
       </div>
     </div>
   )
@@ -194,35 +210,39 @@ function ArtistList({
 }) {
   if (loading) {
     return (
-      <aside className="w-[24rem] shrink-0 overflow-y-auto">
+      <div className="min-h-0 overflow-y-auto">
         <p className="p-4 text-sm text-[var(--color-muted)]">Loading artists…</p>
-      </aside>
+      </div>
     )
   }
   if (totalCount === 0) {
     return (
-      <aside className="w-[24rem] shrink-0 overflow-y-auto">
+      <div className="min-h-0 overflow-y-auto">
         <div className="space-y-2 p-6 text-sm text-[var(--color-muted)]">
           <p className="font-medium text-white">No artists in your library yet.</p>
-          <p>Scan a folder first — Discover pulls from whatever artists are in your tagged tracks.</p>
+          <p>
+            Scan a folder first — Discover pulls from whatever artists are in your tagged tracks.
+          </p>
         </div>
-      </aside>
+      </div>
     )
   }
   // Filtered to nothing — leave the user a clear next step (flip to Anywhere).
   if (list.length === 0 && query.trim()) {
     return (
-      <aside className="w-[24rem] shrink-0 overflow-y-auto">
+      <div className="min-h-0 overflow-y-auto">
         <div className="space-y-3 p-6 text-sm text-[var(--color-muted)]">
           <p className="font-medium text-white">No matches for "{query}" in your library.</p>
-          <button
+          <Button
+            small
+            variant="primary"
             onClick={onSearchAnywhere}
             className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
           >
             Search anywhere instead →
-          </button>
+          </Button>
         </div>
-      </aside>
+      </div>
     )
   }
 
@@ -233,47 +253,48 @@ function ArtistList({
   })
 
   return (
-    <aside className="w-[24rem] shrink-0 overflow-y-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       <ul>
         {sorted.map((a) => (
-          <li
-            key={a.id}
-            className={[
-              'cursor-pointer border-b border-[var(--color-border)]/40 px-4 py-3 text-sm hover:bg-white/5',
-              selectedId === a.id ? 'bg-[var(--color-accent)]/10' : '',
-            ].join(' ')}
-            onClick={() => onSelect(a.id)}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{a.name}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-muted)]">
-                  <span>{a.trackCount} local</span>
-                  {a.latestLocalYear !== null && (
-                    <span>latest {a.latestLocalYear}</span>
-                  )}
-                  {a.newReleaseCount > 0 && (
-                    <span className="font-medium text-[var(--color-accent)]">
-                      {a.newReleaseCount} new
-                    </span>
-                  )}
+          <li key={a.id} className="workspace-nav-row" data-active={selectedId === a.id}>
+            <button
+              className="workspace-nav-choice"
+              aria-current={selectedId === a.id ? 'page' : undefined}
+              onClick={() => onSelect(a.id)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{a.name}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-muted)]">
+                    <span>{a.trackCount} local</span>
+                    {a.latestLocalYear !== null && <span>latest {a.latestLocalYear}</span>}
+                    {a.newReleaseCount > 0 && (
+                      <span className="font-medium text-[var(--color-accent)]">
+                        {a.newReleaseCount} new
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {a.newReleaseCount > 0 && (
+                  <span className="shrink-0 rounded-md bg-[var(--color-accent)] px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums">
+                    +{a.newReleaseCount}
+                  </span>
+                )}
               </div>
-              {a.newReleaseCount > 0 && (
-                <span className="shrink-0 rounded-md bg-[var(--color-accent)] px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums">
-                  +{a.newReleaseCount}
-                </span>
-              )}
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              <SourceChip name="Spotify" matched={a.isMatchedSpotify} tone="emerald" />
-              <SourceChip name="Discogs" matched={a.isMatchedDiscogs} tone="orange" />
-              <SourceChip name="YouTube" matched={a.isMatchedYouTube} tone="red" />
-            </div>
+              <small>
+                {[
+                  a.isMatchedSpotify && 'Spotify',
+                  a.isMatchedDiscogs && 'Discogs',
+                  a.isMatchedYouTube && 'YouTube',
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'No sources matched'}
+              </small>
+            </button>
           </li>
         ))}
       </ul>
-    </aside>
+    </div>
   )
 }
 
@@ -325,41 +346,54 @@ function AnywhereView({ query }: { query: string }) {
           enabled={youtubeEnabled}
           onToggle={() => toggleSource('youtube')}
         />
-        {enabled && <button onClick={() => void search.refetch()} disabled={search.isFetching}
-          className="rounded border border-[var(--color-border)] px-2 py-1 hover:text-white focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] disabled:opacity-40">
-          {search.isFetching ? 'Searching…' : 'Retry search'}
-        </button>}
-        {search.data?.youTubeQuota && (
-          <QuotaMeter info={search.data.youTubeQuota} />
+        {enabled && (
+          <Button small onClick={() => void search.refetch()} disabled={search.isFetching}>
+            {search.isFetching ? 'Searching…' : 'Retry search'}
+          </Button>
         )}
+        {search.data?.youTubeQuota && <QuotaMeter info={search.data.youTubeQuota} />}
         {!enabled && debounced.trim().length < 2 && (
           <span className="ml-auto text-[var(--color-muted)]">
             Type at least 2 characters to search
           </span>
         )}
         {!enabled && sources.length === 0 && (
-          <span className="ml-auto text-amber-300/80">
-            Enable a source to search
-          </span>
+          <span className="ml-auto text-amber-300/80">Enable a source to search</span>
         )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
         {search.isFetching && enabled && (
-          <p role="status" className="text-sm text-[var(--color-muted)]">Searching…</p>
+          <p role="status" className="text-sm text-[var(--color-muted)]">
+            Searching…
+          </p>
         )}
         {search.error && (
-          <p role="alert" className="text-sm text-red-400">{(search.error as Error).message}</p>
+          <p role="alert" className="text-sm text-red-400">
+            {(search.error as Error).message}
+          </p>
         )}
-        {enabled && search.data && (
-          <SearchResultsBlocks data={search.data} />
+        {enabled && search.data && <SearchResultsBlocks data={search.data} />}
+        {enabled && youtubeEnabled && !search.isFetching && (
+          <p className="mt-4 text-xs text-[var(--color-muted)]">
+            Missing a track? Paste its YouTube video link above to look it up directly, or{' '}
+            <a
+              href={youtubeLinks.search(debounced.trim())}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => {
+                if (bridgeAvailable()) {
+                  e.preventDefault()
+                  void bridge.openExternal(e.currentTarget.href)
+                }
+              }}
+              className="underline hover:text-white"
+            >
+              search on YouTube
+            </a>
+            .
+          </p>
         )}
-        {enabled && youtubeEnabled && !search.isFetching && <p className="mt-4 text-xs text-[var(--color-muted)]">
-          Missing a track? Paste its YouTube video link above to look it up directly, or{' '}
-          <a href={youtubeLinks.search(debounced.trim())} target="_blank" rel="noreferrer"
-            onClick={e => { if (bridgeAvailable()) { e.preventDefault(); void bridge.openExternal(e.currentTarget.href) } }}
-            className="underline hover:text-white">search on YouTube</a>.
-        </p>}
       </div>
     </div>
   )
@@ -377,19 +411,15 @@ function SourceToggle({
   onToggle: () => void
 }) {
   return (
-    <button
+    <Button
+      small
       onClick={onToggle}
       aria-pressed={enabled}
-      className={[
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors',
-        enabled
-          ? 'border-[var(--color-accent)]/50 bg-[var(--color-accent)]/15 text-white'
-          : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-white',
-      ].join(' ')}
+      variant={enabled ? 'primary' : 'secondary'}
     >
       {icon}
       {label}
-    </button>
+    </Button>
   )
 }
 
@@ -408,7 +438,9 @@ function QuotaMeter({ info }: { info: DiscoverQuotaInfo }) {
       title={`WISP's local Discover search-call budget, not Google's total API usage. Local reset: ${reset.toLocaleString()}. Direct video links don't consume this search budget.`}
     >
       <Tv size={12} strokeWidth={1.75} />
-      {info.exhausted ? 'WISP search budget used' : `${remaining}/${info.dailyBudget} WISP search calls left`}
+      {info.exhausted
+        ? 'WISP search budget used'
+        : `${remaining}/${info.dailyBudget} WISP search calls left`}
     </span>
   )
 }
@@ -418,38 +450,54 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
   const hasVideos = data.videos.length > 0
 
   if (!hasArtists && !hasVideos && data.errors.length === 0) {
-    return <p role="status" className="text-sm text-[var(--color-muted)]">No matching results returned. Try the artist and track title, or paste the YouTube video link.</p>
+    return (
+      <p role="status" className="text-sm text-[var(--color-muted)]">
+        No matching results returned. Try the artist and track title, or paste the YouTube video
+        link.
+      </p>
+    )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="discover-results">
       {data.errors.includes('spotify_unconfigured') && (
-        <ErrorBanner>Spotify isn't configured. Add credentials in Settings to enable artist search.</ErrorBanner>
+        <ErrorBanner>
+          Spotify isn't configured. Add credentials in Settings to enable artist search.
+        </ErrorBanner>
       )}
       {data.errors.includes('youtube_unconfigured') && (
-        <ErrorBanner>YouTube isn't configured. Add an API key in Settings to enable video search.</ErrorBanner>
+        <ErrorBanner>
+          YouTube isn't configured. Add an API key in Settings to enable video search.
+        </ErrorBanner>
       )}
       {data.errors.includes('spotify_failed') && (
         <ErrorBanner>Spotify search failed. Try again or check your credentials.</ErrorBanner>
       )}
       {data.errors.includes('youtube_failed') && (
-        <ErrorBanner>YouTube search failed. Retry the search or check your API key in Settings.</ErrorBanner>
+        <ErrorBanner>
+          YouTube search failed. Retry the search or check your API key in Settings.
+        </ErrorBanner>
       )}
       {data.errors.includes('youtube_quota_exhausted') && (
         <ErrorBanner tone="warn">
-          YouTube search is unavailable because the local search budget or Google's API quota was reached. Spotify can still return artists. A video link can bypass the local search budget, but not Google's API limits.
+          YouTube search is unavailable because the local search budget or Google's API quota was
+          reached. Spotify can still return artists. A video link can bypass the local search
+          budget, but not Google's API limits.
         </ErrorBanner>
       )}
       {data.errors.includes('youtube_video_unavailable') && (
-        <ErrorBanner tone="warn">YouTube did not return that video. It may be private, deleted or unavailable through the API.</ErrorBanner>
+        <ErrorBanner tone="warn">
+          YouTube did not return that video. It may be private, deleted or unavailable through the
+          API.
+        </ErrorBanner>
       )}
 
       {hasArtists && (
-        <section>
+        <section className="discover-artists">
           <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
             Artists · Spotify
           </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="discover-artist-results">
             {data.artists.map((a) => (
               <ArtistResultCard key={a.externalId} hit={a} />
             ))}
@@ -458,11 +506,11 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
       )}
 
       {hasVideos && (
-        <section>
+        <section className="discover-videos">
           <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-            Videos · YouTube
+            Tracks & videos · YouTube
           </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="workspace-results">
             {data.videos.map((v) => (
               <VideoResultCard key={v.videoId} hit={v} />
             ))}
@@ -473,13 +521,14 @@ function SearchResultsBlocks({ data }: { data: import('../../api/types').Discove
   )
 }
 
-function ErrorBanner({ children, tone = 'error' }: { children: React.ReactNode; tone?: 'error' | 'warn' }) {
-  const cls = tone === 'error'
-    ? 'border-red-500/30 bg-red-500/10 text-red-200'
-    : 'border-amber-400/30 bg-amber-400/10 text-amber-200'
-  return (
-    <div role="alert" className={`rounded-md border px-3 py-2 text-xs ${cls}`}>{children}</div>
-  )
+function ErrorBanner({
+  children,
+  tone = 'error',
+}: {
+  children: React.ReactNode
+  tone?: 'error' | 'warn'
+}) {
+  return <StatusMessage tone={tone === 'error' ? 'error' : undefined}>{children}</StatusMessage>
 }
 
 /// Spotify artist hit — vertical card to match the Tv-grid feel:
@@ -488,20 +537,24 @@ function ErrorBanner({ children, tone = 'error' }: { children: React.ReactNode; 
 /// interactive at a glance.
 function ArtistResultCard({ hit }: { hit: DiscoverArtistHit }) {
   return (
-    <div className="group flex flex-col items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-center transition-colors hover:border-[var(--color-accent)]/40">
+    <div className="discover-artist-result">
       {hit.imageUrl ? (
-        <img src={hit.imageUrl} alt="" className="h-24 w-24 shrink-0 rounded-full object-cover ring-1 ring-[var(--color-border)] transition-transform group-hover:scale-105" />
+        <img src={hit.imageUrl} alt="" loading="lazy" className="h-12 w-12 shrink-0 object-cover" />
       ) : (
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg)] text-2xl text-[var(--color-muted)] ring-1 ring-[var(--color-border)]">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[var(--color-bg)] text-lg text-[var(--color-muted)]">
           {hit.name[0]?.toUpperCase()}
         </div>
       )}
-      <p className="line-clamp-2 text-sm font-medium" title={hit.name}>{hit.name}</p>
-      <p className="line-clamp-2 text-[11px] text-[var(--color-muted)]">
-        {hit.followers !== null && `${hit.followers.toLocaleString()} followers`}
-        {hit.followers !== null && hit.genres.length > 0 && ' · '}
-        {hit.genres.length > 0 && hit.genres.slice(0, 2).join(', ')}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-2 text-sm font-medium" title={hit.name}>
+          {hit.name}
+        </p>
+        <p className="line-clamp-2 text-[11px] text-[var(--color-muted)]">
+          {hit.followers !== null && `${hit.followers.toLocaleString()} followers`}
+          {hit.followers !== null && hit.genres.length > 0 && ' · '}
+          {hit.genres.length > 0 && hit.genres.slice(0, 2).join(', ')}
+        </p>
+      </div>
       <FollowButton hit={hit} />
     </div>
   )
@@ -525,11 +578,12 @@ function FollowButton({ hit }: { hit: DiscoverArtistHit }) {
   )
 
   const follow = useMutation({
-    mutationFn: () => discover.follow({
-      name: hit.name,
-      spotifyArtistId: hit.externalId,
-      imageUrl: hit.imageUrl ?? undefined,
-    }),
+    mutationFn: () =>
+      discover.follow({
+        name: hit.name,
+        spotifyArtistId: hit.externalId,
+        imageUrl: hit.imageUrl ?? undefined,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['artists'] })
     },
@@ -547,14 +601,22 @@ function FollowButton({ hit }: { hit: DiscoverArtistHit }) {
   }
 
   return (
-    <button
-      onClick={() => follow.mutate()}
-      disabled={follow.isPending}
-      className="shrink-0 rounded-md border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-40"
-      title="Add this artist to your library and watch for new releases"
-    >
-      {follow.isPending ? 'Following…' : '+ Follow'}
-    </button>
+    <div>
+      <Button
+        small
+        onClick={() => follow.mutate()}
+        disabled={follow.isPending}
+        className="shrink-0 rounded-md border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-40"
+        title="Add this artist to your library and watch for new releases"
+      >
+        {follow.isPending ? 'Following…' : '+ Follow'}
+      </Button>
+      {follow.error && (
+        <StatusMessage tone="error">
+          Could not follow: {follow.error.message}. Try Follow again.
+        </StatusMessage>
+      )}
+    </div>
   )
 }
 
@@ -586,53 +648,67 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
   // button stops being clickable after the first add. The check is local
   // (just iterates the cached items) — cheap.
   const alreadyWanted = wanted.items.some(
-    (w) => w.artist.toLowerCase() === artist.toLowerCase() && w.title.toLowerCase() === title.toLowerCase(),
+    (w) =>
+      w.artist.toLowerCase() === artist.toLowerCase() &&
+      w.title.toLowerCase() === title.toLowerCase(),
   )
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] transition-colors hover:border-[var(--color-accent)]/40">
-      <div className="relative aspect-video w-full bg-[var(--color-bg)]">
+    <article className="discover-video-result" aria-label={hit.title}>
+      <div className="discover-video-thumbnail">
         {hit.thumbnailUrl ? (
-          <img src={hit.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          <img
+            src={hit.thumbnailUrl}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[var(--color-muted)]"><Tv size={28} strokeWidth={1.25} /></div>
+          <div className="flex h-full w-full items-center justify-center text-[var(--color-muted)]">
+            <Tv size={28} strokeWidth={1.25} />
+          </div>
         )}
-        {/* Hover overlay — quick-action shortcut over the thumbnail. The
-            full action row lives below for keyboard / always-visible
-            access; this is the Tv-style hover affordance. */}
-        <div className="pointer-events-none absolute inset-0 flex items-end justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            onClick={() => setExpandWatch((e) => !e)}
-            className="pointer-events-auto rounded-full bg-red-500/90 p-1.5 text-white hover:bg-red-500"
-            title="Watch on YouTube"
-          >
-            <Play size={12} fill="currentColor" />
-          </button>
-        </div>
       </div>
-      <div className="flex flex-col gap-1 p-3">
-        <p className="line-clamp-2 text-sm font-medium leading-snug" title={hit.title}>{hit.title}</p>
+      <div className="min-w-0 flex flex-col gap-1">
+        <p className="line-clamp-2 text-sm font-medium leading-snug" title={hit.title}>
+          {hit.title}
+        </p>
         <p className="truncate text-[11px] text-[var(--color-muted)]" title={hit.channelTitle}>
           {hit.channelTitle}
           {hit.publishedAt && ` · ${new Date(hit.publishedAt).toLocaleDateString()}`}
         </p>
       </div>
-      <div className="flex flex-wrap gap-1 border-t border-[var(--color-border)]/40 px-3 py-2">
-        <button
+      <div className="discover-video-actions">
+        <Button
+          small
+          aria-expanded={expandWatch}
           onClick={() => setExpandWatch((e) => !e)}
           className="inline-flex items-center gap-1 rounded border border-red-500/30 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
           title="Watch on YouTube (embedded)"
         >
-          {expandWatch ? <ChevronDown size={11} strokeWidth={1.75} /> : <Play size={10} fill="currentColor" />} Watch
-        </button>
-        <button
+          {expandWatch ? (
+            <ChevronDown size={11} strokeWidth={1.75} />
+          ) : (
+            <Play size={10} fill="currentColor" />
+          )}{' '}
+          Watch
+        </Button>
+        <Button
+          small
+          aria-expanded={expandSlskd}
           onClick={() => setExpandSlskd((e) => !e)}
           className="inline-flex items-center gap-1 rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
           title="Search Soulseek for this track"
         >
-          {expandSlskd ? <ChevronDown size={11} strokeWidth={1.75} /> : <Disc3 size={11} strokeWidth={1.75} />} Soulseek
-        </button>
-        <button
+          {expandSlskd ? (
+            <ChevronDown size={11} strokeWidth={1.75} />
+          ) : (
+            <Disc3 size={11} strokeWidth={1.75} />
+          )}{' '}
+          Soulseek
+        </Button>
+        <Button
+          small
           onClick={onWant}
           disabled={alreadyWanted || wanted.create.isPending}
           className={[
@@ -643,22 +719,36 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
           ].join(' ')}
           title={alreadyWanted ? 'Already on your Wanted list' : 'Add to Wanted'}
         >
-          {alreadyWanted
-            ? <><Check size={11} strokeWidth={2} /> Wanted</>
-            : <><Heart size={11} strokeWidth={1.75} /> Want</>}
-        </button>
+          {alreadyWanted ? (
+            <>
+              <Check size={11} strokeWidth={2} /> Wanted
+            </>
+          ) : (
+            <>
+              <Heart size={11} strokeWidth={1.75} /> Want
+            </>
+          )}
+        </Button>
         {bridgeAvailable() && (
-          <button
+          <IconButton
+            small
+            variant="quiet"
+            label="Open on YouTube"
             onClick={() => bridge.openExternal(hit.url)}
             className="ml-auto rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
             title="Open on YouTube"
           >
             <ExternalLink size={12} strokeWidth={1.75} />
-          </button>
+          </IconButton>
         )}
       </div>
+      {wanted.create.error && (
+        <StatusMessage tone="error">
+          Could not add to Wanted: {wanted.create.error.message}. Try Want again.
+        </StatusMessage>
+      )}
       {expandWatch && (
-        <div className="border-t border-[var(--color-border)] p-3">
+        <div className="discover-video-expanded">
           <div className="aspect-video w-full overflow-hidden rounded bg-black">
             <iframe
               src={youtubeLinks.embed(hit.videoId)}
@@ -677,11 +767,14 @@ function VideoResultCard({ hit }: { hit: DiscoverVideoHit }) {
           onClose={() => setExpandSlskd(false)}
         />
       )}
-    </div>
+    </article>
   )
 }
 
-function parseYouTubeTitle(rawTitle: string, channelTitle: string): { artist: string; title: string } {
+function parseYouTubeTitle(
+  rawTitle: string,
+  channelTitle: string,
+): { artist: string; title: string } {
   // Quick heuristic — split on en-dash, em-dash, or first hyphen surrounded
   // by spaces. If the channel looks like an artist's Topic channel, prefer
   // that as the artist and use the full title as the track name.
@@ -700,35 +793,10 @@ function parseYouTubeTitle(rawTitle: string, channelTitle: string): { artist: st
 }
 
 function stripBrackets(s: string): string {
-  return s.replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s+/g, ' ').trim()
-}
-
-function SourceChip({
-  name,
-  matched,
-  tone,
-}: {
-  name: string
-  matched: boolean
-  tone: 'emerald' | 'orange' | 'red'
-}) {
-  const matchedCls = tone === 'emerald'
-    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-    : tone === 'orange'
-      ? 'border-orange-400/40 bg-orange-400/10 text-orange-200'
-      : 'border-red-500/40 bg-red-500/10 text-red-200'
-  return (
-    <span
-      className={[
-        'rounded border px-1.5 py-0.5 text-[10px]',
-        matched ? matchedCls : 'border-[var(--color-border)] bg-transparent text-[var(--color-muted)]/60',
-      ].join(' ')}
-      title={`${name} ${matched ? 'matched' : 'not matched'}`}
-    >
-      {name}
-      {!matched && ' —'}
-    </span>
-  )
+  return s
+    .replace(/\[[^\]]*\]|\([^)]*\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 type ReleaseFilter = 'new' | 'saved' | 'dismissed' | 'library'
@@ -773,64 +841,80 @@ function ArtistDetail({
           <p className="text-sm text-[var(--color-muted)]">
             {artist.trackCount} local
             {artist.latestLocalYear !== null && ` · latest ${artist.latestLocalYear}`}
-            {artist.lastCheckedAt && ` · last checked ${new Date(artist.lastCheckedAt).toLocaleDateString()}`}
+            {artist.lastCheckedAt &&
+              ` · last checked ${new Date(artist.lastCheckedAt).toLocaleDateString()}`}
           </p>
         </div>
         {anyMatched && (
-          <button
+          <Button
+            small
             onClick={() => refresh.mutate()}
             disabled={refresh.isPending}
             className="shrink-0 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm hover:bg-white/5 disabled:opacity-40"
           >
             {refresh.isPending ? 'Fetching…' : 'Refresh from sources'}
-          </button>
+          </Button>
         )}
       </header>
 
       <SourceMatchRow artist={artist} onMatch={onMatch} />
 
       {refresh.error && (
-        <p className="mt-3 text-sm text-red-400">{(refresh.error as Error).message}</p>
+        <StatusMessage tone="error">
+          Could not refresh releases: {refresh.error.message}. Try Refresh from sources again.
+        </StatusMessage>
       )}
 
       {!anyMatched && (
         <div className="mt-6 space-y-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
           <p className="text-white">No source matched yet.</p>
-          <p>Pick a source above to identify this artist. Different sources cover different ground:</p>
+          <p>
+            Pick a source above to identify this artist. Different sources cover different ground:
+          </p>
           <ul className="ml-4 list-disc text-[12px]">
-            <li><strong className="text-white">Spotify</strong> — broad streaming catalogue, fast for current/active artists</li>
-            <li><strong className="text-white">Discogs</strong> — vinyl + underground, best for old white-label material</li>
-            <li><strong className="text-white">Tv</strong> — enriches matched releases with an inline audition player</li>
+            <li>
+              <strong className="text-white">Spotify</strong> — broad streaming catalogue, fast for
+              current/active artists
+            </li>
+            <li>
+              <strong className="text-white">Discogs</strong> — vinyl + underground, best for old
+              white-label material
+            </li>
+            <li>
+              <strong className="text-white">YouTube</strong> — enriches matched releases with an
+              inline audition player
+            </li>
           </ul>
         </div>
       )}
 
       {anyMatched && (
-        <div className="mt-4 flex items-center gap-1 border-b border-[var(--color-border)] pb-1">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className={[
-                'rounded-md px-3 py-1 text-xs',
-                filter === f.value
-                  ? 'bg-[var(--color-accent)]/20 text-white'
-                  : 'text-[var(--color-muted)] hover:text-white',
-              ].join(' ')}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="mt-4">
+          <SectionTabs
+            label="Release status"
+            items={FILTERS.map((f) => ({ id: f.value, label: f.label }))}
+            active={filter}
+            onSelect={setFilter}
+          />
         </div>
       )}
 
       {anyMatched && releases.isLoading && (
         <p className="mt-6 text-sm text-[var(--color-muted)]">Loading releases…</p>
       )}
+      {releases.error && (
+        <StatusMessage tone="error">
+          Could not load releases: {releases.error.message}.{' '}
+          <Button small onClick={() => void releases.refetch()}>
+            Retry releases
+          </Button>
+        </StatusMessage>
+      )}
 
       {anyMatched && releases.data && releases.data.length === 0 && filter !== 'new' && (
         <p className="mt-6 text-sm text-[var(--color-muted)]">
-          {filter === 'saved' && 'No wanted tracks yet. Mark releases on the New tab as Want to collect them here.'}
+          {filter === 'saved' &&
+            'No wanted tracks yet. Mark releases on the New tab as Want to collect them here.'}
           {filter === 'dismissed' && 'No dismissed tracks for this artist.'}
           {filter === 'library' && 'No fetched releases match anything in your local library yet.'}
         </p>
@@ -838,15 +922,20 @@ function ArtistDetail({
 
       {anyMatched && releases.data && releases.data.length === 0 && filter === 'new' && (
         <div className="mt-6 space-y-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-muted)]">
-          <p className="text-white">No new releases since {artist.latestLocalYear ?? 'your latest local track'}.</p>
+          <p className="text-white">
+            No new releases since {artist.latestLocalYear ?? 'your latest local track'}.
+          </p>
           <p>
-            Click <strong className="text-white">Refresh from sources</strong> to re-poll. To broaden the search,
-            match additional sources (you currently have:
+            Click <strong className="text-white">Refresh from sources</strong> to re-poll. To
+            broaden the search, match additional sources (you currently have:
             {[
               artist.isMatchedSpotify && ' Spotify',
               artist.isMatchedDiscogs && ' Discogs',
-              artist.isMatchedYouTube && ' Tv',
-            ].filter(Boolean).join(', ')}).
+              artist.isMatchedYouTube && ' YouTube',
+            ]
+              .filter(Boolean)
+              .join(', ')}
+            ).
           </p>
         </div>
       )}
@@ -870,7 +959,7 @@ function SourceMatchRow({
   onMatch: (source: CatalogSource) => void
 }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <SourceMatchTile
         label="Spotify"
         matched={artist.isMatchedSpotify}
@@ -904,14 +993,16 @@ function SourceMatchTile({
   colour: 'emerald' | 'orange' | 'red'
   onMatch: () => void
 }) {
-  const ring = colour === 'emerald'
-    ? 'border-emerald-500/40 bg-emerald-500/10'
-    : colour === 'orange'
-      ? 'border-orange-400/40 bg-orange-400/10'
-      : 'border-red-500/40 bg-red-500/10'
+  const ring =
+    colour === 'emerald'
+      ? 'border-emerald-500/40 bg-emerald-500/10'
+      : colour === 'orange'
+        ? 'border-orange-400/40 bg-orange-400/10'
+        : 'border-red-500/40 bg-red-500/10'
 
   return (
-    <button
+    <Button
+      small
       onClick={onMatch}
       className={[
         'rounded-md border px-3 py-2 text-left text-sm transition-colors',
@@ -920,16 +1011,21 @@ function SourceMatchTile({
     >
       <div className="flex items-center justify-between">
         <span className="font-medium">{label}</span>
-        <span className={`inline-flex items-center gap-1 text-xs ${matched ? 'text-white' : 'text-[var(--color-muted)]'}`}>
-          {matched ? <><Check size={11} strokeWidth={2} /> matched</> : <>match <ChevronDown size={11} strokeWidth={1.75} className="-rotate-90" /></>}
+        <span
+          className={`inline-flex items-center gap-1 text-xs ${matched ? 'text-white' : 'text-[var(--color-muted)]'}`}
+        >
+          {matched ? (
+            <>
+              <Check size={11} strokeWidth={2} /> matched
+            </>
+          ) : (
+            <>
+              match <ChevronDown size={11} strokeWidth={1.75} className="-rotate-90" />
+            </>
+          )}
         </span>
       </div>
-      <p className="mt-0.5 text-[10px] text-[var(--color-muted)]">
-        {label === 'Spotify' && 'broad streaming catalogue'}
-        {label === 'Discogs' && 'vinyl + underground'}
-        {label === 'YouTube' && 'inline audition'}
-      </p>
-    </button>
+    </Button>
   )
 }
 
@@ -953,11 +1049,12 @@ function ReleaseRow({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['releases', release.artistProfileId] }),
   })
 
-  const sourceColour = release.source === 'Spotify'
-    ? 'bg-emerald-500/20 text-emerald-300'
-    : release.source === 'Discogs'
-      ? 'bg-orange-400/20 text-orange-300'
-      : 'bg-white/10 text-[var(--color-muted)]'
+  const sourceColour =
+    release.source === 'Spotify'
+      ? 'bg-emerald-500/20 text-emerald-300'
+      : release.source === 'Discogs'
+        ? 'bg-orange-400/20 text-orange-300'
+        : 'bg-white/10 text-[var(--color-muted)]'
 
   const searchYouTube = () => {
     const q = `${artistName} ${release.title}`
@@ -965,8 +1062,8 @@ function ReleaseRow({
   }
 
   return (
-    <li className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="flex items-center gap-3 p-3">
+    <li className="workspace-result-row">
+      <div className="discover-release-row">
         {release.artworkUrl ? (
           <img src={release.artworkUrl} alt="" className="h-12 w-12 shrink-0 rounded" />
         ) : (
@@ -981,96 +1078,128 @@ function ReleaseRow({
             <span>{release.releaseType}</span>
             {release.releaseDate && <span>· {release.releaseDate}</span>}
             {release.isAlreadyInLibrary && (
-              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300">in library</span>
+              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                in library
+              </span>
             )}
           </p>
         </div>
-        <div className="flex shrink-0 gap-1">
+        <div className="discover-release-actions">
           {release.youTubeVideoId ? (
-            <button
+            <Button
+              small
+              aria-expanded={ytExpanded}
               onClick={() => setYtExpanded((e) => !e)}
               className="inline-flex items-center gap-1 rounded border border-red-500/30 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
-              title="Audition on Tv"
+              title="Watch on YouTube"
             >
-              {ytExpanded ? <ChevronDown size={11} strokeWidth={1.75} /> : <Play size={10} fill="currentColor" />} Tv
-            </button>
+              {ytExpanded ? (
+                <ChevronDown size={11} strokeWidth={1.75} />
+              ) : (
+                <Play size={10} fill="currentColor" />
+              )}{' '}
+              Watch
+            </Button>
           ) : (
             bridgeAvailable() && (
-              <button
+              <Button
+                small
                 onClick={searchYouTube}
                 className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
-                title="Search Tv for this release"
+                title="Search YouTube for this release"
               >
-                <SearchIcon size={11} strokeWidth={1.75} /> YT
-              </button>
+                <SearchIcon size={11} strokeWidth={1.75} /> YouTube
+              </Button>
             )
           )}
           {release.url && bridgeAvailable() && (
-            <button
+            <IconButton
+              small
+              label={`Open on ${release.source}`}
               onClick={() => bridge.openExternal(release.url!)}
               className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
               title={`Open on ${release.source}`}
             >
               <ExternalLink size={12} strokeWidth={1.75} />
-            </button>
+            </IconButton>
           )}
           {/* Soulseek search — same component Crate Digger uses, just fed the
               release's artist + title. Useful for tracking down vinyl-only / OOP
               material that the catalog sources only have a tracklist entry for. */}
-          <button
+          <Button
+            small
+            aria-expanded={slskdExpanded}
             onClick={() => setSlskdExpanded((s) => !s)}
             className="inline-flex items-center gap-1 rounded border border-[var(--color-accent)]/40 px-2 py-1 text-xs text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
             title="Search Soulseek for this release"
           >
-            {slskdExpanded ? <ChevronDown size={11} strokeWidth={1.75} /> : <Disc3 size={11} strokeWidth={1.75} />} Soulseek
-          </button>
+            {slskdExpanded ? (
+              <ChevronDown size={11} strokeWidth={1.75} />
+            ) : (
+              <Disc3 size={11} strokeWidth={1.75} />
+            )}{' '}
+            Soulseek
+          </Button>
           {/* Action buttons swap based on which tab the row is rendered in.
               `library` tab is read-only — the row's already in the user's library,
               there's nothing to want/dismiss. */}
           {filter === 'new' && (
             <>
-              <button
+              <Button
+                small
+                disabled={update.isPending}
                 onClick={() => update.mutate({ isSavedForLater: true })}
                 className="rounded border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
                 title="Move to Wanted tab"
               >
                 Want
-              </button>
-              <button
+              </Button>
+              <Button
+                small
+                disabled={update.isPending}
                 onClick={() => update.mutate({ isDismissed: true })}
                 className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
                 title="Move to Dismissed tab"
               >
                 Dismiss
-              </button>
+              </Button>
             </>
           )}
           {filter === 'saved' && (
-            <button
+            <Button
+              small
+              disabled={update.isPending}
               onClick={() => update.mutate({ isSavedForLater: false })}
               className="inline-flex items-center gap-1 rounded border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10"
               title="Remove from Wanted (back to New)"
             >
               <Check size={11} strokeWidth={2} /> Wanted
-            </button>
+            </Button>
           )}
           {filter === 'dismissed' && (
-            <button
+            <Button
+              small
+              disabled={update.isPending}
               onClick={() => update.mutate({ isDismissed: false })}
               className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted)] hover:text-white"
               title="Restore to New"
             >
               Restore
-            </button>
+            </Button>
           )}
         </div>
       </div>
+      {update.error && (
+        <StatusMessage tone="error">
+          Could not save release status: {update.error.message}. Try the action again.
+        </StatusMessage>
+      )}
       {ytExpanded && release.youTubeVideoId && (
         <div className="border-t border-[var(--color-border)] p-3">
           <div className="aspect-video w-full overflow-hidden rounded bg-black">
             <iframe
               src={youtubeLinks.embed(release.youTubeVideoId)}
-              title={`${release.title} — Tv audition`}
+              title={`${release.title} — YouTube preview`}
               className="h-full w-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen

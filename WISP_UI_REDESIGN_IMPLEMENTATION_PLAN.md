@@ -3,10 +3,11 @@
 Updated: 2026-10-01
 
 Status: UI 1 shared foundations/navigation (PR #42) are merged into develop.
-UI 2 Library/playlists/preparation is implemented on `codex/ui-phase-two-library`,
-including the approved full-height right inspector, wide, resizable preparation waveform and compact bottom
-playback overview. Automated evidence is recorded below and in the status log;
-owner visual review and native acceptance remain separate gates.
+UI 2 Library/playlists/preparation, including the approved full-height right
+inspector, is merged into develop (PR #43) and the owner approved its appearance.
+UI 3 Mix Plans/discovery is implemented on `codex/ui-phase-three-workspaces`.
+Automated evidence is recorded below and in the status log; phase-three owner
+visual review and native acceptance remain separate gates.
 
 ## Product outcome
 
@@ -238,29 +239,51 @@ Implementation boxes above do not close the owner/native acceptance gate below.
 
 ## Phase UI 3 Mix Plans and discovery
 
-- [ ] Make plan/artist/source navigators collapsible or resizable, with bounded
+- [x] Make plan/artist/source navigators collapsible or resizable, with bounded
   remembered widths and useful layouts at 1024px.
-- [ ] Mix Plans: separate plan selection from the main work area; reduce
+- [x] Mix Plans: separate plan selection from the main work area; reduce
   repeated selectors. Provide a readable ordered-track view and a deliberate
   transition-detail view, preserving existing chain editing and preview.
-- [ ] Discover: distinguish general music search from followed-library-artist
+- [x] Discover: distinguish general music search from followed-library-artist
   filtering, with clear modes and placeholders. Prioritise track results when
   relevant without silently changing provider capabilities or search budgets.
-- [ ] Discover: reduce repeated provider cards/badges, clarify follow/want/
+- [x] Discover: reduce repeated provider cards/badges, clarify follow/want/
   dismiss actions, and preserve direct YouTube link search and audition.
-- [ ] Crate Digger: prioritise common status filters, move others into More
+- [x] Crate Digger: prioritise common status filters, move others into More
   filters, clarify scan progress/results and show source context. Preserve
   upload-date ordering and explain undated items without a permanent text bar.
-- [ ] Wanted: use a readable wishlist layout with search, sort and Found/Waiting
+- [x] Wanted: use a readable wishlist layout with search, sort and Found/Waiting
   states. Make removal easy to understand; an undo replaces confirmation only
   if it can reliably restore the item without duplicate or lost state.
-- [ ] Apply common loading, empty, offline, quota, partial-result and failure
+- [x] Apply common loading, empty, offline, quota, partial-result and failure
   states. Avoid disruptive modal detail views where a stable inspector suffices.
 
 Acceptance: each page's search/filter scope is understandable before typing.
 Primary content remains usable at narrow widths, and source/plan selection does
 not consume most of the screen. Audition, Want, download handoff and plan
 editing continue working with accessible feedback on failure.
+
+UI 3 implementation evidence: the actual client is exercised with fictional
+plans, artists, 601 discoveries and Wanted items. Plan/artist/source navigators
+default to 240px instead of the previous 288/384/320px, with independent saved
+collapse/180–360px width preferences and keyboard resize. The ordered plan view
+has an optional transition inspector; chain editing and previews remain available.
+Discover places explicit search modes before the input and track results before
+artist results. Crate Digger uses a non-modal inspector, collapsed corrections
+and confirmation before discarding edited metadata. Wanted retains confirmation
+because its API cannot faithfully undo a deleted item's identity/history.
+
+Screenshots at 1024/1366 by 768 and 1920 by 1080 are under ignored
+`artifacts/ui-phase-three`. With playback and both plan/transition panels open,
+the ordered list is 420 by 290px, 602 by 326px and 1156 by 638px respectively;
+panels can be closed for browsing. CSS-equivalent 125/150 percent viewports are
+checked separately from physical Windows scaling. Existing library virtualisation,
+audio owners, download/search APIs, budgets and export formats are unchanged.
+Tests cover search scopes/direct URLs, Want/follow/dismiss/restore, auditions,
+download-dialog handoff, plan drops/reorder/notes/anchors/preview shortcuts,
+rescan results, parse/status/availability failures, retry and safe removal.
+Native Windows OLE, Photino/WebView2 focus/scaling, live providers and hardware
+remain owner acceptance checks; no new device compatibility claim is made.
 
 ## Phase UI 4 Remaining pages and final consistency
 

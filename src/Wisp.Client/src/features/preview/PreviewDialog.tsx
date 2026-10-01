@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, type KeyboardEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { blendRatings } from '../../api/blendRatings'
 import type { BlendRatingValue, Track } from '../../api/types'
@@ -7,6 +7,7 @@ import { useCrossfader } from '../../audio/useCrossfader'
 import { useCues } from '../cues/useCues'
 import { Crossfader } from './Crossfader'
 import { DeckPreview } from './DeckPreview'
+import { Modal } from '../../components/ui/Modal'
 
 interface Props {
   trackA: Track
@@ -31,28 +32,25 @@ export function PreviewDialog({ trackA, trackB, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ESC closes; 1-8 jumps deck A; Shift+1-8 jumps deck B.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      const target = e.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
-      const n = Number(e.key)
-      if (!Number.isInteger(n) || n < 1 || n > 8) return
-      const cues = e.shiftKey ? cuesB : cuesA
-      const deck = e.shiftKey ? deckB : deckA
-      const cue = cues[n - 1]
-      if (cue) {
-        deck.seek(cue.timeSeconds)
-        e.preventDefault()
-      }
+  // Keep preview shortcuts inside the modal; don't activate the library's keys.
+  // Native Modal owns Escape and focus containment.
+  const onPreviewKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null
+    if (
+      target &&
+      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+    )
+      return
+    const n = e.shiftKey && /^Digit[1-8]$/.test(e.code) ? Number(e.code.slice(-1)) : Number(e.key)
+    if (!Number.isInteger(n) || n < 1 || n > 8) return
+    const cues = e.shiftKey ? cuesB : cuesA
+    const deck = e.shiftKey ? deckB : deckA
+    const cue = cues[n - 1]
+    if (cue) {
+      deck.seek(cue.timeSeconds)
+      e.preventDefault()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, cuesA, cuesB, deckA, deckB])
+  }
 
   // Active deck = the one currently audible. While the crossfader is mid-way we treat
   // both as active (highlight both decks); past 0.66 / 0.34 we lock to one side.
@@ -60,10 +58,15 @@ export function PreviewDialog({ trackA, trackB, onClose }: Props) {
   const bHot = fade > 0.34
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-      <div className="flex max-h-full w-full max-w-3xl flex-col gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 shadow-2xl">
+    <Modal labelledBy="blend-preview-title" onClose={onClose} className="max-w-3xl">
+      <div
+        onKeyDown={onPreviewKey}
+        className="flex max-h-full w-full max-w-3xl flex-col gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 shadow-2xl"
+      >
         <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Blend preview</h2>
+          <h2 id="blend-preview-title" className="text-base font-semibold">
+            Blend preview
+          </h2>
           <button
             onClick={onClose}
             className="text-xl leading-none text-[var(--color-muted)] hover:text-white"
@@ -93,10 +96,11 @@ export function PreviewDialog({ trackA, trackB, onClose }: Props) {
         <BlendRatingRow trackAId={trackA.id} trackBId={trackB.id} />
 
         <p className="text-center text-[11px] text-[var(--color-muted)]">
-          Click waveform to seek · drag crossfader to blend · keys <kbd>1</kbd>–<kbd>8</kbd> jump Deck A cues, <kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>8</kbd> jump Deck B
+          Click waveform to seek · drag crossfader to blend · keys <kbd>1</kbd>–<kbd>8</kbd> jump
+          Deck A cues, <kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>8</kbd> jump Deck B
         </p>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -150,10 +154,11 @@ function CenterStrip({
 
   // Bars at avg BPM — a beat is 60/bpm; 4-beat bar is 240/bpm seconds.
   const avgBpm = useMemo(() => {
-    if (trackA.bpm !== null && trackB.bpm !== null) return (Number(trackA.bpm) + Number(trackB.bpm)) / 2
+    if (trackA.bpm !== null && trackB.bpm !== null)
+      return (Number(trackA.bpm) + Number(trackB.bpm)) / 2
     return Number(trackA.bpm ?? trackB.bpm ?? 0)
   }, [trackA.bpm, trackB.bpm])
-  const barsForOverlap = avgBpm > 0 ? Math.round((overlap / (240 / avgBpm))) : null
+  const barsForOverlap = avgBpm > 0 ? Math.round(overlap / (240 / avgBpm)) : null
 
   return (
     <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
@@ -192,10 +197,34 @@ function BlendRatingRow({ trackAId, trackBId }: { trackAId: string; trackBId: st
     <div className="flex items-center justify-between rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
       <span className="text-xs text-[var(--color-muted)]">Rate this blend</span>
       <div className="flex items-center gap-1">
-        <RatingButton emoji="🔥" label="Great" value="Great" current={current} onClick={(v) => upsert.mutate(v)} />
-        <RatingButton emoji="👍" label="Good" value="Good" current={current} onClick={(v) => upsert.mutate(v)} />
-        <RatingButton emoji="😐" label="Maybe" value="Maybe" current={current} onClick={(v) => upsert.mutate(v)} />
-        <RatingButton emoji="❌" label="Bad" value="Bad" current={current} onClick={(v) => upsert.mutate(v)} />
+        <RatingButton
+          emoji="🔥"
+          label="Great"
+          value="Great"
+          current={current}
+          onClick={(v) => upsert.mutate(v)}
+        />
+        <RatingButton
+          emoji="👍"
+          label="Good"
+          value="Good"
+          current={current}
+          onClick={(v) => upsert.mutate(v)}
+        />
+        <RatingButton
+          emoji="😐"
+          label="Maybe"
+          value="Maybe"
+          current={current}
+          onClick={(v) => upsert.mutate(v)}
+        />
+        <RatingButton
+          emoji="❌"
+          label="Bad"
+          value="Bad"
+          current={current}
+          onClick={(v) => upsert.mutate(v)}
+        />
       </div>
       {upsert.isError && <span className="ml-2 text-[11px] text-red-400">save failed</span>}
     </div>

@@ -2,10 +2,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { defaultLibraryColumns, normalizeLibraryColumns, type LibraryColumnPrefs } from '../features/library/libraryColumns'
 import type { DiscoverySort } from '../api/types'
+import { normalizeNavigation, type NavigationPrefs, type WorkspaceNavigationKey } from './workspaceNavigation'
 
 export type InspectorTab = 'overview' | 'recommendations' | 'cues' | 'metadata' | 'notes' | 'tags'
 
 interface UiPrefsState {
+  workspaceNavigation: NavigationPrefs
+  setWorkspaceNavigation: (key: WorkspaceNavigationKey, prefs: Partial<NavigationPrefs[WorkspaceNavigationKey]>) => void
   libraryColumns: LibraryColumnPrefs
   setLibraryColumns: (columns: LibraryColumnPrefs) => void
   libraryPrepHeight: number
@@ -71,6 +74,13 @@ const DEFAULT_WIDTH = 448
 export const useUiPrefs = create<UiPrefsState>()(
   persist(
     (set) => ({
+      workspaceNavigation: normalizeNavigation(null),
+      setWorkspaceNavigation: (key, prefs) => set(s => ({
+        workspaceNavigation: normalizeNavigation({
+          ...s.workspaceNavigation,
+          [key]: { ...s.workspaceNavigation[key], ...prefs },
+        }),
+      })),
       libraryColumns: defaultLibraryColumns,
       setLibraryColumns: (columns) => set({ libraryColumns: normalizeLibraryColumns(columns) }),
       libraryPrepHeight: 340,
@@ -128,6 +138,7 @@ export const useUiPrefs = create<UiPrefsState>()(
       merge: (persisted, current) => {
         const saved = persisted && typeof persisted === 'object' ? persisted as Partial<UiPrefsState> : {}
         return { ...current, ...saved,
+          workspaceNavigation: normalizeNavigation(saved.workspaceNavigation),
           libraryColumns: normalizeLibraryColumns(saved.libraryColumns),
           sidebarCollapsed: typeof saved.sidebarCollapsed === 'boolean' ? saved.sidebarCollapsed : current.sidebarCollapsed,
           sidebarCompactExpanded: typeof saved.sidebarCompactExpanded === 'boolean' ? saved.sidebarCompactExpanded : false,

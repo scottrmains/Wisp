@@ -3,6 +3,10 @@ import { useMutation } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { mixPlans } from '../../api/mixPlans'
 import type { MixPlanTrack, SuggestedRoute, Track } from '../../api/types'
+import { Modal } from '../../components/ui/Modal'
+import { Button, IconButton } from '../../components/ui/Button'
+import { StatusMessage } from '../../components/ui/StatusMessage'
+import { X } from 'lucide-react'
 import { formatBpm } from '../library/format'
 
 interface Props {
@@ -27,22 +31,30 @@ export function SuggestRouteDialog({ planId, fromMpt, toMpt, onClose, onAccept }
   })
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    <Modal
+      labelledBy="suggest-fillers-title"
+      onClose={onClose}
+      dismissOnBackdrop
+      className="max-w-2xl"
     >
       <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl">
         <header className="flex items-start justify-between border-b border-[var(--color-border)] px-5 py-3">
           <div>
-            <h2 className="text-base font-semibold">Suggest fillers</h2>
+            <h2 id="suggest-fillers-title" className="text-base font-semibold">
+              Suggest fillers
+            </h2>
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">
               Bridge between
-              <strong className="ml-1 text-white">{fromMpt.track.title ?? fromMpt.track.fileName}</strong>
+              <strong className="ml-1 text-white">
+                {fromMpt.track.title ?? fromMpt.track.fileName}
+              </strong>
               <span className="mx-1">→</span>
               <strong className="text-white">{toMpt.track.title ?? toMpt.track.fileName}</strong>
             </p>
           </div>
-          <button onClick={onClose} className="text-xl leading-none text-[var(--color-muted)] hover:text-white">×</button>
+          <IconButton small variant="quiet" label="Close filler suggestions" onClick={onClose}>
+            <X />
+          </IconButton>
         </header>
 
         <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-5 py-2 text-xs">
@@ -70,14 +82,15 @@ export function SuggestRouteDialog({ planId, fromMpt, toMpt, onClose, onAccept }
         <div className="min-h-0 flex-1 overflow-auto p-3">
           {!suggest.isPending && routes.length === 0 && !suggest.data && (
             <p className="px-2 py-4 text-sm text-[var(--color-muted)]">
-              Click <strong>Suggest routes</strong> to fetch candidates. Wisp ranks routes by transition score
-              and excludes archived tracks, blocked pairs, and tracks already in this plan.
+              Click <strong>Suggest routes</strong> to fetch candidates. Wisp ranks routes by
+              transition score and excludes archived tracks, blocked pairs, and tracks already in
+              this plan.
             </p>
           )}
           {!suggest.isPending && suggest.data && routes.length === 0 && (
             <p className="px-2 py-4 text-sm text-[var(--color-muted)]">
-              No clean route between these anchors at gap {gap}. Try a different gap, relax the anchors,
-              or add more candidates to your library.
+              No clean route between these anchors at gap {gap}. Try a different gap, relax the
+              anchors, or add more candidates to your library.
             </p>
           )}
 
@@ -96,7 +109,7 @@ export function SuggestRouteDialog({ planId, fromMpt, toMpt, onClose, onAccept }
           </ul>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -107,8 +120,9 @@ function RouteRow({
 }: {
   route: SuggestedRoute
   index: number
-  onAccept: () => void
+  onAccept: () => Promise<void>
 }) {
+  const accept = useMutation({ mutationFn: onAccept })
   return (
     <li className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
       <div className="mb-2 flex items-center justify-between">
@@ -117,23 +131,31 @@ function RouteRow({
           <span className="ml-2 text-xs text-[var(--color-muted)]">
             score {route.totalScore} · {route.summary}
             {route.warningCount > 0 && (
-              <span className="ml-1 inline-flex items-center gap-1 text-amber-400" title={`${route.warningCount} rough transition${route.warningCount === 1 ? '' : 's'}`}>
+              <span
+                className="ml-1 inline-flex items-center gap-1 text-amber-400"
+                title={`${route.warningCount} rough transition${route.warningCount === 1 ? '' : 's'}`}
+              >
                 · <AlertTriangle size={11} strokeWidth={2} /> {route.warningCount}
               </span>
             )}
           </span>
         </div>
-        <button
-          onClick={onAccept}
+        <Button
+          small
+          variant="primary"
+          disabled={accept.isPending}
+          onClick={() => accept.mutate()}
           className="rounded-md bg-[var(--color-accent)] px-3 py-1 text-xs font-medium text-white"
         >
-          Accept
-        </button>
+          {accept.isPending ? 'Adding route…' : 'Accept'}
+        </Button>
       </div>
       <ol className="space-y-1">
         {route.tracks.map((t, i) => (
           <li key={t.id} className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-2 text-xs">
-            <span className="text-[var(--color-muted)] tabular-nums">{(i + 1).toString().padStart(2, '0')}</span>
+            <span className="text-[var(--color-muted)] tabular-nums">
+              {(i + 1).toString().padStart(2, '0')}
+            </span>
             <span className="min-w-0 truncate" title={t.title ?? t.fileName}>
               <span className="text-[var(--color-muted)]">{t.artist ?? '?'}</span>
               <span className="mx-1">—</span>
@@ -145,6 +167,12 @@ function RouteRow({
           </li>
         ))}
       </ol>
+      {accept.error && (
+        <StatusMessage tone="error">
+          Could not add the full route: {accept.error.message}. Check the plan for tracks already
+          added before retrying.
+        </StatusMessage>
+      )}
     </li>
   )
 }

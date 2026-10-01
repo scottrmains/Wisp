@@ -1,7 +1,10 @@
-import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { artists } from '../../api/artists'
 import type { ArtistCandidate, ArtistSummary, CatalogSource } from '../../api/types'
+import { Modal } from '../../components/ui/Modal'
+import { Button, IconButton } from '../../components/ui/Button'
+import { StatusMessage } from '../../components/ui/StatusMessage'
+import { X } from 'lucide-react'
 
 interface Props {
   artist: ArtistSummary
@@ -40,42 +43,44 @@ export function ArtistMatchModal({ artist, source, onClose, onMatched }: Props) 
     },
   })
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   const copy = sourceCopy[source]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+    <Modal labelledBy="artist-match-title" onClose={onClose} className="max-w-md">
       <div className="flex max-h-full w-full max-w-md flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] shadow-2xl">
         <header className="flex items-start justify-between border-b border-[var(--color-border)] px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold">
+            <h2 id="artist-match-title" className="text-base font-semibold">
               Match "{artist.name}" on <span className="text-[var(--color-accent)]">{source}</span>
             </h2>
             <p className="text-xs text-[var(--color-muted)]">{copy.hint}</p>
           </div>
-          <button onClick={onClose} className="text-xl leading-none text-[var(--color-muted)] hover:text-white">
-            ×
-          </button>
+          <IconButton small variant="quiet" label="Close artist matching" onClick={onClose}>
+            <X />
+          </IconButton>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {candidates.isLoading && <p className="px-5 py-4 text-sm text-[var(--color-muted)]">{copy.searching}</p>}
+          {candidates.isLoading && (
+            <p className="px-5 py-4 text-sm text-[var(--color-muted)]">{copy.searching}</p>
+          )}
           {candidates.error && (
-            <p className="px-5 py-4 text-sm text-red-400">{(candidates.error as Error).message}</p>
+            <StatusMessage tone="error">
+              Could not load matches: {candidates.error.message}.{' '}
+              <Button small onClick={() => void candidates.refetch()}>
+                Retry matches
+              </Button>
+            </StatusMessage>
           )}
           {candidates.data && candidates.data.length === 0 && (
             <p className="px-5 py-4 text-sm text-[var(--color-muted)]">No matches found.</p>
           )}
           <ul>
             {candidates.data?.map((c) => (
-              <li key={c.externalId} className="flex items-center gap-3 border-b border-[var(--color-border)]/40 px-5 py-3">
+              <li
+                key={c.externalId}
+                className="flex items-center gap-3 border-b border-[var(--color-border)]/40 px-5 py-3"
+              >
                 {c.imageUrl ? (
                   <img src={c.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-full" />
                 ) : (
@@ -88,18 +93,25 @@ export function ArtistMatchModal({ artist, source, onClose, onMatched }: Props) 
                     {c.genres.length > 0 && ` · ${c.genres.slice(0, 3).join(', ')}`}
                   </p>
                 </div>
-                <button
+                <Button
+                  small
+                  variant="primary"
                   onClick={() => assign.mutate(c)}
                   disabled={assign.isPending}
                   className="shrink-0 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
                 >
                   Use this
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
+          {assign.error && (
+            <StatusMessage tone="error">
+              Could not save match: {assign.error.message}. Try Use this again.
+            </StatusMessage>
+          )}
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

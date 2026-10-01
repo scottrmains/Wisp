@@ -29,7 +29,10 @@ export function useMixPlans() {
 
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => mixPlans.update(id, { name }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['mixPlans'] }),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['mixPlans'] })
+      qc.invalidateQueries({ queryKey: ['mixPlan', id] })
+    },
   })
 
   const remove = useMutation({
@@ -42,6 +45,9 @@ export function useMixPlans() {
 
   return {
     plans: list.data ?? [],
+    loading: list.isLoading,
+    error: list.error,
+    retry: list.refetch,
     activePlanId,
     setActivePlanId,
     create,
@@ -106,5 +112,5 @@ export function useMixPlan(id: string | null) {
     },
   })
 
-  return { plan: detail.data, loading: detail.isLoading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack, setScope }
+  return { plan: detail.data, loading: detail.isLoading, error: detail.error, retry: detail.refetch, addTrack, moveTrack, updateNotes, setAnchor, removeTrack, setScope }
 }
