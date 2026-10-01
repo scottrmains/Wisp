@@ -1,10 +1,16 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { defaultLibraryColumns, normalizeLibraryColumns, type LibraryColumnPrefs } from '../features/library/libraryColumns'
 import type { DiscoverySort } from '../api/types'
+import { normalizeNavigation, type NavigationPrefs, type WorkspaceNavigationKey } from './workspaceNavigation'
 
 export type InspectorTab = 'overview' | 'recommendations' | 'cues' | 'metadata' | 'notes' | 'tags'
 
 interface UiPrefsState {
+  workspaceNavigation: NavigationPrefs
+  setWorkspaceNavigation: (key: WorkspaceNavigationKey, prefs: Partial<NavigationPrefs[WorkspaceNavigationKey]>) => void
+  libraryColumns: LibraryColumnPrefs
+  setLibraryColumns: (columns: LibraryColumnPrefs) => void
   libraryPrepHeight: number
   setLibraryPrepHeight: (height: number) => void
   prepWaveformVisible: boolean
@@ -35,6 +41,9 @@ interface UiPrefsState {
   /// Whether the App-level sidebar is collapsed to icons-only.
   sidebarCollapsed: boolean
   toggleSidebarCollapsed: () => void
+  /// Independent narrow-window override; no existing preference is reset.
+  sidebarCompactExpanded: boolean
+  setSidebarCompactExpanded: (expanded: boolean) => void
 
   /// Discover "Anywhere" search source toggles. Persisted so power users
   /// who want Spotify-only (saves YouTube quota) keep that pref across
@@ -65,13 +74,22 @@ const DEFAULT_WIDTH = 448
 export const useUiPrefs = create<UiPrefsState>()(
   persist(
     (set) => ({
+      workspaceNavigation: normalizeNavigation(null),
+      setWorkspaceNavigation: (key, prefs) => set(s => ({
+        workspaceNavigation: normalizeNavigation({
+          ...s.workspaceNavigation,
+          [key]: { ...s.workspaceNavigation[key], ...prefs },
+        }),
+      })),
+      libraryColumns: defaultLibraryColumns,
+      setLibraryColumns: (columns) => set({ libraryColumns: normalizeLibraryColumns(columns) }),
       libraryPrepHeight: 340,
       setLibraryPrepHeight: (height) => set({ libraryPrepHeight: Number.isFinite(height) ? Math.max(100, Math.min(1200, Math.round(height))) : 340 }),
       prepWaveformVisible: true,
       togglePrepWaveform: () => set((s) => ({ prepWaveformVisible: !s.prepWaveformVisible })),
       prepDetailsVisible: true,
       togglePrepDetails: () => set((s) => ({ prepDetailsVisible: !s.prepDetailsVisible })),
-      libraryFiltersVisible: true,
+      libraryFiltersVisible: false,
       toggleLibraryFilters: () => set((s) => ({ libraryFiltersVisible: !s.libraryFiltersVisible })),
       discoverySort: '-published',
       setDiscoverySort: (discoverySort) => set({ discoverySort }),
@@ -92,6 +110,8 @@ export const useUiPrefs = create<UiPrefsState>()(
       sidebarCollapsed: false,
       toggleSidebarCollapsed: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      sidebarCompactExpanded: false,
+      setSidebarCompactExpanded: (expanded) => set({ sidebarCompactExpanded: expanded }),
 
       // YouTube default-on per Phase 22 decision; quota meter signals when
       // it's running low so the user knows whether to flip it off.
@@ -115,8 +135,16 @@ export const useUiPrefs = create<UiPrefsState>()(
     }),
     {
       name: 'wisp.uiPrefs',
-      // Only the persistent width + collapsed toggle should hit localStorage —
-      // the last-used tab is intentionally session-y, but persisting it is harmless and small.
+      merge: (persisted, current) => {
+        const saved = persisted && typeof persisted === 'object' ? persisted as Partial<UiPrefsState> : {}
+        return { ...current, ...saved,
+          workspaceNavigation: normalizeNavigation(saved.workspaceNavigation),
+          libraryColumns: normalizeLibraryColumns(saved.libraryColumns),
+          sidebarCollapsed: typeof saved.sidebarCollapsed === 'boolean' ? saved.sidebarCollapsed : current.sidebarCollapsed,
+          sidebarCompactExpanded: typeof saved.sidebarCompactExpanded === 'boolean' ? saved.sidebarCompactExpanded : false,
+        }
+      },
+      // Presentation preferences only: no music, cue data or credentials.
     },
   ),
 )

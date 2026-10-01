@@ -1,6 +1,381 @@
 # Wisp implementation status
 
-Last reviewed: 2026-09-30
+Last reviewed: 2026-10-01
+
+## 2026-10-01: UI redesign final release verification
+
+- **Scope:** all UI phases #42–#45 are merged into develop and owner visually
+  approved. Verification uses merged `d02c8e7` in a separate checkout on
+  `codex/ui-release-verification`, with a fresh isolated profile and generated
+  audio. Owner library/cues/music/USBs and unrelated Discovery source edit are
+  untouched. No production merge, packaging, install or deployment performed.
+- **Release blocker corrected:** full browser verification caught sidebar
+  tooltips intercepting adjacent navigation clicks at scaled-equivalent widths.
+  The harden skill guided placement outside the sidebar hit area; hints remain
+  hoverable, keyboard-described and Escape-dismissible. Added an explicit
+  adjacent-navigation regression; no drag/audio/API/export behaviour changed.
+- **Backend:** all 488 tests pass (115 Core, 185 Infrastructure, 188 API), using
+  existing FFmpeg for isolated audio tests. Three additional full Infrastructure
+  runs pass. Previous PR #45 date-backfill timeout did not reproduce; its root
+  cause is not established. Merged develop validation run 36860987829 is green.
+- **Client:** after tooltip fix, 61 unit and 137 browser tests pass; client build
+  and browser-test TypeScript check pass. Lint has no errors/12 existing warnings;
+  existing roughly 511KB initial bundle warning remains. No root build/publish.
+- **Release support:** 8 dependency-download recovery tests, 23 marketing unit
+  tests, 17 marketing browser tests and marketing build pass locally. Main-only
+  production packaging/publishing/deployment gates and smoke scripts reviewed,
+  not executed locally or bypassed.
+- **Native:** actual Photino/WebView2 launches and loads production client/assets
+  from an isolated profile; generated track playback advances across Library,
+  Mix Plans and sidebar collapse. Xone:24C Input 1 captures stereo float 44.1kHz
+  for 67.76 seconds across navigation and Settings; capture start pauses library
+  audio, explicit stop reaches Ready without issue and complete WAV decodes with
+  FFmpeg. This near-silent test verifies lifecycle, not both musical deck routes
+  or listening quality. Native Settings exposes modal-only accessibility content
+  and dismisses with Escape without stopping capture.
+- **Still unverified:** successful sustained OLE drops to WISP playlists/plans,
+  Explorer and rekordbox. One automated multi-track drag releases before handoff,
+  reports it safely and leaves playlist empty; no success claimed. Native complete
+  keyboard focus loop/return is inconclusive in accessibility focus reporting;
+  full browser focus coverage passes. Actual Windows 125/150% display scaling
+  not changed/tested; browser equivalents remain separate. No live-provider,
+  physical USB or new CDJ hardware acceptance.
+- **Release gate:** merge verification fix into develop after CI, then owner
+  accepts remaining manual checks/limitations and authorises develop→main.
+  Main push builds the installer, verifies install/start/upgrade/uninstall and
+  publishes download/checksum plus website. No new installer exists yet.
+- **Owner release decision:** subsequently explicitly authorised merging this
+  verification PR and develop→main once checks pass, accepting the documented
+  remaining manual-check limits. This is release acceptance of limitations,
+  not evidence that deferred hardware/OLE/scaling checks passed. Production
+  pipeline completion and the new installer URL must be reported separately.
+
+## 2026-10-01: UI 4 remaining workspaces and final consistency implemented
+
+- **Delivery:** `codex/ui-phase-four-workspaces` from current origin/develop,
+  after owner-approved/merged UI 3 PR #44. PR targets develop; no merge,
+  auto-merge, production promotion or installer release authorised.
+- **Design:** frontend-design and normalize skills guided reuse of approved
+  display/body typography, shared tokens, Lucide icons, controls, section tabs
+  and native modals. Flat lists and existing workspaces remain; no new theme.
+- **Mixes:** Review retains the full waveform/zoom/loop workspace. Tracklist
+  and Exports use compact transport without replacing the audio owner or
+  unmounting editors; waveform height/preferences and comment drafts survive.
+  Section navigation precedes playback. More compact export options expose the
+  create action in the initial 1024x768 fixture viewport. Existing actual versus
+  planned tracklists, ratings, comments, revised plans and RF64 paths remain.
+- **Recording:** visible input/title/folder/optional blueprint and shared Start/
+  Stop controls; technical capture format is collapsed help. Input failures and
+  request errors stay outside collapsed diagnostics. No capture, checkpoint,
+  recovery, endpoint identity, metering, monitoring or gain-processing changes.
+- **Soulseek:** consistent page header, readable sortable results with full
+  Download labels and keyboard-accessible local scrolling. Download completion
+  is not called library import completion. Transfer/filter/retry/cancel/clear and
+  sharing use shared controls while retaining existing contracts. Search state,
+  batch feedback and header dropdown remain. Contextual search gains native
+  modal focus containment/restoration and prevents dismissal during active or
+  starting search/queue requests; no new polling/provider requests added.
+- **Settings:** Library / Connections / Audio tools / About & diagnostics,
+  with mounted forms preserving drafts across categories. Masked accessible
+  credential controls, visible loading/read/save/remove errors and read retries;
+  failed reads disable configuration writes. Soulseek form hydrates once, not
+  on every settings refresh. Explorer errors are actionable. Removed the inert
+  Coming soon placeholder, not implemented functionality. Credential drafts
+  are not stored in browser persistence; existing plain-JSON credential storage
+  remains unchanged and is not represented as encrypted.
+- **CDJ:** shared selector and export controls, accurate overview-waveform/
+  Memory Cue copy and restored keyboard focus. Physical device ID, disconnect/
+  drive-letter-reuse handling, layout/preflight checks, single-flight export,
+  replacement/backups and success/error dialogs remain. Historical CDJ-900
+  evidence is preserved; full CDJ-850 acceptance, beat grids/detailed scrolling
+  waveforms and residual reference-catalogue limitations remain explicit.
+- **Verified:** 61 unit tests and all 136 browser tests pass, including eight
+  UI 4 additions for compact layouts, stable audio, retained credential drafts,
+  failed reads/saves, scaled-equivalent Settings, modal focus, USB scope and
+  pending-search dismissal. Client build and browser-test TypeScript checks
+  pass. Lint: zero errors and 12 pre-existing warnings. Existing approximately
+  511KB initial-chunk warning remains; no new backend/native contracts required
+  dotnet verification or local packaging.
+- **Safety/limits:** fictional browser fixtures only; no working profiles,
+  library/music/cues, USB contents, recording captures, external services,
+  website/pipeline or installer changes. Owner visual/native acceptance stays
+  open: Photino focus/scaling, Windows OLE/folder/rekordbox dragging, Xone input
+  and device playback are not proved by browser mocks. Existing feature-local
+  sharing draft lifecycle is unchanged; category-preserved Settings drafts
+  deliberately disappear when Settings closes. Ignored after-renders are in
+  `artifacts/ui-phase-four`; prior audit is the before baseline.
+
+## 2026-10-01: UI 3 Mix Plans and discovery workspaces implemented
+
+- **Delivery:** `codex/ui-phase-three-workspaces`, based on current develop after
+  merged PR #43. Implements all seven UI 3 items; owner visual/native acceptance
+  remains open. No merge, auto-merge or production promotion is authorised.
+- **Shared workspace layout:** editorial headers, flat readable results and
+  existing shared buttons/tabs/status/dialogs/Lucide icons, following the
+  frontend-design and normalize skills. Plans/artists/sources have independent
+  collapsible, pointer/keyboard-resizable navigators. Persisted widths are bounded
+  to 180–360px/default 240px; invalid saved values fall back safely without
+  resetting existing preferences. No new font, theme or backend contract.
+- **Mix Plans:** ordered Tracklist is the default; Chain view remains available.
+  Optional transition details expose BPM/key warnings, preview and anchored filler
+  suggestions. Notes and energy/key/BPM charts are deliberately expanded.
+  Removed duplicate page-level plan selection from the global header. Preserved
+  entry identities, internal multi-drop ordering, anchors, notes, recording links,
+  recommendation playlist and export. Failed writes/partial adds are visible;
+  plan rename refreshes the selected plan as well as its navigator. Preview and
+  suggestions use native shared modals; local cue shortcuts remain active inside
+  preview without activating Library shortcuts. Closing details restores focus.
+- **Discover:** explicit My artists/Search anywhere modes precede the input;
+  local artist filtering is not described as track search. Existing provider
+  settings/debounce/budgets/direct YouTube URL search remain unchanged. Track/video
+  results precede artist results, with persistent Watch/Soulseek/Want controls.
+  Compact source matching replaces repeated provider tiles. Release status has
+  shared New/Wanted/In library/Dismissed controls; follow/save/refresh/matching
+  failures are actionable. Artist matching now contains and restores modal focus.
+- **Crate Digger:** clear active-source context, common All/New/Want/Already have
+  filters plus More filters; existing upload-date ordering/paging/SSE scan reports
+  remain. Scan completion explicitly reports no new tracks and updated dates.
+  Details use a scrollable non-modal right inspector, with corrections collapsed
+  until needed. Close/track/source changes confirm discarding edited metadata;
+  failed correction/status/availability writes retain retry controls. Correction
+  inputs lock during saving to prevent a completed request clearing newer edits.
+  Newly created sources enter the cached navigator before selection, avoiding a
+  stale-list reset during refetch; a deliberately delayed refresh test covers it.
+- **Wanted:** flat searchable wishlist with newest/oldest/artist sorting and
+  All/Waiting/Found states. Soulseek and source handoffs remain. Removing a wish
+  never deletes audio and still asks for confirmation: no misleading undo is
+  offered without an API capable of restoring original identity/history.
+- **Measured:** fictional-data renders at 1024/1366 by 768 and 1920 by 1080,
+  with playback active. Open plan navigator plus transition details leaves list
+  areas of 420x290, 602x326 and 1156x638px. All four pages avoid whole-window
+  horizontal overflow; independent scroll areas and collapse controls remain.
+  Ignored screenshots: `artifacts/ui-phase-three`. Equivalent CSS viewports at
+  125/150 percent and reduced-motion checks are not native Windows scaling tests.
+- **Verified:** 61 unit tests, 128 browser tests, client build and browser-test
+  TypeScript checks pass. Includes existing dual-drag, playlist/duplicate, cue,
+  loudness, recorder, Soulseek and CDJ-export UI suites; 19 new phase-three tests
+  cover page interactions/failures/playback/layout. Lint: zero errors, 12 existing
+  warnings. Build retains the existing approximately 512KB initial-chunk warning.
+- **Limits/safety:** no real library/profile/music/cue/USB writes, recording
+  capture, external provider requests, website/pipeline changes or installers.
+  Native Windows OLE/folder/rekordbox dragging, Photino focus, physical scaling,
+  live-provider results and Xone/device playback remain owner checks. Backend
+  and native APIs are unchanged; mock-bridge tests imply no CDJ compatibility.
+  Global page navigation still unmounts existing feature-local drafts: Crate
+  discard protection covers inspector/source changes, not navigation away from
+  the page. These edits are not represented as durable cross-page drafts.
+
+## 2026-10-01: Restore the approved full-height preparation sidebar
+
+- **Correction in PR #43:** the initial UI 2 implementation placed the cue/details
+  area inside the height-limited top preparation pane, diverging from the approved
+  prototype. Restored a separate right column spanning both waveform and track
+  list. It contains the track summary, saved Memory Cue bank and existing Markers,
+  Notes, Tags, Metadata and Matches sections; no cue/export semantics change.
+- **Independent controls:** Collapse track sidebar gives the left workspace its
+  full width without closing the waveform. Show track sidebar reopens it. Focus
+  list still hides both preparation areas without stopping playback. Stable portal
+  placement retains editor/tab state and the existing table/audio owners; collapse
+  returns keyboard focus to the reopen control. Existing shared tokens, controls
+  and Lucide icons were reused under the frontend-design/normalize skills.
+- **Measured:** the inspector is 602px high at 1024/1366 by 768 and 914px at
+  1920 by 1080, independent of waveform resizing. Compact browsing remains 11/11/19
+  complete rows. Narrow preparation tables scroll locally rather than overflowing
+  the whole window. Ignored screenshots remain under `artifacts/ui-phase-two`.
+- **Verified:** client build, browser-test TypeScript check, 58 unit tests and
+  all 109 browser tests pass; lint has zero errors and 12 existing warnings.
+  Added geometric coverage for full-height placement and independent resizing,
+  plus collapse/reopen focus, scroll, zoom, audio and unsaved-notes retention.
+  Existing drag, playlist, cue, recording, export UI and Soulseek suites pass.
+- **Limits:** owner/native visual and drag acceptance remain open. No backend,
+  real library/profile, music, USB, recording capture or installer changes. Client
+  build retains the existing approximately 514KB initial-chunk warning. This updates
+  the same open develop PR; no merge, auto-merge or production promotion.
+
+## 2026-10-01: UI 2 Library, playlists and precision preparation implemented
+
+- **Actual application migration:** implemented the approved Library direction
+  on `codex/ui-phase-two-library`, following merged UI 1/PR #42. A clear All
+  tracks/playlist header, primary search, optional advanced filters and one
+  selection toolbar replace the stacked action bars. Frequent Add to mix/Add
+  to playlist actions stay visible; Library actions contains maintenance,
+  loudness/versions, playlist removal and duplicate scan. Normalised/original
+  version feedback stays visible even when the File column is hidden.
+- **Playback versus preparation:** ordinary Play/double-click browsing uses a
+  compact full-width bottom overview. Prepare deliberately opens a wide top
+  waveform and right-hand cue/details sidebar. Focus list hides preparation
+  without stopping audio or resetting zoom, height or in-session editor drafts.
+  The single application-lifetime audio deck remains mounted across navigation.
+  Zoom offers whole track and 60/20/6/2-second playhead-centred windows; existing
+  beatgrid, beat snapping, hover/wheel magnifier and cue seeking remain. Keyboard
+  seeking and 10ms nudges update paused position immediately.
+- **Cue clarity:** separate saved Memory Cue/loop bank and editorial WISP
+  markers, millisecond timestamps, counts and explicit save/remove/error feedback.
+  Saving means selected in WISP for the next export, never automatic USB sync.
+  Hot Cues remain explicitly unsupported on CDJ-850; no new cue type/export
+  format is invented. Marker-generation tools are collapsible. Existing structural
+  suggestions run only during explicit preparation; failed cue reads cannot
+  masquerade as an empty list and trigger automatic writes.
+- **Space and columns:** active plan defaults to a 40px summary and expands
+  into a drawer without shrinking the track list. Existing drops, ordering,
+  notes and transition preview remain. DJ preparation/Recently added/File
+  management presets and selectable, pointer/keyboard-resizable columns persist
+  with bounded defaults; Recently added selects newest-first track sorting.
+  Track dates remain distinct from playlist-entry dates. Keyboard row actions,
+  context-menu navigation/Escape/focus return and table semantics are provided.
+- **Measured actual-client layouts:** 1,205 fictional tracks, playing audio,
+  selection and compact plan show 11 complete rows at 1024 by 768 and 1366 by
+  768 (429px list), and 19 at 1920 by 1080. Core DJ columns fit without horizontal
+  overflow. The default 328px preparation plus 12px handle leaves a 174px list/
+  four rows at the laptop sizes. Only 24 rows are mounted there; virtualisation
+  and the existing scroll owner are retained. Ignored screenshots are under
+  `artifacts/ui-phase-two`; no user library data is used.
+- **Verified:** 58 unit tests and all 108 browser tests pass; client build and
+  browser-test TypeScript checks pass. Lint has zero errors and the 12 existing
+  warnings. New browser coverage includes real WAV/audio ownership and paused
+  position retention across search/sort/paging, zoom/beatgrid/fine seek, pointer
+  and keyboard resize, preference persistence, Memory Cue save/remove/failure,
+  missing-audio recovery, failed library/track/cue reads and retry, plan multi-drop/
+  keyboard reorder, and equivalent 125/150 percent CSS viewports/reduced motion.
+  Existing native-drag-contract, duplicate/occurrence removal, loudness, recording,
+  Soulseek and CDJ-export UI suites still pass.
+- **Limits and safety:** native Windows OLE/folder/rekordbox dragging, Photino/
+  WebView2 focus, physical Windows scaling and Xone/audio-device acceptance remain
+  owner checks. Existing 4096-bucket peaks are reused: millisecond controls do
+  not promise sample-accurate waveform analysis. Build retains an approximately
+  512 KB initial-chunk warning and existing lazy feature loading. No backend,
+  database/profile, working music/cues, USB, website, pipeline or installer/publish
+  changes. Removed only the unused client BulkActionBar component; its source is
+  recoverable from Git. The two design skills guided reuse of UI 1 tokens, shared
+  controls and the approved content-first layout rather than a second design system.
+- **Next gate:** owner reviews the UI 2 PR into develop and checks playback,
+  Prepare/Focus list, cue editing and internal/external dragging locally. Phase
+  implementation items are checked; native/owner acceptance and production
+  promotion remain open. UI 3 then covers Mix Plans and discovery workspaces.
+
+## 2026-10-01: UI 1 application foundations and navigation implemented
+
+- **Implemented in PR #42:** approved dark editorial direction in the actual
+  client, with shared colour/type/spacing/focus tokens, self-hosted DM Sans and
+  Barlow Condensed fonts, reusable buttons, section navigation, native menus,
+  status messages, dialogs and hover/keyboard tooltips. Font licence downloads
+  are included in About and emitted with static-server-compatible `.txt` names.
+- **Navigation:** Workspace and Find music groups with consistent Lucide icons
+  and 38px rows; independently scrolling/searchable playlists, visible keyboard
+  management menus, current-page breadcrumbs and bounded global plan controls.
+  Compact navigation defaults consistently at 1100px, with additive saved
+  preferences and an explicit searchable playlist drawer. The drawer is non-modal
+  so Library selection and internal drops remain usable. Existing duplicate
+  confirmations, occurrence identities and native drag contracts are preserved.
+- **Accessibility:** Settings now uses a native modal, contains Tab/Shift+Tab
+  focus, prevents background interaction and returns focus on close. Common
+  confirmations/prompts/alerts and playlist creation use the same foundation;
+  queued prompts retain separate drafts. Playlist menus handle keyboard navigation,
+  errors and retry. Unavailable scan actions have focus-accessible explanations.
+- **Verified:** 56 unit tests and all 95 browser tests passed; client build and
+  browser-test TypeScript checks passed. Lint has zero errors and 12 existing
+  warnings. Browser renders cover 1024 by 768, 1366 by 768 and 1920 by 1080,
+  long names/55 playlists, all destinations, empty/error states, contrast,
+  reduced motion and equivalent 125/150 percent CSS viewports. Screenshots use
+  fictional fixtures under ignored `artifacts/ui-phase-one`.
+- **Regression evidence:** the existing internal/external drag-contract,
+  duplicate/removal, CDJ-export UI, recording, Mixes, loudness and Soulseek browser
+  suites pass. A real browser audio element/WAV fixture keeps playing across
+  navigation, sidebar changes and Settings; mocked active capture stays visible
+  without a stop/restart request. Native bridge mocks do not verify Windows OLE,
+  rekordbox dragging, WebView2 focus, Xone capture or CDJ hardware. Physical
+  Windows display scaling and owner visual/native acceptance remain outstanding.
+- **Limits and safety:** build emits a roughly 505 KB initial-chunk warning;
+  existing lazy feature loading is retained. No backend, user library/profile,
+  audio/cue data, USB, website or release pipeline changes; no installer/publish
+  was run. The actual Library/player/preparation layout is unchanged, including
+  existing waveform/beat-grid/cue behaviour. Its migration belongs to UI 2.
+- **Next gate:** owner reviews/merges PR #42 into develop and checks the native
+  interactions before UI 1 acceptance is marked complete. UI 2 then implements
+  the approved Library/preparation layout; production promotion remains owner-led.
+
+## 2026-10-01: Accepted UI direction and precision preparation preview
+
+- **Owner decision:** approved the shell direction with the adjustment that
+  compact bottom playback must not replace a usable cue editor. The design
+  approval gate is checked; application UI 1 and UI 2 remain unimplemented.
+- **Prototype revised:** wide top waveform above the track list, Memory Cue
+  bank on the right, whole-track through two-second zoom, centred playhead,
+  visible cue markers, click/keyboard seeking, millisecond timestamp display
+  and 10 ms adjustments. Pointer/keyboard resizing is bounded; Focus list
+  collapses preparation and reopening restores the session's chosen height
+  without resetting the position. Production preferences are still pending.
+- **Verified prototype:** Browse and Selected + plan retain eight full rows
+  at 1366 by 768 and 1024 by 768; expanded preparation retains four with the
+  waveform taking priority. All three states also passed at 1920 by 1080.
+  Browser checks passed for zoom, cue seeking, click seeking, fine positioning,
+  pointer and keyboard resize, height/position retention and Focus list, plus
+  existing search, selection, modal focus, tooltips and equivalent-zoom checks.
+- **Limits:** waveform samples and cues are fictional, not real audio analysis
+  or a detected beat grid. This verifies the layout and interaction proposal,
+  not audio-accurate cue placement in WISP. No application code, audio controller,
+  user profile, music, database, USB or release pipeline was changed.
+- **Next:** migrate the accepted shared foundations/navigation into WISP for
+  UI 1; implement the actual preparation layout and precision controls in UI 2.
+
+## 2026-09-30: UI 1 shell and Library approval preview
+
+- **Started:** isolated interactive design prototype in `design/ui-redesign`,
+  representing the visual gate before UI 1 application migration. No application
+  source, profile, audio, cue data, USB or production site is changed.
+- **Visual proposal:** marketing-inspired dark surfaces, DM Sans and condensed
+  headings, clearer navigation icons/groups, separately scrolling playlists,
+  compact-navigation playlist drawer, compact bottom transport and one right
+  pane for preparation or active plan. Shared selection tools replace search
+  tools instead of adding another permanent toolbar.
+- **Prototype only:** fictional Library/playlists, selection, cue feedback,
+  column controls, tooltip behaviour and native Settings dialog focus. Audio,
+  downloads, export, maintenance and other page destinations are not connected;
+  demo controls explicitly disclose this. The real Settings focus repair and
+  shared application foundations are still pending.
+- **Verified prototype:** browser checks for Browse/Prepare/Selected with plan
+  at 1024 by 768, 1366 by 768 and 1920 by 1080, retaining at least eight complete
+  track rows at the two laptop sizes. Long labels, search/empty state, Select all,
+  optional date column, playlist filtering and compact drawer, Settings focus
+  containment/return, keyboard tooltips/Escape and illustrative cue feedback
+  passed. Reduced-motion mode and equivalent 125/150 percent CSS viewport checks
+  passed; the latter are not physical Windows display-scaling evidence.
+- **Safety and limits:** browser reported no script/console errors or requests
+  to WISP APIs/external services. Fonts/icons reuse existing dependency assets;
+  no new package or generated asset is added to Git. Static prototype tables
+  do not validate real-library virtualisation, Windows OLE dragging, playback,
+  capture or CDJ hardware. These remain later implementation regression gates.
+- **Next gate:** owner approval of the visual example. The two prototype delivery
+  checkboxes are checked; UI 1 implementation and all later phases remain open.
+
+## 2026-09-30: Application UI redesign audit and phased plan
+
+- **Planning implemented:** tracked
+  [UI redesign plan](WISP_UI_REDESIGN_IMPLEMENTATION_PLAN.md) with four bounded
+  implementation phases, per-phase checklists, acceptance criteria and a shared
+  regression checklist. This documentation does not implement the redesign.
+- **Audit evidence:** 25 rendered states across all main pages, playlists,
+  preparation and Mixes sub-pages using fictional browser fixtures; laptop-width
+  checks include 1366 and 1024px. The sampled Library list shrank from 550px
+  alone to 80px with preparation, expanded plan and multi-selection. Settings
+  allowed keyboard focus behind its overlay. USB dialogs were source-reviewed,
+  not exercised against physical storage.
+- **Proposed direction:** marketing-inspired typography, crisp borders and
+  restrained purple in a dark desktop workspace; grouped navigation, usable
+  playlists in compact mode, contextual tools, configurable Library columns,
+  deliberate preparation/plan drawers and consistent accessible controls.
+  The owner must approve a shell/Library visual example before broad migration.
+- **Delivery:** shared foundations/navigation, Library/preparation, planning/
+  discovery, then remaining pages/final review, through codex branches and PRs
+  into develop. Owner merge and production-promotion policy is unchanged.
+- **Protected behaviour:** internal and external multi-file dragging, playlist
+  occurrence identity/duplicates, playback/capture across navigation, Memory
+  Cues, existing export safeguards, relinking/audio versions and plan/actual
+  recording tracklist separation. Native/hardware checks stay distinct from
+  mocked browser evidence; no new CDJ compatibility is claimed.
+- **Current limit:** all UI implementation phases and visual approval remain
+  pending. No application source, data, export engine or release pipeline changes
+  are included in this planning PR.
 
 ## 2026-09-30: Production marketing/release pipeline (deployment acceptance pending)
 

@@ -6,6 +6,8 @@ export type AppPage = 'library' | 'mix-plans' | 'discover' | 'wanted' | 'crate-d
 interface CurrentPageState {
   page: AppPage
   setPage: (page: AppPage) => void
+  preparationOpen: boolean
+  setPreparationOpen: (open: boolean) => void
 
   /// Library's TrackPrepWorkspace publishes whether it's currently showing.
   /// Used by App.tsx to suppress the redundant MiniPlayer when the workspace
@@ -21,6 +23,8 @@ export const useCurrentPage = create<CurrentPageState>()(
     (set) => ({
       page: 'library',
       setPage: (page) => set({ page }),
+      preparationOpen: false,
+      setPreparationOpen: (preparationOpen) => set({ preparationOpen }),
 
       libraryWorkspaceActive: false,
       setLibraryWorkspaceActive: (active) => set({ libraryWorkspaceActive: active }),

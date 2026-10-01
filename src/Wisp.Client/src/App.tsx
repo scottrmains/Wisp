@@ -10,6 +10,7 @@ import { AppHeader } from './features/shell/AppHeader'
 import { AppSidebar } from './features/shell/AppSidebar'
 import { bridge, bridgeAvailable } from './bridge'
 import { DialogHost } from './components/DialogHost'
+import { TooltipHost } from './components/ui/TooltipHost'
 import { RecordingInputIndicator } from './features/recordings/RecordingInputPage'
 import { MixRecordingIndicator } from './features/recordings/MixRecorderPanel'
 
@@ -40,18 +41,15 @@ const SoulseekPage = lazy(() => import('./features/soulseek/SoulseekPage').then(
 /// Settings stays as a modal overlay (contextual panel, not a section).
 function App() {
   const page = useCurrentPage((s) => s.page)
-  // When LibraryPage's TrackPrepWorkspace is showing, the workspace owns the
-  // playback UI for the selected track — the bottom MiniPlayer would just
-  // duplicate the same controls. Hide it in that case. The mini-player still
-  // renders when no row is selected, so users coming back from Mix Plans /
-  // Crate Digger with a track playing don't lose visibility of it.
+  // Only deliberate preparation replaces the compact bottom playback UI.
+  // Selection and browsing never hide the playing track's transport.
   const libraryWorkspaceActive = useCurrentPage((s) => s.libraryWorkspaceActive)
   const { activePlanId } = useActivePlan()
   const scan = useScan()
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Chain-dock collapse lives at the App level so the user's preference survives
   // section navigation (the dock unmounts/remounts as pages change otherwise).
-  const [chainCollapsed, setChainCollapsed] = useState(false)
+  const [chainCollapsed, setChainCollapsed] = useState(true)
 
   const pickAndScan = async () => {
     if (!bridgeAvailable()) return
@@ -88,7 +86,8 @@ function App() {
       // Never let an unhandled drop navigate the embedded browser or download.
       // Bubbling preserves playlist/mix handlers; no files are imported here.
       onDrop={(e) => e.preventDefault()}>
-      <AppSidebar />
+      <a className="app-skip-link" href="#workspace-content">Skip to workspace</a>
+      <AppSidebar onOpenSettings={() => setSettingsOpen(true)} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppHeader
@@ -99,7 +98,7 @@ function App() {
 
         <RecordingInputIndicator />
         <MixRecordingIndicator />
-        <main className="min-h-0 flex-1 overflow-hidden">
+        <main id="workspace-content" tabIndex={-1} className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<div className="p-6 text-sm text-[var(--color-muted)]">Loading workspaceâ€¦</div>}>
           {page === 'library' && <LibraryPage />}
           {page === 'mix-plans' && <MixPlansPage />}
@@ -137,6 +136,7 @@ function App() {
         </Suspense>
       )}
       <DialogHost />
+      <TooltipHost />
     </div>
   )
 }

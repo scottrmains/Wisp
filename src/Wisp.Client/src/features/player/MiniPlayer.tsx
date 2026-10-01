@@ -1,7 +1,10 @@
 import { useEffect } from 'react'
 import { PlaybackError } from './PlaybackError'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Pause, Play, X } from 'lucide-react'
+import { AlertTriangle, Pause, Play, SlidersHorizontal, X } from 'lucide-react'
+import { Button, IconButton } from '../../components/ui/Button'
+import { useCurrentPage } from '../../state/currentPage'
+import { useUiPrefs } from '../../state/uiPrefs'
 import { tracks as tracksApi } from '../../api/library'
 import { useAudioDeck } from '../../audio/useAudioDeck'
 import { usePlayer } from '../../state/player'
@@ -61,30 +64,28 @@ export function MiniPlayer() {
   const artist = track?.artist ?? 'Unknown'
 
   return (
-    <div className="flex shrink-0 flex-col border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+    <div className="compact-player" aria-label="Playback overview">
       {track && <PlaybackError track={track} error={deck.error} />}
       {/* Waveform: full width, click to seek, MiK-style band-coloured bars. */}
-      <div className="px-3 pt-2">
+      <div className="compact-player-waveform">
         <BandedWaveform
           trackId={trackId}
           duration={deck.duration}
           currentTime={deck.currentTime}
           onSeek={(t) => deck.seek(t)}
-          height={80}
+          height={32}
         />
       </div>
 
       {/* Controls strip below the waveform. */}
-      <div className="flex h-12 items-center gap-3 px-3">
-        <button
+      <div className="compact-player-controls">
+        <IconButton variant="primary"
           onClick={() => void deck.toggle()}
           disabled={deck.loading}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-sm text-white disabled:opacity-40"
-          aria-label={deck.isPlaying ? 'Pause' : 'Play'}
-          title={deck.isPlaying ? 'Pause' : 'Play'}
+          label={deck.isPlaying ? 'Pause' : 'Play'}
         >
           {deck.loading ? '…' : deck.isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
-        </button>
+        </IconButton>
 
         {/* Title + artist */}
         <div className="min-w-0 flex-1">
@@ -110,14 +111,19 @@ export function MiniPlayer() {
           </div>
         )}
 
-        <button
+        <Button onClick={() => {
+          useUiPrefs.getState().setInspectorCollapsed(false)
+          useCurrentPage.getState().setPreparationOpen(true)
+          useCurrentPage.getState().setPage('library')
+        }} tooltip="Open waveform, beatgrid and cue editor without changing playback">
+          <SlidersHorizontal size={16} /> Prepare
+        </Button>
+        <IconButton variant="quiet"
           onClick={clear}
-          className="shrink-0 text-[var(--color-muted)] hover:text-white"
-          aria-label="Stop and close player"
-          title="Stop and close player"
+          label="Stop and close player"
         >
           <X size={16} strokeWidth={1.75} />
-        </button>
+        </IconButton>
 
         {deck.error && (
           <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-red-400" title={deck.error}>

@@ -197,7 +197,11 @@ export function useAudioDeck(trackId: string | null): AudioDeck {
   const toggle = useCallback(async () => (audio.paused ? play() : pause()), [audio, play, pause])
   const seek = useCallback(
     (t: number) => {
+      if (!Number.isFinite(t)) return
       audio.currentTime = Math.max(0, Math.min(t, audio.duration || t))
+      // Paused seeks and fine nudges must redraw immediately, not wait for
+      // the next browser timeupdate (which can coalesce rapid key presses).
+      setCurrentTime(audio.currentTime)
     },
     [audio],
   )

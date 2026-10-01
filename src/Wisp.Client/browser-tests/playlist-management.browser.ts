@@ -97,7 +97,8 @@ test('remove one repeated entry via the toolbar without stopping playback or rem
   const row = page.locator('[data-playlist-entry-id="entry-0"]')
   await row.getByText('Alpha', { exact: true }).dblclick()
   await expect(page.getByRole('button', { name: 'Pause', exact: true }).first()).toBeVisible()
-  await page.getByRole('button', { name: 'Remove from playlist…', exact: true }).click()
+  await page.getByRole('button', { name: 'Library actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Remove from playlist…', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Remove from playlist?' })
   await expect(dialog).toContainText('1 selected entry')
   await expect(dialog).toContainText('Your music files, library tracks, cues and other playlists stay unchanged')
@@ -115,11 +116,12 @@ test('remove one repeated entry via the toolbar without stopping playback or rem
 test('right-click removal can be cancelled and failed saves can be retried', async ({ page }) => {
   const state = await setup(page)
   await page.locator('[data-playlist-entry-id="entry-1"]').click({ button: 'right' })
-  await page.getByRole('button', { name: 'Remove from playlist…', exact: true }).last().click()
+  await page.getByRole('menuitem', { name: 'Remove from playlist…', exact: true }).click()
   let dialog = page.getByRole('dialog', { name: 'Remove from playlist?' })
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   expect(state.requests).toHaveLength(0)
-  await page.getByRole('button', { name: 'Remove from playlist…', exact: true }).click()
+  await page.getByRole('button', { name: 'Library actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Remove from playlist…', exact: true }).click()
   dialog = page.getByRole('dialog', { name: 'Remove from playlist?' })
   state.failRemove(true)
   await dialog.getByRole('button', { name: 'Remove from playlist', exact: true }).click()
@@ -138,7 +140,8 @@ test('Ctrl+A removes all playlist occurrences across pages, not just unique audi
   await expect(page.getByText('1002 tracks selected', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Next page', exact: true }).click()
   await page.locator('[data-playlist-entry-id="entry-500"]').waitFor()
-  await page.getByRole('button', { name: 'Remove from playlist…', exact: true }).click()
+  await page.getByRole('button', { name: 'Library actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Remove from playlist…', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Remove from playlist?' })
   await expect(dialog).toContainText('1002 selected entries')
   await dialog.getByRole('button', { name: 'Remove from playlist', exact: true }).click()
@@ -213,12 +216,17 @@ for (const choice of ['Skip existing', 'Add again', 'Cancel']) {
   })
 }
 
+async function openDuplicateScan(page: Page) {
+  await page.getByRole('button', { name: 'Library actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Scan for duplicates…', exact: true }).click()
+}
+
 test('duplicate scan checks every page, confirms before removal, and refreshes counts', async ({ page }, testInfo) => {
   const state = await setup(page, 1002)
   await page.getByRole('button', { name: 'Next page', exact: true }).click()
   await page.locator('[data-playlist-entry-id="entry-500"]').waitFor()
   await page.setViewportSize({ width: 800, height: 600 })
-  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  await openDuplicateScan(page)
   const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
   await expect(dialog).toContainText('Found 1,000 extra entries across 1 track')
   await expect(dialog.getByRole('list')).toContainText('Alpha')
@@ -238,8 +246,8 @@ test('duplicate scan checks every page, confirms before removal, and refreshes c
 
 test('cancelling a duplicate scan leaves every entry untouched', async ({ page }) => {
   const state = await setup(page)
-  const scanButton = page.getByRole('button', { name: 'Scan for duplicates…', exact: true })
-  await scanButton.click()
+  const scanButton = page.getByRole('button', { name: 'Library actions', exact: true })
+  await openDuplicateScan(page)
   const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
   await expect(dialog).toContainText('Found 1 extra entry')
   await page.keyboard.press('Escape')
@@ -252,7 +260,7 @@ for (const count of [0, 1]) {
   test(`clean playlist with ${count} entries gives explicit no-duplicates feedback`, async ({ page }) => {
     const state = await setup(page, 1)
     if (count === 0) state.entries.first = []
-    await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+    await openDuplicateScan(page)
     const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
     await expect(dialog).toContainText(`No duplicates found. Checked ${count}`)
     await expect(dialog.getByRole('button', { name: /^Remove/ })).toHaveCount(0)
@@ -264,7 +272,7 @@ for (const count of [0, 1]) {
 test('scan and removal failures are visible and retryable without losing the preview', async ({ page }) => {
   const state = await setup(page)
   state.failScan(true)
-  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  await openDuplicateScan(page)
   const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
   await expect(dialog.getByRole('alert')).toContainText('Scan unavailable')
   state.failScan(false)
@@ -282,7 +290,7 @@ test('scan and removal failures are visible and retryable without losing the pre
 
 test('changed playlist requires a fresh scan and another explicit confirmation', async ({ page }) => {
   const state = await setup(page)
-  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  await openDuplicateScan(page)
   const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
   await expect(dialog).toContainText('Found 1 extra entry')
   state.entries.first.push({ playlistEntryId: 'concurrent-entry', id: 'track-0' })
@@ -301,7 +309,7 @@ test('changed playlist requires a fresh scan and another explicit confirmation',
 test('pending duplicate removal blocks repeated confirmation and modal dismissal', async ({ page }) => {
   const state = await setup(page)
   state.delayDuplicateRemove(1000)
-  await page.getByRole('button', { name: 'Scan for duplicates…', exact: true }).click()
+  await openDuplicateScan(page)
   const dialog = page.getByRole('dialog', { name: 'Scan playlist for duplicates' })
   await dialog.getByRole('button', { name: 'Remove 1 duplicate', exact: true }).click()
   await expect(dialog.getByRole('button', { name: 'Removing…', exact: true })).toBeDisabled()

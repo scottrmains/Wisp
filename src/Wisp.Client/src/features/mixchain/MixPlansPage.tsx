@@ -11,11 +11,27 @@ import {
 import {
   SortableContext,
   horizontalListSortingStrategy,
+  verticalListSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Play } from 'lucide-react'
+import {
+  Play,
+  Plus,
+  Trash2,
+  GripVertical,
+  Pin,
+  X,
+  ArrowRight,
+  ListOrdered,
+  Columns3,
+  Sparkles,
+} from 'lucide-react'
+import { Button, IconButton } from '../../components/ui/Button'
+import { StatusMessage } from '../../components/ui/StatusMessage'
+import { SectionTabs } from '../../components/ui/SectionTabs'
+import { WorkspaceNavigation, NavigationToggle } from '../../components/ui/WorkspaceNavigation'
 import type { MixPlanTrack, Track } from '../../api/types'
 import { confirmDialog, promptDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
@@ -33,14 +49,40 @@ import { PlanRecordingLinks } from '../recordings/PlanRecordingLinks'
 /// active plan on the right. No `fixed inset-0` overlay; lives inside the App
 /// layout so the mini-player stays visible at the bottom.
 export function MixPlansPage() {
-  const { plans, activePlanId, setActivePlanId, create, remove, rename } = useMixPlans()
-  const { plan, loading, addTrack, moveTrack, updateNotes, setAnchor, removeTrack, setScope } = useMixPlan(activePlanId)
+  const {
+    plans,
+    loading: plansLoading,
+    error: plansError,
+    retry: retryPlans,
+    activePlanId,
+    setActivePlanId,
+    create,
+    remove,
+    rename,
+  } = useMixPlans()
+  const {
+    plan,
+    loading,
+    error,
+    retry,
+    addTrack,
+    moveTrack,
+    updateNotes,
+    setAnchor,
+    removeTrack,
+    setScope,
+  } = useMixPlan(activePlanId)
   const [preview, setPreview] = useState<{ a: Track; b: Track } | null>(null)
   const [suggest, setSuggest] = useState<{ from: MixPlanTrack; to: MixPlanTrack } | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
+  const [view, setView] = useState<'list' | 'chain'>('list')
+  const [transitionId, setTransitionId] = useState<string | null>(null)
+  const [planSearch, setPlanSearch] = useState('')
+  const [dropError, setDropError] = useState<string | null>(null)
 
   // Library → plan drag-and-drop. Same shape as ChainDock's handlers.
-  const isWispDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('application/x-wisp-track-ids')
+  const isWispDrag = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes('application/x-wisp-track-ids')
   const onDragOver = (e: React.DragEvent) => {
     if (!isWispDrag(e) || !activePlanId) return
     e.preventDefault()
@@ -54,15 +96,20 @@ export function MixPlansPage() {
     if (!isWispDrag(e) || !activePlanId) return
     e.preventDefault()
     setIsDropTarget(false)
+    setDropError(null)
     try {
       const ids = JSON.parse(e.dataTransfer.getData('application/x-wisp-track-ids')) as string[]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string'))
+        throw new Error('Invalid WISP track selection')
       let after: string | null = null
       for (const trackId of ids) {
         const created = await addTrack.mutateAsync({ trackId, after })
         after = created.id
       }
     } catch (err) {
-      console.error('Drop failed', err)
+      setDropError(
+        `Could not add the full selection: ${(err as Error).message}. Successfully added tracks remain in the plan; check before retrying.`,
+      )
     }
   }
 
@@ -93,83 +140,123 @@ export function MixPlansPage() {
       confirmLabel: 'Create',
     })
     if (!name) return
-    await create.mutateAsync(name)
+    create.mutate(name)
   }
 
   const handleDelete = async (id: string, name: string) => {
     const ok = await confirmDialog({
       title: `Delete "${name}"?`,
-      message: 'The mix plan and its track ordering will be removed. The tracks themselves stay in your library.',
+      message:
+        'The mix plan and its track ordering will be removed. The tracks themselves stay in your library.',
       danger: true,
     })
     if (!ok) return
-    await remove.mutateAsync(id)
+    remove.mutate(id)
   }
 
   const summary = computePlanSummary(plan)
   const warningsByTransition = indexWarningsByTransition(summary.warnings)
+  const transitionIndex = plan?.tracks.findIndex((t) => t.id === transitionId) ?? -1
+  const from = transitionIndex >= 0 ? plan?.tracks[transitionIndex] : undefined
+  const to = transitionIndex >= 0 ? plan?.tracks[transitionIndex + 1] : undefined
+  const mutationError = [
+    create,
+    remove,
+    rename,
+    addTrack,
+    moveTrack,
+    updateNotes,
+    setAnchor,
+    removeTrack,
+    setScope,
+  ].find((m) => m.isError)?.error
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Mix Plans</h1>
-          <p className="text-xs text-[var(--color-muted)]">
-            Build, preview and tune sets. Drag to reorder, click between cards to audition the transition.
-          </p>
+    <div className="feature-workspace mix-plans-workspace">
+      <header className="workspace-heading">
+        <NavigationToggle navigation="plans" label="plans" />
+        <div className="min-w-0 flex-1">
+          <h1>Mix Plans</h1>
+          <p>Shape the running order. Tune each transition.</p>
         </div>
+        <Button variant="primary" onClick={() => void handleCreate()} disabled={create.isPending}>
+          <Plus /> New mix plan
+        </Button>
       </header>
+      {mutationError && (
+        <StatusMessage tone="error">
+          Could not save plan change: {mutationError.message}. Try the action again.
+        </StatusMessage>
+      )}
+      {dropError && <StatusMessage tone="error">{dropError}</StatusMessage>}
 
       <div className="flex min-h-0 flex-1">
         {/* Plan list */}
-        <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--color-border)]">
-          <div className="border-b border-[var(--color-border)] p-2">
-            <button
-              onClick={handleCreate}
-              className="w-full rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white"
-            >
-              + New mix plan
-            </button>
-          </div>
+        <WorkspaceNavigation navigation="plans" label="Plans">
+          <label className="workspace-nav-search">
+            <span className="sr-only">Find a mix plan</span>
+            <input
+              value={planSearch}
+              onChange={(e) => setPlanSearch(e.target.value)}
+              placeholder="Find a plan…"
+            />
+          </label>
           <div className="min-h-0 flex-1 overflow-auto">
-            {plans.length === 0 && (
+            {plansLoading && (
+              <p className="workspace-empty" role="status">
+                Loading plans…
+              </p>
+            )}
+            {plansError && (
+              <StatusMessage tone="error">
+                Could not load plans.{' '}
+                <Button small onClick={() => void retryPlans()}>
+                  Retry plans
+                </Button>
+              </StatusMessage>
+            )}
+            {!plansLoading && !plansError && plans.length === 0 && (
               <p className="px-3 py-4 text-xs text-[var(--color-muted)]">
                 No plans yet. Create one to start building a set.
               </p>
             )}
-            {plans.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setActivePlanId(p.id)}
-                className={[
-                  'group flex w-full items-center justify-between border-b border-[var(--color-border)]/40 px-3 py-2 text-left text-sm hover:bg-white/5',
-                  p.id === activePlanId ? 'bg-[var(--color-accent)]/15 text-white' : 'text-[var(--color-muted)]',
-                ].join(' ')}
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {p.name}
-                  <span className="ml-2 text-[10px] text-[var(--color-muted)]">
-                    {p.trackCount} tracks
-                  </span>
-                </span>
-                <span
-                  role="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void handleDelete(p.id, p.name)
-                  }}
-                  className="ml-2 text-xs text-[var(--color-muted)] opacity-0 hover:text-red-400 group-hover:opacity-100"
-                  aria-label={`Delete ${p.name}`}
-                >
-                  delete
-                </span>
-              </button>
-            ))}
+            {plans.length > 0 &&
+              !plans.some((p) => p.name.toLowerCase().includes(planSearch.toLowerCase())) && (
+                <p className="workspace-empty">No plans match. Try a different name.</p>
+              )}
+            {plans
+              .filter((p) => p.name.toLowerCase().includes(planSearch.toLowerCase()))
+              .map((p) => (
+                <div key={p.id} className="workspace-nav-row" data-active={p.id === activePlanId}>
+                  <button
+                    className="workspace-nav-choice"
+                    aria-current={p.id === activePlanId ? 'page' : undefined}
+                    onClick={() => {
+                      setActivePlanId(p.id)
+                      setTransitionId(null)
+                    }}
+                    title={p.name}
+                  >
+                    <span className="truncate">{p.name}</span>
+                    <small>{p.trackCount} tracks</small>
+                  </button>
+                  <IconButton
+                    small
+                    variant="quiet"
+                    label={`Delete ${p.name}`}
+                    disabled={remove.isPending}
+                    onClick={() => void handleDelete(p.id, p.name)}
+                  >
+                    <Trash2 />
+                  </IconButton>
+                </div>
+              ))}
           </div>
-        </aside>
+        </WorkspaceNavigation>
 
         {/* Active plan — drop zone for library drags */}
         <main
+          aria-label="Plan workspace"
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
@@ -178,7 +265,15 @@ export function MixPlansPage() {
             isDropTarget ? 'bg-[var(--color-accent)]/10' : '',
           ].join(' ')}
         >
-          {!plan && !loading && (
+          {error && (
+            <StatusMessage tone="error">
+              Could not load the plan: {error.message}.{' '}
+              <Button small onClick={() => void retry()}>
+                Retry plan
+              </Button>
+            </StatusMessage>
+          )}
+          {!plan && !loading && !error && (
             <p className="flex flex-1 items-center justify-center text-sm text-[var(--color-muted)]">
               Pick a plan from the left, or create a new one.
             </p>
@@ -193,49 +288,167 @@ export function MixPlansPage() {
                 onScopeChange={(playlistId) => setScope.mutate(playlistId)}
               />
               <PlanRecordingLinks planId={plan.id} />
-              {plan.tracks.length > 0 && <ChainStats tracks={plan.tracks} />}
+              {plan.tracks.length > 0 && (
+                <details className="plan-overview">
+                  <summary>Energy, key and BPM journey</summary>
+                  <ChainStats tracks={plan.tracks} />
+                </details>
+              )}
+              <SectionTabs
+                label="Plan view"
+                active={view}
+                onSelect={setView}
+                items={[
+                  { id: 'list', label: 'Tracklist', icon: <ListOrdered /> },
+                  { id: 'chain', label: 'Chain view', icon: <Columns3 /> },
+                ]}
+              />
 
-              <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-6 py-4">
-                {plan.tracks.length === 0 && (
-                  <p className="py-6 text-sm text-[var(--color-muted)]">
-                    Empty plan. Head back to the Library and click <span className="rounded bg-[var(--color-accent)]/20 px-1.5 py-0.5 font-mono text-[var(--color-accent)]">+</span> on a row to add it here.
-                  </p>
-                )}
-                {plan.tracks.length > 0 && (
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={plan.tracks.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
-                      <ol className="flex items-stretch gap-2">
-                        {plan.tracks.map((mpt, i) => (
-                          <Fragment key={mpt.id}>
-                            <BigCard
-                              mpt={mpt}
-                              order={i + 1}
-                              onRemove={() => removeTrack.mutate(mpt.id)}
-                              onNotesChange={(notes) => updateNotes.mutate({ mptId: mpt.id, notes })}
-                              onToggleAnchor={() => setAnchor.mutate({ mptId: mpt.id, isAnchor: !mpt.isAnchor })}
-                            />
-                            {i < plan.tracks.length - 1 && (
-                              <TransitionGap
-                                warnings={
-                                  warningsByTransition.get(`${mpt.id}|${plan.tracks[i + 1].id}`) ?? []
+              <div className="plan-body">
+                <div className="plan-track-scroll" aria-label="Plan tracks">
+                  {plan.tracks.length === 0 && (
+                    <p className="py-6 text-sm text-[var(--color-muted)]">
+                      Empty plan. Head back to the Library and click{' '}
+                      <span className="rounded bg-[var(--color-accent)]/20 px-1.5 py-0.5 font-mono text-[var(--color-accent)]">
+                        +
+                      </span>{' '}
+                      on a row to add it here.
+                    </p>
+                  )}
+                  {plan.tracks.length > 0 && (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext
+                        items={plan.tracks.map((t) => t.id)}
+                        strategy={
+                          view === 'chain'
+                            ? horizontalListSortingStrategy
+                            : verticalListSortingStrategy
+                        }
+                      >
+                        <ol className={`plan-tracks plan-tracks--${view}`}>
+                          {plan.tracks.map((mpt, i) => (
+                            <Fragment key={mpt.id}>
+                              <BigCard
+                                mpt={mpt}
+                                order={i + 1}
+                                view={view}
+                                onRemove={() => removeTrack.mutate(mpt.id)}
+                                onNotesChange={(notes) =>
+                                  updateNotes.mutate({ mptId: mpt.id, notes })
                                 }
-                                onPreview={() =>
-                                  setPreview({ a: mpt.track, b: plan.tracks[i + 1].track })
-                                }
-                                // Suggest only fires when both sides are anchored — otherwise the
-                                // suggester has no clear "must include" pair to bridge between.
-                                onSuggest={
-                                  mpt.isAnchor && plan.tracks[i + 1].isAnchor
-                                    ? () => setSuggest({ from: mpt, to: plan.tracks[i + 1] })
-                                    : undefined
+                                onToggleAnchor={() =>
+                                  setAnchor.mutate({ mptId: mpt.id, isAnchor: !mpt.isAnchor })
                                 }
                               />
-                            )}
-                          </Fragment>
-                        ))}
-                      </ol>
-                    </SortableContext>
-                  </DndContext>
+                              {i < plan.tracks.length - 1 &&
+                                (view === 'chain' ? (
+                                  <li className="flex shrink-0">
+                                    <TransitionGap
+                                      warnings={
+                                        warningsByTransition.get(
+                                          `${mpt.id}|${plan.tracks[i + 1].id}`,
+                                        ) ?? []
+                                      }
+                                      onPreview={() =>
+                                        setPreview({ a: mpt.track, b: plan.tracks[i + 1].track })
+                                      }
+                                      // Suggest only fires when both sides are anchored — otherwise the
+                                      // suggester has no clear "must include" pair to bridge between.
+                                      onSuggest={
+                                        mpt.isAnchor && plan.tracks[i + 1].isAnchor
+                                          ? () => setSuggest({ from: mpt, to: plan.tracks[i + 1] })
+                                          : undefined
+                                      }
+                                    />
+                                  </li>
+                                ) : (
+                                  <li className="plan-transition-row">
+                                    <Button
+                                      small
+                                      variant="quiet"
+                                      aria-pressed={transitionId === mpt.id}
+                                      data-transition-track={mpt.id}
+                                      onClick={() => setTransitionId(mpt.id)}
+                                    >
+                                      <ArrowRight /> Transition {i + 1} → {i + 2}
+                                      {(warningsByTransition.get(
+                                        `${mpt.id}|${plan.tracks[i + 1].id}`,
+                                      )?.length ?? 0) > 0
+                                        ? ' · review'
+                                        : ''}
+                                    </Button>
+                                  </li>
+                                ))}
+                            </Fragment>
+                          ))}
+                        </ol>
+                      </SortableContext>
+                    </DndContext>
+                  )}
+                </div>
+                {from && to && (
+                  <aside className="plan-transition-inspector" aria-label="Transition details">
+                    <header className="workspace-inspector-heading">
+                      <h2>
+                        Transition {transitionIndex + 1} → {transitionIndex + 2}
+                      </h2>
+                      <IconButton
+                        small
+                        variant="quiet"
+                        label="Close transition details"
+                        onClick={() => {
+                          document
+                            .querySelector<HTMLButtonElement>(
+                              `[data-transition-track="${window.CSS.escape(from.id)}"]`,
+                            )
+                            ?.focus()
+                          setTransitionId(null)
+                        }}
+                      >
+                        <X />
+                      </IconButton>
+                    </header>
+                    <div className="p-4 space-y-4">
+                      <div>
+                        <p className="workspace-eyebrow">From</p>
+                        <p>{from.track.title ?? from.track.fileName}</p>
+                        <p className="text-xs text-[var(--color-muted)]">
+                          {formatBpm(from.track.bpm)} BPM · {from.track.musicalKey ?? 'Unknown key'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="workspace-eyebrow">Into</p>
+                        <p>{to.track.title ?? to.track.fileName}</p>
+                        <p className="text-xs text-[var(--color-muted)]">
+                          {formatBpm(to.track.bpm)} BPM · {to.track.musicalKey ?? 'Unknown key'}
+                        </p>
+                      </div>
+                      {(warningsByTransition.get(`${from.id}|${to.id}`) ?? []).map((w) => (
+                        <StatusMessage key={w.kind}>{w.message}</StatusMessage>
+                      ))}
+                      <p className="text-xs text-[var(--color-muted)]">
+                        Warnings are preparation hints, not a verdict on the mix. Use the track's
+                        Notes control for your transition notes.
+                      </p>
+                      <Button
+                        variant="primary"
+                        onClick={() => setPreview({ a: from.track, b: to.track })}
+                      >
+                        <Play /> Preview transition
+                      </Button>
+                      <Button
+                        disabled={!from.isAnchor || !to.isAnchor}
+                        tooltip="Pin both tracks as anchors to suggest filler tracks"
+                        onClick={() => setSuggest({ from, to })}
+                      >
+                        <Sparkles /> Suggest filler tracks
+                      </Button>
+                    </div>
+                  </aside>
                 )}
               </div>
             </>
@@ -271,17 +484,21 @@ export function MixPlansPage() {
 function BigCard({
   mpt,
   order,
+  view,
   onRemove,
   onNotesChange,
   onToggleAnchor,
 }: {
   mpt: MixPlanTrack
   order: number
+  view: 'list' | 'chain'
   onRemove: () => void
   onNotesChange: (notes: string) => void
   onToggleAnchor: () => void
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mpt.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: mpt.id,
+  })
   const [notes, setNotes] = useState(mpt.transitionNotes ?? '')
   const playTrack = usePlayer((s) => s.playTrack)
 
@@ -296,30 +513,35 @@ function BigCard({
       ref={setNodeRef}
       style={style}
       className={[
-        'flex w-64 shrink-0 flex-col rounded-md border bg-[var(--color-surface)] p-3',
-        mpt.isAnchor ? 'border-[var(--color-accent)]/60 ring-1 ring-[var(--color-accent)]/40' : 'border-[var(--color-border)]',
+        `plan-track plan-track--${view}`,
+        mpt.isAnchor
+          ? 'border-[var(--color-accent)]/60 ring-1 ring-[var(--color-accent)]/40'
+          : 'border-[var(--color-border)]',
       ].join(' ')}
     >
       <div className="flex items-start gap-2">
         <span className="inline-flex h-6 min-w-[2rem] items-center justify-center rounded bg-[var(--color-accent)]/20 px-1.5 text-xs font-semibold text-[var(--color-accent)] tabular-nums">
           {order.toString().padStart(2, '0')}
         </span>
-        <button
+        <IconButton
+          small
+          variant="quiet"
           onClick={() => playTrack(mpt.track.id)}
           className="text-[var(--color-muted)] hover:text-[var(--color-accent)]"
-          title="Play in mini-player"
-          aria-label="Play in mini-player"
+          label="Play in mini-player"
         >
           <Play size={11} fill="currentColor" />
-        </button>
-        <button
+        </IconButton>
+        <IconButton
+          small
+          variant="quiet"
           {...attributes}
           {...listeners}
           className="cursor-grab text-[var(--color-muted)] hover:text-white active:cursor-grabbing"
-          aria-label="Drag to reorder"
+          label="Drag to reorder"
         >
-          ⋮⋮
-        </button>
+          <GripVertical />
+        </IconButton>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" title={mpt.track.title ?? ''}>
             {mpt.track.title ?? mpt.track.fileName}
@@ -328,21 +550,33 @@ function BigCard({
             {mpt.track.artist ?? 'Unknown'}
           </p>
         </div>
-        <button
+        <IconButton
+          small
+          variant="quiet"
           onClick={onToggleAnchor}
-          aria-label={mpt.isAnchor ? 'Unpin anchor' : 'Pin as anchor'}
-          title={mpt.isAnchor ? 'Unpin anchor — track can move freely' : 'Pin as anchor — fixed position for route suggester'}
-          className={mpt.isAnchor ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)] hover:text-white'}
+          label={mpt.isAnchor ? 'Unpin anchor' : 'Pin as anchor'}
+          tooltip={
+            mpt.isAnchor
+              ? 'Unpin anchor — track can move freely'
+              : 'Pin as anchor — fixed position for route suggester'
+          }
+          className={
+            mpt.isAnchor
+              ? 'text-[var(--color-accent)]'
+              : 'text-[var(--color-muted)] hover:text-white'
+          }
         >
-          📌
-        </button>
-        <button
+          <Pin />
+        </IconButton>
+        <IconButton
+          small
+          variant="quiet"
           onClick={onRemove}
-          aria-label="Remove from plan"
+          label="Remove from plan"
           className="text-[var(--color-muted)] hover:text-red-400"
         >
-          ×
-        </button>
+          <X />
+        </IconButton>
       </div>
 
       <div className="mt-3 flex justify-between text-xs text-[var(--color-muted)]">
@@ -351,16 +585,20 @@ function BigCard({
         <span>E{mpt.track.energy ?? '—'}</span>
       </div>
 
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        onBlur={() => {
-          if (notes !== (mpt.transitionNotes ?? '')) onNotesChange(notes)
-        }}
-        placeholder="Transition notes…"
-        rows={3}
-        className="mt-3 resize-none rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-2 text-xs text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
-      />
+      <details className="plan-track-notes" open={view === 'chain' ? true : undefined}>
+        <summary>Notes{notes ? ' · added' : ''}</summary>
+        <textarea
+          aria-label={`Transition notes for ${mpt.track.title ?? mpt.track.fileName}`}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={() => {
+            if (notes !== (mpt.transitionNotes ?? '')) onNotesChange(notes)
+          }}
+          placeholder="Transition notes…"
+          rows={3}
+          className="mt-3 resize-none rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-2 text-xs text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
+        />
+      </details>
     </li>
   )
 }

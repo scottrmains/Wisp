@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mkdir } from 'node:fs/promises'
 import type { CdjUsbDevice } from '../src/api/cdjExport'
 
 const usb: CdjUsbDevice = { deviceId: 'disk-A', rootPath: 'F:\\', label: 'DJ USB', model: 'Flash drive',
@@ -157,4 +158,28 @@ test('empty and failed device discovery are actionable and refresh can recover',
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await page.getByLabel('Connected USB', { exact: true }).selectOption('disk-A')
   await expect(page.getByRole('button', { name: 'Review export' })).toBeEnabled()
+})
+
+test('UI4 USB selector shows accurate scope and keyboard dismissal restores export focus', async ({
+  page,
+}) => {
+  const state = await setup(page, false, false, false)
+  const dialog = page.getByRole('dialog', { name: 'Choose your USB' })
+  await expect(dialog).toContainText('overview waveforms')
+  await expect(dialog).not.toContainText('waveforms are not generated')
+  await expect(dialog).toContainText('CDJ-850 profile remains unverified')
+  await dialog.getByText('Export limitations & USB safety').click()
+  await expect(dialog).toContainText('never formats or repartitions')
+  await expect(dialog).toContainText('detailed scrolling waveforms are not included')
+  await mkdir('../../artifacts/ui-phase-four', { recursive: true })
+  await page.screenshot({ path: '../../artifacts/ui-phase-four/cdj-usb.png' })
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).focus()
+  for (let i = 0; i < 10; i++) {
+    await page.keyboard.press('Tab')
+    expect(await page.evaluate(() => !!document.activeElement?.closest('dialog'))).toBe(true)
+  }
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Export to CDJ USB', exact: true })).toBeFocused()
+  expect(state.exports).toEqual([])
 })

@@ -12,6 +12,7 @@ export interface CueMarker {
   label?: string
   /// True when slskd / external generation suggested this; renders subtler.
   isAutoSuggested?: boolean
+  isDeviceCue?: boolean
 }
 
 interface Props {
@@ -37,6 +38,8 @@ interface Props {
   /// Time of beat 0 used to anchor the beat grid. Without this we don't know
   /// where the kick lands so beat ticks would be cosmetic noise.
   firstBeatSec?: number | null
+  /// Deliberate preparation zoom; zero/omitted retains the whole-track overview.
+  windowSeconds?: number
 }
 
 /// Flat-cyan waveform render in the Mixed-in-Key style. Every bucket is drawn
@@ -48,7 +51,10 @@ interface Props {
 /// Click anywhere to seek; vertical playhead overlays the current position.
 ///
 /// While peaks are computing, falls back to a thin baseline so the click-to-seek still works.
-export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange, bpm, firstBeatSec }: Props) {
+export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange, bpm, firstBeatSec, windowSeconds = 0 }: Props) {
+  const span = windowSeconds > 0 ? Math.min(windowSeconds, duration || windowSeconds) : duration
+  const start = windowSeconds > 0 ? Math.max(0, Math.min(duration - span, currentTime - span / 2)) : 0
+  const percent = (time: number) => span > 0 ? (time - start) / span * 100 : 0
   const revision = useAudioFiles((s) => s.revisions[trackId] ?? 0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -145,21 +151,28 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
       return
     }
 
-    drawWaveformBars(ctx, peaks.full, cssWidth, cssHeight)
-  }, [peaks, height, containerWidth])
+    if (windowSeconds > 0) {
+      drawZoomedWaveformBars(ctx, peaks.full, cssWidth, cssHeight, start, span, duration)
+      for (const tick of beatTicksInRange(start, start + span, bpm ?? null, firstBeatSec ?? null)) {
+        const x = (tick.timeSeconds - start) / span * cssWidth
+        ctx.fillStyle = `rgba(243,240,231,${0.15 + tick.weight * 0.5})`
+        ctx.fillRect(x, 0, 1, tick.weight >= 0.6 ? cssHeight : 8)
+      }
+    } else drawWaveformBars(ctx, peaks.full, cssWidth, cssHeight)
+  }, [peaks, height, containerWidth, windowSeconds, start, span, duration, bpm, firstBeatSec])
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration) return
     const rect = e.currentTarget.getBoundingClientRect()
     const ratio = (e.clientX - rect.left) / rect.width
-    onSeek(Math.max(0, Math.min(1, ratio)) * duration)
+    onSeek(start + Math.max(0, Math.min(1, ratio)) * span)
   }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration) return
     const rect = e.currentTarget.getBoundingClientRect()
     const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
-    const time = (x / rect.width) * duration
+    const time = start + (x / rect.width) * span
     setCursor({ x, clientX: e.clientX, clientY: e.clientY, time })
     cursorActiveRef.current = true
     onHoverChange?.(time)
@@ -195,7 +208,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  const playheadPct = duration > 0 ? (currentTime / duration) * 100 : 0
+  const playheadPct = percent(currentTime)
 
   return (
     <div
@@ -206,10 +219,18 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
       className="relative w-full cursor-crosshair overflow-hidden rounded bg-[var(--color-bg)]"
       style={{ height }}
       role="slider"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+        e.preventDefault(); e.stopPropagation()
+        const step = e.shiftKey ? 0.01 : windowSeconds > 0 ? 0.1 : 1
+        onSeek(e.key === 'Home' ? 0 : e.key === 'End' ? duration : Math.max(0, Math.min(duration, currentTime + (e.key === 'ArrowLeft' ? -step : step))))
+      }}
       aria-label="Seek"
       aria-valuemin={0}
       aria-valuemax={duration}
       aria-valuenow={currentTime}
+      aria-valuetext={`${formatTimeFine(currentTime)} of ${formatTimeFine(duration)}`}
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
       {loading && (
@@ -232,9 +253,9 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           play affordance is "start from this cue". Sections render BEFORE
           markers so markers stay clickable on top. */}
       {cues && duration > 0 && cues.map((c, i) => {
-        const startPct = (c.timeSeconds / duration) * 100
+        const startPct = Math.max(0, percent(c.timeSeconds))
         const nextTime = i + 1 < cues.length ? cues[i + 1].timeSeconds : duration
-        const endPct = (nextTime / duration) * 100
+        const endPct = Math.min(100, percent(nextTime))
         if (startPct >= 100 || endPct <= startPct) return null
         return (
           <div
@@ -277,9 +298,9 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           the bare waveform). The play-from-cue affordance is the ▶
           button inside the section overlay, not the marker itself. */}
       {cues && duration > 0 && cues.map((c) => {
-        const left = (c.timeSeconds / duration) * 100
+        const left = percent(c.timeSeconds)
         if (left < 0 || left > 100) return null
-        const tone = c.isAutoSuggested ? 'bg-amber-400/60' : 'bg-emerald-400/80'
+        const tone = c.isDeviceCue ? 'bg-emerald-400/80' : c.isAutoSuggested ? 'bg-amber-400/60' : 'bg-[var(--ui-accent-text)]'
         return (
           <div
             key={c.id}
@@ -319,7 +340,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           user is already on a beat the green wins visually. */}
       {cursor && bpm && bpm > 0 && firstBeatSec !== null && firstBeatSec !== undefined && duration > 0 && (() => {
         const snapTime = snapToBeat(cursor.time, bpm, firstBeatSec)
-        const snapPct = (snapTime / duration) * 100
+        const snapPct = percent(snapTime)
         if (snapPct < 0 || snapPct > 100) return null
         return (
           <div

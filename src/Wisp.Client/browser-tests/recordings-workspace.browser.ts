@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Locator } from '@playwright/test'
+import { mkdir } from 'node:fs/promises'
 import type { Tracklist } from '../src/features/recordings/useRecordingTracklist'
 import type { Feedback, RevisionRequest } from '../src/features/recordings/useRecordingFeedback'
 import type { MixExport } from '../src/features/recordings/useMixExports'
@@ -568,4 +569,39 @@ test('capture stops playback, blocks imports and records a live marker; import c
   await page.getByRole('button', { name: 'Mark this moment (live)', exact: true }).click()
   await expect.poll(() => fixture.reviews['mix-0'].markers.length).toBe(1)
   expect(fixture.reviews['mix-0'].markers[0].seconds).toBe(15)
+})
+
+test('UI4 compact mix sections preserve audio, waveform preferences and review drafts', async ({
+  page,
+}) => {
+  await mkdir('../../artifacts/ui-phase-four', { recursive: true })
+  await setup(page, false, true)
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await openDetails(page.locator('.wm-player-tools'))
+  await page.getByRole('slider', { name: 'Waveform height' }).fill('180')
+  await page.getByRole('button', { name: 'Play mix', exact: true }).click()
+  const audio = page.locator('.wm-mix-detail audio')
+  await audio.evaluate((el) => el.setAttribute('data-instance', 'UI4-original'))
+  const full = (await page.locator('.wm-sticky-player').boundingBox())!.height
+  for (const section of ['Tracklist', 'Exports']) {
+    await page
+      .getByRole('navigation', { name: 'Mix workspace sections' })
+      .getByRole('button', { name: section, exact: true })
+      .click()
+    await expect(audio).toHaveAttribute('data-instance', 'UI4-original')
+    await expect.poll(() => audio.evaluate((el: HTMLAudioElement) => el.paused)).toBe(false)
+    await expect(page.locator('.wm-waveform')).toBeHidden()
+    await expect(page.locator('.wm-player-tools')).toBeHidden()
+    const compact = (await page.locator('.wm-sticky-player').boundingBox())!.height
+    expect(compact).toBeLessThan(full - 100)
+    const primary = await page.getByRole('button', { name: section === 'Exports' ? 'Create export' : 'Copy blueprint as draft', exact: true }).boundingBox()
+    expect(primary!.y + primary!.height).toBeLessThan(768)
+    await page.screenshot({
+      path: `../../artifacts/ui-phase-four/mix-${section.toLowerCase()}-1024.png`,
+    })
+  }
+  await page.getByRole('button', { name: 'Review', exact: true }).click()
+  await expect(page.locator('.wm-waveform')).toBeVisible()
+  await expect(page.getByRole('slider', { name: 'Waveform height' })).toHaveValue('180')
+  await page.screenshot({ path: '../../artifacts/ui-phase-four/mix-review-1024.png' })
 })

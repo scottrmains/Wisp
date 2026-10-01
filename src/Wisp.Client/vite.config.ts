@@ -19,5 +19,14 @@ export default defineConfig({
   build: {
     outDir: apiWwwRoot,
     emptyOutDir: true,
+    // Preserve the font licences as readable static assets. Extensionless
+    // LICENSE files are not served by ASP.NET's default static-file provider.
+    rolldownOptions: {
+      output: {
+        assetFileNames: asset => asset.names.includes('LICENSE')
+          ? 'assets/[name]-[hash].txt'
+          : 'assets/[name]-[hash][extname]',
+      },
+    },
   },
 })

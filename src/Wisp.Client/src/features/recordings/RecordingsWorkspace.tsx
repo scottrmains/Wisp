@@ -31,6 +31,7 @@ import { useMixExports, exportName } from './useMixExports'
 import { MixesLibrary, type Mix } from './MixesLibrary'
 import { RecordingFileActions } from './RecordingFileActions'
 import { ReviseRecordingPlan } from './ReviseRecordingPlan'
+import { SectionTabs } from '../../components/ui/SectionTabs'
 import './mixes.css'
 
 interface Job {
@@ -329,7 +330,17 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
       {(details || mix.missing || mix.session.state === 'Recoverable') && (
         <RecordingFileActions session={mix.session} />
       )}
-      <div className="wm-sticky-player">
+      <SectionTabs
+        label="Mix workspace sections"
+        active={section}
+        onSelect={setSection}
+        items={[
+          { id: 'review', label: 'Review', icon: <MessageSquare /> },
+          { id: 'tracklist', label: 'Tracklist', icon: <ListMusic /> },
+          { id: 'exports', label: 'Exports', icon: <Download /> },
+        ]}
+      />
+      <div className="wm-sticky-player" data-compact={section !== 'review'}>
         {playableExports.length > 0 && (
           <label className="flex flex-wrap items-center gap-2 text-sm">
             Playback source
@@ -394,48 +405,50 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
             )
           }
         />
-        {peaks.data ? (
-          <>
-            <RecordingWaveform
-              height={waveHeight}
-              disabled={disabled}
-              peaks={peaks.data}
-              position={position}
-              start={start}
-              span={span}
-              seek={seek}
-              markers={[
-                ...(review.data?.markers ?? []).map((m) => ({ ...m, kind: 'bookmark' as const })),
-                ...(feedback.data?.annotations ?? []).map((a) => ({
-                  seconds: a.seconds,
-                  endSeconds: a.endSeconds,
-                  label: a.text,
-                  resolved: a.resolved,
-                  kind: 'comment' as const,
-                })),
-                ...(tracklist.data?.entries ?? [])
-                  .filter((e) => e.played && e.startSeconds != null)
-                  .map((e) => ({
-                    seconds: e.startSeconds!,
-                    label: e.title,
-                    kind: 'track' as const,
+        <div hidden={section !== 'review'}>
+          {peaks.data ? (
+            <>
+              <RecordingWaveform
+                height={waveHeight}
+                disabled={disabled}
+                peaks={peaks.data}
+                position={position}
+                start={start}
+                span={span}
+                seek={seek}
+                markers={[
+                  ...(review.data?.markers ?? []).map((m) => ({ ...m, kind: 'bookmark' as const })),
+                  ...(feedback.data?.annotations ?? []).map((a) => ({
+                    seconds: a.seconds,
+                    endSeconds: a.endSeconds,
+                    label: a.text,
+                    resolved: a.resolved,
+                    kind: 'comment' as const,
                   })),
-              ]}
-            />
-            <div className="flex justify-between text-xs tabular-nums text-[var(--color-muted)]">
-              <span>{clock(start)}</span>
-              <span>{clock(Math.min(mix.duration, start + span))}</span>
+                  ...(tracklist.data?.entries ?? [])
+                    .filter((e) => e.played && e.startSeconds != null)
+                    .map((e) => ({
+                      seconds: e.startSeconds!,
+                      label: e.title,
+                      kind: 'track' as const,
+                    })),
+                ]}
+              />
+              <div className="flex justify-between text-xs tabular-nums text-[var(--color-muted)]">
+                <span>{clock(start)}</span>
+                <span>{clock(Math.min(mix.duration, start + span))}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex min-h-40 items-center justify-center border-y border-[var(--color-border)] p-4 text-sm text-[var(--color-muted)]">
+              {mix.missing
+                ? 'Master file is missing. Reconnect its drive or use Relink missing master in Details & files.'
+                : mix.session.state !== 'Ready'
+                  ? `Recording is ${mix.session.state.toLowerCase()}. Playback becomes available after saving.`
+                  : 'Open Waveform & loop controls to prepare the waveform. Playback works while analysis is pending.'}
             </div>
-          </>
-        ) : (
-          <div className="flex min-h-40 items-center justify-center border-y border-[var(--color-border)] p-4 text-sm text-[var(--color-muted)]">
-            {mix.missing
-              ? 'Master file is missing. Reconnect its drive or use Relink missing master in Details & files.'
-              : mix.session.state !== 'Ready'
-                ? `Recording is ${mix.session.state.toLowerCase()}. Playback becomes available after saving.`
-                : 'Open Waveform & loop controls to prepare the waveform. Playback works while analysis is pending.'}
-          </div>
-        )}
+          )}
+        </div>
         {(error || save.error || peaks.error || review.error) && (
           <p role="alert" className="text-sm text-red-400">
             {error ?? save.error?.message ?? peaks.error?.message ?? review.error?.message}{' '}
@@ -516,7 +529,7 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
           Playback is disabled during capture to avoid feeding audio back into the recording.
         </p>
       )}
-      <details className="wm-player-tools">
+      <details className="wm-player-tools" hidden={section !== 'review'}>
         <summary>Waveform & loop controls</summary>
         <button
           className={button}
@@ -606,25 +619,7 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
           </div>
         </details>
       </details>
-      <nav className="wm-section-nav" aria-label="Mix workspace sections">
-        {(
-          [
-            { key: 'review', label: 'Review', Icon: MessageSquare },
-            { key: 'tracklist', label: 'Tracklist', Icon: ListMusic },
-            { key: 'exports', label: 'Exports', Icon: Download },
-          ] as const
-        ).map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            className="wm-section-button"
-            aria-pressed={section === key}
-            onClick={() => setSection(key)}
-          >
-            <Icon /> {label}
-          </button>
-        ))}
-      </nav>
-      <div hidden={section !== 'review'}>
+      <div className="wm-section-content" hidden={section !== 'review'}>
         <RecordingFeedbackPanel
           id={id}
           title={mix.session.title}
@@ -722,14 +717,14 @@ function MixPlayback({ mix, processing, job }: { mix: Mix; processing: boolean; 
           </div>
         </details>
       </div>
-      <div hidden={section !== 'exports'}>
+      <div className="wm-section-content" hidden={section !== 'exports'}>
         <RecordingExportPanel
           id={id}
           ready={mix.session.state === 'Ready' && !mix.missing}
           busy={!!recorder.data?.busy}
         />
       </div>
-      <div hidden={section !== 'tracklist'}>
+      <div className="wm-section-content" hidden={section !== 'tracklist'}>
         <RecordingTracklistPanel
           id={id}
           position={position}

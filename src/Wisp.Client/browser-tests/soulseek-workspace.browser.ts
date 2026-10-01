@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mkdir } from 'node:fs/promises'
 
 const searchId = '11111111-1111-4111-8111-111111111111'
 const hits = ['Big Buds.mp3', 'Olive remix.aif', 'Restricted.mp3'].map((filename, i) => ({
@@ -203,4 +204,46 @@ test('compact layout keeps navigation, search and transfer actions reachable', a
   await expect(page.getByRole('button', { name: 'Cancel Queued.mp3 from peer' })).toBeVisible()
   await page.screenshot({ path: '../../artifacts/soulseek-downloads.png', fullPage: true })
   expect(state.errors).toEqual([])
+})
+
+test('UI4 search results show sortable columns, full Download actions and an accessible scroll region', async ({
+  page,
+}) => {
+  const state = await setup(page)
+  await search(page)
+  await mkdir('../../artifacts/ui-phase-four', { recursive: true })
+  const results = page.getByRole('region', { name: 'Soulseek search results' })
+  await results.getByRole('button', { name: 'File', exact: true }).click()
+  await expect(results.getByRole('columnheader', { name: /File/ })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+  await expect(
+    results.getByRole('button', { name: 'Download Big Buds.mp3 from user-0' }),
+  ).toHaveText('Download')
+  for (const size of [
+    { width: 1024, height: 768 },
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(size)
+    await results.focus()
+    await expect(results).toBeFocused()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      size.width,
+    )
+    await page.screenshot({ path: `../../artifacts/ui-phase-four/soulseek-${size.width}.png` })
+  }
+  await page.getByRole('button', { name: 'Stop search', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Soulseek sections' })
+    .getByRole('button', { name: /Downloads/ })
+    .click()
+  await expect(page.getByText('Library import needs attention', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Retry import Needs import.mp3' })).toBeVisible()
+  await page.screenshot({ path: '../../artifacts/ui-phase-four/soulseek-downloads.png' })
+  await page.getByRole('button', { name: 'Sharing', exact: true }).click()
+  await page.screenshot({ path: '../../artifacts/ui-phase-four/soulseek-sharing.png' })
+  expect(state.errors).toEqual([])
+  expect(state.requests.filter((r) => r.path === '/api/soulseek/downloads')).toEqual([])
 })

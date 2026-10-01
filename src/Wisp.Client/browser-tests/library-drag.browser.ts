@@ -231,7 +231,7 @@ async function unifiedDrop(page: Page, withFiles = true) {
 test('Modern Windows rows start one dual-format drag; the same payload is accepted inside WISP across all pages', async ({ page }) => {
   const { additions, downloads } = await setup(page, true, undefined, true)
   await selectAll(page)
-  await expect(page.getByText('Drag rows to WISP playlists, rekordbox or folders', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Drag 1205 audio files to rekordbox' })).toBeEnabled()
   await page.evaluate(() => { window.dragTest.delay = 1000 })
   await rowDrag(page)
   await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(1)
@@ -239,7 +239,7 @@ test('Modern Windows rows start one dual-format drag; the same payload is accept
   await unifiedDrop(page)
   await page.mouse.up()
   await expect.poll(() => additions).toEqual([tracks.map(t => t.id)])
-  await expect(page.getByRole('status')).toContainText('Track selection dropped')
+  await expect(page.getByRole('status').filter({ hasText: 'Track selection dropped' })).toContainText('Track selection dropped')
   await selectAll(page)
   await page.getByRole('button', { name: 'Next page' }).click()
   await rowDrag(page, 'Track 0500')
@@ -287,7 +287,7 @@ test('Missing files still allow internal organisation without claiming a partial
   await unifiedDrop(page, false)
   await page.mouse.up()
   await expect.poll(() => additions).toEqual([tracks.map(t => t.id)])
-  await expect(page.getByRole('status')).toContainText('Some audio files are missing')
+  await expect(page.getByRole('status').filter({ hasText: 'Track selection dropped' })).toContainText('Some audio files are missing')
   expect(downloads).toEqual([])
 })
 

@@ -1,4 +1,5 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { StatusMessage } from '../../components/ui/StatusMessage'
 import {
   DndContext,
   closestCenter,
@@ -40,9 +41,21 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
   const { rename } = useMixPlans()
   const [preview, setPreview] = useState<{ a: Track; b: Track } | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
+  const dropBusy = useRef(false)
+  const [dropError, setDropError] = useState<string | null>(null)
   const playTrack = usePlayer((s) => s.playTrack)
   const summary = computePlanSummary(plan)
   const warningsByTransition = indexWarningsByTransition(summary.warnings)
+  useEffect(() => {
+    if (collapsed) return
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('dialog:modal')) return
+      event.preventDefault()
+      onToggle()
+    }
+    document.addEventListener('keydown', escape)
+    return () => document.removeEventListener('keydown', escape)
+  }, [collapsed, onToggle])
 
   // Library → chain drag-and-drop. The library writes the wisp track-ids payload on dragstart;
   // we accept here and append each track to the active plan in selection order.
@@ -62,8 +75,12 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
     if (!isWispDrag(e)) return
     e.preventDefault()
     setIsDropTarget(false)
+    if (dropBusy.current) return
+    dropBusy.current = true
+    setDropError(null)
     try {
-      const ids = JSON.parse(e.dataTransfer.getData('application/x-wisp-track-ids')) as string[]
+      const ids: unknown = JSON.parse(e.dataTransfer.getData('application/x-wisp-track-ids'))
+      if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string')) throw new Error('Invalid selection. Select the tracks again.')
       // Sequential addTrack chain: each call's result feeds the next as `after` so order is preserved.
       let after: string | null = null
       for (const trackId of ids) {
@@ -71,7 +88,9 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
         after = created.id
       }
     } catch (err) {
-      console.error('Drop failed', err)
+      setDropError(`Could not finish adding tracks: ${(err as Error).message}. Review the plan before retrying; earlier tracks may have been added.`)
+    } finally {
+      dropBusy.current = false
     }
   }
 
@@ -104,33 +123,38 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
 
   return (
     <section
+      aria-label="Active mix plan"
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={[
-        'flex max-h-[26rem] flex-col border-t bg-[var(--color-surface)] transition-colors',
+        `chain-dock flex flex-col border-t bg-[var(--color-surface)] transition-colors${collapsed ? '' : ' chain-dock--expanded'}`,
         isDropTarget
           ? 'border-[var(--color-accent)] ring-2 ring-inset ring-[var(--color-accent)]/40'
           : 'border-[var(--color-border)]',
       ].join(' ')}
     >
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2">
+      <header className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4">
         <div className="flex items-center gap-3">
           <button
             onClick={onToggle}
             className="text-[var(--color-muted)] hover:text-white"
             aria-label={collapsed ? 'Expand chain' : 'Collapse chain'}
+            aria-expanded={!collapsed}
+            data-ui-tooltip={collapsed ? 'Open active plan drawer. Drop WISP tracks here to add them.' : 'Close plan drawer without changing the plan'}
           >
             {collapsed
               ? <ChevronUp size={14} strokeWidth={1.75} />
               : <ChevronDown size={14} strokeWidth={1.75} />}
           </button>
-          <h2 className="text-sm font-semibold">{plan?.name ?? 'Mix chain'}</h2>
+          <h2 className="max-w-64 truncate text-sm font-semibold" data-ui-tooltip={plan?.name}>{plan?.name ?? 'Mix plan'}</h2>
           <span className="text-xs text-[var(--color-muted)]">
             {plan ? `${plan.tracks.length} tracks` : ''}
           </span>
         </div>
       </header>
+      {dropError && <StatusMessage tone="error">{dropError}</StatusMessage>}
+      {(moveTrack.error || updateNotes.error || removeTrack.error) && <StatusMessage tone="error">{(moveTrack.error || updateNotes.error || removeTrack.error)?.message}</StatusMessage>}
 
       {!collapsed && (
         <>
@@ -207,7 +231,7 @@ function SortableCard({
   onNotesChange: (notes: string) => void
   onPlay: () => void
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mpt.id })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: mpt.id })
   const [notes, setNotes] = useState(mpt.transitionNotes ?? '')
 
   const style = {
@@ -236,6 +260,7 @@ function SortableCard({
             <Play size={10} fill="currentColor" />
           </button>
           <button
+            ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
             className="cursor-grab text-[var(--color-muted)] hover:text-white active:cursor-grabbing"

@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AudioLines,
   Compass,
-  CircleDot,
   Heart,
   Library as LibraryIcon,
+  ListMusic,
+  Network,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Pickaxe,
-  Disc3,
   Plus,
-  SlidersVertical,
+  Search,
+  Settings2,
   Trash2,
+  MoreHorizontal,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import { playlists } from '../../api/playlists'
@@ -23,72 +29,73 @@ import { WispLogo } from '../../components/WispLogo'
 import { CreatePlaylistDialog } from '../library/CreatePlaylistDialog'
 import { useWantedTracks } from '../wanted/useWantedTracks'
 import { apiGet } from '../../api/client'
+import { Button, IconButton } from '../../components/ui/Button'
+import { Drawer } from '../../components/ui/Modal'
+import { ActionMenu } from '../../components/ui/ActionMenu'
+import { StatusMessage } from '../../components/ui/StatusMessage'
 
-interface SectionDef {
-  id: AppPage
-  label: string
-  icon: LucideIcon
-}
-
-const SECTIONS: SectionDef[] = [
+const WORKSPACE: { id: AppPage; label: string; icon: LucideIcon }[] = [
   { id: 'library', label: 'Library', icon: LibraryIcon },
-  { id: 'mix-plans', label: 'Mix Plans', icon: SlidersVertical },
-  { id: 'recordings', label: 'Mixes', icon: CircleDot },
-  { id: 'discover', label: 'Discover', icon: Compass },
-  { id: 'wanted', label: 'Wanted', icon: Heart },
-  { id: 'crate-digger', label: 'Crate Digger', icon: Pickaxe },
+  { id: 'mix-plans', label: 'Mix Plans', icon: ListMusic },
+  { id: 'recordings', label: 'Mixes', icon: AudioLines },
 ]
-
+const FIND_MUSIC: typeof WORKSPACE = [
+  { id: 'discover', label: 'Discover', icon: Compass },
+  { id: 'crate-digger', label: 'Crate Digger', icon: Pickaxe },
+  { id: 'wanted', label: 'Wanted', icon: Heart },
+]
 const WISP_DRAG_TYPE = 'application/x-wisp-track-ids'
 
-/// Left-rail navigation. Owns the cross-page section switcher AND (since 21b) the
-/// Playlists tree. Clicking a playlist scopes the Library view to it via
-/// `useActivePlaylist`. Right-click a playlist to rename / delete.
-///
-/// Drag-and-drop (this commit): library rows can be dragged onto a playlist
-/// entry to bulk-add via the existing /tracks/bulk endpoint.
-export function AppSidebar() {
+export function AppSidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const page = useCurrentPage((s) => s.page)
   const setPage = useCurrentPage((s) => s.setPage)
   const savedCollapsed = useUiPrefs((s) => s.sidebarCollapsed)
-  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 1000px)').matches)
-  const [expandedMixes, setExpandedMixes] = useState(false)
-  useEffect(() => { const media = window.matchMedia('(max-width: 1000px)'); const changed = () => setNarrow(media.matches); media.addEventListener('change', changed); return () => media.removeEventListener('change', changed) }, [])
-  const autoCompact = page === 'recordings' && narrow
-  const collapsed = autoCompact ? !expandedMixes : savedCollapsed
+  const compactExpanded = useUiPrefs((s) => s.sidebarCompactExpanded)
+  const setCompactExpanded = useUiPrefs((s) => s.setSidebarCompactExpanded)
   const toggle = useUiPrefs((s) => s.toggleSidebarCollapsed)
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 1100px)').matches)
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1100px)')
+    const changed = () => setNarrow(media.matches)
+    media.addEventListener('change', changed)
+    return () => media.removeEventListener('change', changed)
+  }, [])
+  const collapsed = narrow ? !compactExpanded : savedCollapsed
   const activePlaylistId = useActivePlaylist((s) => s.activePlaylistId)
   const setActivePlaylistId = useActivePlaylist((s) => s.setActivePlaylistId)
   const qc = useQueryClient()
-  const [contextMenu, setContextMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
-
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const playlistList = useQuery({
     queryKey: ['playlists'],
     queryFn: () => playlists.list(),
     staleTime: 30_000,
   })
-  // Count badge for the Wanted entry — reads the same TanStack cache the
-  // Wanted page uses, so a Want from Discover bumps the badge in real time.
-  const wantedTracks = useWantedTracks()
-  const wantedCount = wantedTracks.items.length
-  const soulseek = useQuery({ queryKey: ['soulseek-status'], queryFn: () => apiGet<{ isConfigured: boolean; hasUsername?: boolean; hasPassword?: boolean }>('/api/settings/soulseek'), staleTime: 60_000 })
-  const soulseekSetUp = soulseek.data?.isConfigured || (soulseek.data?.hasUsername && soulseek.data?.hasPassword)
-
+  const wantedCount = useWantedTracks().items.length
+  const soulseek = useQuery({
+    queryKey: ['soulseek-status'],
+    queryFn: () =>
+      apiGet<{ isConfigured: boolean; hasUsername?: boolean; hasPassword?: boolean }>(
+        '/api/settings/soulseek',
+      ),
+    staleTime: 60_000,
+  })
+  const soulseekSetUp =
+    soulseek.data?.isConfigured || (soulseek.data?.hasUsername && soulseek.data?.hasPassword)
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => playlists.update(id, { name }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['playlists'] }),
   })
-
   const remove = useMutation({
     mutationFn: (id: string) => playlists.delete(id),
     onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ['playlists'] })
-      // If the deleted playlist was scoping the library, drop the scope.
       if (activePlaylistId === id) setActivePlaylistId(null)
     },
   })
-
   const handleRename = async (id: string, currentName: string) => {
     const name = await promptDialog({
       title: 'Rename playlist',
@@ -97,9 +104,16 @@ export function AppSidebar() {
       confirmLabel: 'Rename',
     })
     if (!name || name === currentName) return
-    rename.mutate({ id, name })
+    try {
+      await rename.mutateAsync({ id, name })
+    } catch (error) {
+      await alertDialog({
+        title: 'Could not rename playlist',
+        message: (error as Error).message,
+        tone: 'error',
+      })
+    }
   }
-
   const handleDelete = async (id: string, name: string) => {
     const ok = await confirmDialog({
       title: `Delete playlist "${name}"?`,
@@ -107,116 +121,221 @@ export function AppSidebar() {
       danger: true,
     })
     if (!ok) return
-    remove.mutate(id)
+    try {
+      await remove.mutateAsync(id)
+    } catch (error) {
+      await alertDialog({
+        title: 'Could not delete playlist',
+        message: (error as Error).message,
+        tone: 'error',
+      })
+    }
   }
-
-  const onPlaylistClick = (id: string) => {
-    setActivePlaylistId(id)
-    setPage('library')
+  const filtered = (playlistList.data ?? []).filter((p) =>
+    p.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+  )
+  const playlistRows = (
+    <>
+      {playlistList.isLoading && (
+        <p role="status" className="p-2 text-xs text-[var(--color-muted)]">
+          Loading playlists…
+        </p>
+      )}
+      {playlistList.isError && (
+        <>
+          <StatusMessage tone="error">Could not load playlists.</StatusMessage>
+          <Button small onClick={() => void playlistList.refetch()}>
+            Retry playlists
+          </Button>
+        </>
+      )}
+      {playlistList.isSuccess && !playlistList.data.length && (
+        <p className="p-2 text-xs text-[var(--color-muted)]">
+          No playlists yet. Create one, then add or drag tracks into it.
+        </p>
+      )}
+      {!!playlistList.data?.length && !filtered.length && (
+        <p className="p-2 text-xs text-[var(--color-muted)]">
+          No matching playlists. Try another name.
+        </p>
+      )}
+      <ul aria-label="Saved playlists">
+        {filtered.map((p) => (
+          <PlaylistRow
+            key={p.id}
+            id={p.id}
+            name={p.name}
+            trackCount={p.trackCount}
+            active={page === 'library' && activePlaylistId === p.id}
+            onClick={() => {
+              setActivePlaylistId(p.id)
+              setPage('library')
+              setDrawerOpen(false)
+            }}
+            onRename={() => void handleRename(p.id, p.name)}
+            onDelete={() => void handleDelete(p.id, p.name)}
+          />
+        ))}
+      </ul>
+    </>
+  )
+  const newPlaylist = () => {
+    setDrawerOpen(false)
+    setCreateOpen(true)
   }
-
   return (
     <aside
-      className={[
-        'flex shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] transition-[width]',
-        collapsed ? 'w-12' : 'w-56',
-      ].join(' ')}
+      aria-label="WISP sidebar"
+      className={`app-sidebar${collapsed ? ' app-sidebar--compact' : ''}`}
     >
-      <div className="flex h-12 items-center justify-between border-b border-[var(--color-border)] px-3">
+      <div className="app-brand">
         {!collapsed && (
-          <div className="flex items-center gap-2">
+          <>
             <WispLogo size={30} />
-            <span className="text-sm font-semibold tracking-tight">Wisp</span>
-          </div>
+            <strong>WISP</strong>
+          </>
         )}
-        <button
-          onClick={() => autoCompact ? setExpandedMixes(!expandedMixes) : toggle()}
-          className={`flex items-center justify-center rounded text-[var(--color-muted)] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] ${collapsed ? '-mx-1 h-8 w-8' : 'ml-auto h-8 w-8'}`}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        <IconButton
+          label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          variant="quiet"
+          onClick={() => (narrow ? setCompactExpanded(!compactExpanded) : toggle())}
         >
-          {collapsed ? <WispLogo size={30} /> : '‹'}
-        </button>
+          {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+        </IconButton>
       </div>
-
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-        {SECTIONS.map((s) => (
+      <nav className="app-nav" aria-label="Main navigation">
+        <h2 className="app-nav-group">Workspace</h2>
+        {WORKSPACE.map((s) => (
           <SidebarButton
             key={s.id}
-            active={page === s.id && (s.id !== 'library' || activePlaylistId === null)}
+            {...s}
             collapsed={collapsed}
-            icon={s.icon}
-            label={s.label}
-            badge={s.id === 'wanted' && wantedCount > 0 ? wantedCount : undefined}
+            active={page === s.id && (s.id !== 'library' || activePlaylistId === null)}
             onClick={() => {
               if (s.id === 'library') setActivePlaylistId(null)
               setPage(s.id)
             }}
           />
         ))}
-        {soulseekSetUp && <SidebarButton active={page === 'soulseek'} collapsed={collapsed} icon={Disc3}
-          label="Soulseek" onClick={() => setPage('soulseek')} />}
-
-        {!collapsed && (
-          <>
-            <div className="mt-3 flex items-center justify-between px-2 pt-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
-              <span>Playlists</span>
-              <button
-                onClick={() => setCreateOpen(true)}
-                className="text-[var(--color-muted)] hover:text-white"
-                title="New playlist"
-                aria-label="New playlist"
-              >
-                <Plus size={14} strokeWidth={2} />
-              </button>
-            </div>
-            <ul className="flex flex-col gap-0.5 px-1 pt-1">
-              {playlistList.isLoading && (
-                <li className="px-2 py-1 text-[11px] text-[var(--color-muted)]">Loading…</li>
-              )}
-              {playlistList.data && playlistList.data.length === 0 && (
-                <li className="px-2 py-1 text-[11px] text-[var(--color-muted)]">
-                  No playlists yet — click + or drag tracks here.
-                </li>
-              )}
-              {(playlistList.data ?? []).map((p) => (
-                <PlaylistRow
-                  key={p.id}
-                  id={p.id}
-                  name={p.name}
-                  trackCount={p.trackCount}
-                  active={page === 'library' && activePlaylistId === p.id}
-                  onClick={() => onPlaylistClick(p.id)}
-                  onContextMenu={(x, y) => setContextMenu({ id: p.id, name: p.name, x, y })}
-                />
-              ))}
-            </ul>
-          </>
+        <h2 className="app-nav-group">Find music</h2>
+        {FIND_MUSIC.map((s) => (
+          <SidebarButton
+            key={s.id}
+            {...s}
+            collapsed={collapsed}
+            active={page === s.id}
+            badge={s.id === 'wanted' && wantedCount > 0 ? wantedCount : undefined}
+            onClick={() => setPage(s.id)}
+          />
+        ))}
+        {soulseekSetUp && (
+          <SidebarButton
+            label="Soulseek"
+            icon={Network}
+            collapsed={collapsed}
+            active={page === 'soulseek'}
+            onClick={() => setPage('soulseek')}
+          />
         )}
       </nav>
-
-      {contextMenu && (
-        <PlaylistContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onRename={() => {
-            handleRename(contextMenu.id, contextMenu.name)
-            setContextMenu(null)
-          }}
-          onDelete={() => {
-            handleDelete(contextMenu.id, contextMenu.name)
-            setContextMenu(null)
-          }}
-          onClose={() => setContextMenu(null)}
-        />
+      {collapsed ? (
+        <div className="px-3 py-2">
+          <IconButton
+            label="Open playlists"
+            variant="quiet"
+            aria-haspopup="dialog"
+            aria-expanded={drawerOpen}
+            onClick={() => setDrawerOpen(true)}
+          >
+            <ListMusic />
+          </IconButton>
+        </div>
+      ) : (
+        <section className="app-playlists" aria-label="Playlists">
+          <header className="app-playlist-heading">
+            <h2>Playlists</h2>
+            <div>
+              <IconButton
+                label="Search playlists"
+                variant="quiet"
+                aria-expanded={searchOpen}
+                onClick={() => {
+                  if (searchOpen) {
+                    setQuery('')
+                    setSearchOpen(false)
+                  } else {
+                    setSearchOpen(true)
+                    requestAnimationFrame(() => searchRef.current?.focus())
+                  }
+                }}
+              >
+                <Search />
+              </IconButton>
+              <IconButton label="New playlist" variant="quiet" onClick={newPlaylist}>
+                <Plus />
+              </IconButton>
+            </div>
+          </header>
+          {searchOpen && (
+            <input
+              ref={searchRef}
+              type="search"
+              aria-label="Search playlists"
+              placeholder="Find a playlist"
+              className="app-playlist-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+          <div className="app-playlist-scroll">{playlistRows}</div>
+        </section>
       )}
-
+      <footer className="app-sidebar-footer">
+        <SidebarButton
+          label="Settings"
+          icon={Settings2}
+          collapsed={collapsed}
+          active={false}
+          onClick={onOpenSettings}
+        />
+        {!collapsed && <p>LOCAL FIRST. MUSIC FIRST.</p>}
+      </footer>
+      {drawerOpen && (
+        <Drawer
+          labelledBy="playlist-drawer-title"
+          className="app-playlist-drawer"
+          onClose={() => setDrawerOpen(false)}
+        >
+          <header className="app-playlist-heading">
+            <h2 id="playlist-drawer-title">Playlists</h2>
+            <IconButton
+              label="Close playlists"
+              variant="quiet"
+              onClick={() => setDrawerOpen(false)}
+            >
+              <X />
+            </IconButton>
+          </header>
+          <input
+            type="search"
+            aria-label="Find playlist in drawer"
+            placeholder="Find a playlist"
+            className="app-playlist-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="app-playlist-scroll">{playlistRows}</div>
+          <Button onClick={newPlaylist}>
+            <Plus size={18} />
+            New playlist
+          </Button>
+        </Drawer>
+      )}
       {createOpen && (
         <CreatePlaylistDialog
           onClose={() => setCreateOpen(false)}
           onCreated={(created) => {
-            // Auto-select the new playlist + jump to library so the user can start
-            // adding to it (or drag tracks straight onto it).
+            setQuery('')
             setActivePlaylistId(created.id)
             setPage('library')
           }}
@@ -238,82 +357,61 @@ function SidebarButton({
   collapsed: boolean
   icon: LucideIcon
   label: string
-  /// Optional count badge after the label (e.g. Wanted: N). Only renders
-  /// when expanded; in collapsed mode the count would have nowhere to go.
   badge?: number
   onClick: () => void
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-label={label}
-      title={collapsed ? `${label}${badge ? ` (${badge})` : ''}` : undefined}
-      className={[
-        'flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors',
-        collapsed ? 'justify-center' : '',
-        active
-          ? 'bg-[var(--color-accent)]/20 text-white'
-          : 'text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
-      ].join(' ')}
+      aria-current={active ? 'page' : undefined}
+      data-ui-tooltip={collapsed ? `${label}${badge ? ` (${badge})` : ''}` : undefined}
+      className="app-nav-button"
     >
-      <Icon size={16} aria-hidden strokeWidth={1.75} />
+      <Icon aria-hidden="true" />
       {!collapsed && (
         <>
-          <span className="flex-1 text-left">{label}</span>
-          {badge !== undefined && (
-            <span className="rounded-full bg-[var(--color-accent)]/30 px-1.5 text-[10px] font-medium tabular-nums text-white">
-              {badge}
-            </span>
-          )}
+          <span className="app-nav-label">{label}</span>
+          {badge !== undefined && <span className="app-nav-count">{badge}</span>}
         </>
       )}
     </button>
   )
 }
 
-/// Single playlist entry. Drop target for `application/x-wisp-track-ids` payloads
-/// from the library table — bulk-adds the dragged selection. Visual feedback while
-/// dragging over (accent border) and a brief "+N" badge after a successful drop.
+/** Preserve the custom WISP-ID drop workflow and shared duplicate prompt.
+ * Native files/URLs alone never import or download anything here.
+ */
 function PlaylistRow({
   id,
   name,
   trackCount,
   active,
   onClick,
-  onContextMenu,
+  onRename,
+  onDelete,
 }: {
   id: string
   name: string
   trackCount: number
   active: boolean
   onClick: () => void
-  onContextMenu: (x: number, y: number) => void
+  onRename: () => void
+  onDelete: () => void
 }) {
   const qc = useQueryClient()
+  const menuTrigger = useRef<HTMLButtonElement>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
   const [recentlyAdded, setRecentlyAdded] = useState<number | null>(null)
   const dropBusy = useRef(false)
   const [dropPending, setDropPending] = useState(false)
-
-  // Auto-clear the "+N" indicator after 2.5s.
   useEffect(() => {
     if (recentlyAdded === null) return
-    const t = setTimeout(() => setRecentlyAdded(null), 2_500)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setRecentlyAdded(null), 2500)
+    return () => clearTimeout(timer)
   }, [recentlyAdded])
-
   const isWispDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(WISP_DRAG_TYPE)
-
-  const onDragOver = (e: React.DragEvent) => {
-    if (!isWispDrag(e)) return
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
-    if (!isDropTarget) setIsDropTarget(true)
-  }
-  const onDragLeave = (e: React.DragEvent) => {
-    // Only clear when leaving the row entirely — child traversals fire dragleave too.
-    if (e.currentTarget === e.target) setIsDropTarget(false)
-  }
   const onDrop = async (e: React.DragEvent) => {
     if (!isWispDrag(e)) return
     e.preventDefault()
@@ -323,86 +421,77 @@ function PlaylistRow({
     setDropPending(true)
     try {
       const ids: unknown = JSON.parse(e.dataTransfer.getData(WISP_DRAG_TYPE))
-      if (!Array.isArray(ids) || !ids.every(x => typeof x === 'string')) throw new Error('Invalid track selection. Select the tracks again.')
+      if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string'))
+        throw new Error('Invalid track selection. Select the tracks again.')
       const res = await addTracksToPlaylist(id, ids)
       if (!res) return
-      // Bump the recently-added count for the indicator. If the user drops twice in
-      // quick succession, accumulate so they see the running total instead of a flicker.
       setRecentlyAdded((prev) => (prev ?? 0) + res.added)
       qc.invalidateQueries({ queryKey: ['playlists'] })
       qc.invalidateQueries({ queryKey: ['tracks'] })
-    } catch (err) {
-      await alertDialog({ title: 'Could not add to playlist', message: (err as Error).message, tone: 'error' })
+    } catch (error) {
+      await alertDialog({
+        title: 'Could not add to playlist',
+        message: (error as Error).message,
+        tone: 'error',
+      })
+    } finally {
+      dropBusy.current = false
+      setDropPending(false)
     }
-    finally { dropBusy.current = false; setDropPending(false) }
   }
-
   return (
-    <li>
+    <li
+      className={`app-playlist-row${isDropTarget ? ' app-playlist-row--drop' : ''}`}
+      onDragOver={(e) => {
+        if (!isWispDrag(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setIsDropTarget(true)
+      }}
+      onDragLeave={(e) => {
+        if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget))
+          setIsDropTarget(false)
+      }}
+      onDrop={onDrop}
+    >
       <button
+        type="button"
+        className="app-playlist-button"
         onClick={onClick}
         disabled={dropPending}
         aria-busy={dropPending}
+        aria-current={active ? 'page' : undefined}
+        aria-label={`${name}, ${trackCount} tracks`}
+        data-ui-tooltip={`${name} · ${trackCount} tracks. Open playlist or drop selected WISP tracks here.`}
         onContextMenu={(e) => {
           e.preventDefault()
-          onContextMenu(e.clientX, e.clientY)
+          menuTrigger.current?.click()
         }}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        className={[
-          'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-xs transition-colors',
-          active
-            ? 'bg-[var(--color-accent)]/20 text-white'
-            : 'text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
-          isDropTarget ? 'ring-1 ring-inset ring-[var(--color-accent)]' : '',
-        ].join(' ')}
-        title={`Scope library to "${name}" — or drop tracks here to add them`}
       >
         <span className="truncate">{name}</span>
         <span className="flex shrink-0 items-center gap-1">
-          {recentlyAdded !== null && recentlyAdded > 0 && (
-            <span className="rounded bg-emerald-500/30 px-1 text-[9px] font-semibold text-emerald-200">
+          {!!recentlyAdded && (
+            <span role="status" className="text-[var(--ui-success)]">
               +{recentlyAdded}
             </span>
           )}
-          <span className="text-[10px] tabular-nums text-[var(--color-muted)]">{trackCount}</span>
+          <span className="app-nav-count">{trackCount}</span>
         </span>
       </button>
+      <ActionMenu
+        triggerRef={menuTrigger}
+        label={`Actions for ${name}`}
+        icon={<MoreHorizontal size={18} />}
+        items={[
+          { label: 'Rename playlist', icon: <Pencil size={16} />, onSelect: onRename },
+          {
+            label: 'Delete playlist',
+            icon: <Trash2 size={16} />,
+            danger: true,
+            onSelect: onDelete,
+          },
+        ]}
+      />
     </li>
-  )
-}
-
-function PlaylistContextMenu({
-  x,
-  y,
-  onRename,
-  onDelete,
-  onClose,
-}: {
-  x: number
-  y: number
-  onRename: () => void
-  onDelete: () => void
-  onClose: () => void
-}) {
-  return (
-    <>
-      <div className="fixed inset-0 z-50" onMouseDown={onClose} />
-      <div
-        className="fixed z-50 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 text-sm shadow-2xl"
-        style={{ left: x, top: y, width: 160 }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <button onClick={onRename} className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--color-accent)]/20 hover:text-white">
-          <Pencil size={14} className="text-[var(--color-muted)]" strokeWidth={1.75} />
-          <span>Rename</span>
-        </button>
-        <button onClick={onDelete} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-red-300 hover:bg-red-500/10">
-          <Trash2 size={14} strokeWidth={1.75} />
-          <span>Delete</span>
-        </button>
-      </div>
-    </>
   )
 }
