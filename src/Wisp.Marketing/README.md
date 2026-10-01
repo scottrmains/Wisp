@@ -3,7 +3,8 @@
 A separate, pre-rendered static site: warm paper, condensed display type, flat
 purple, restrained hard edges and real WISP screenshots. No frontend framework,
 runtime dependencies, tracking, cookies, external font requests or desktop-app
-changes. JavaScript only enhances the latest-release download area.
+changes. Small progressive enhancements handle the latest-release download,
+on-arrival reveals and four silent, user-controllable product demonstrations.
 
 ## Preview and verify
 
@@ -29,19 +30,58 @@ are involved. Screenshots/test traces go to ignored `artifacts` directories.
 CI validates this site independently. PRs, develop pushes and manual runs never
 publish installers or deploy the site; only a successful push to main can do so.
 
-## Screenshot provenance
+## Focused media and provenance
 
-The four PNGs under `assets/screenshots` are intentional site content, not test
-reports. They show the real WISP client from the integration branch, with
-fictional track names, paths, peers, recording peaks and other API responses.
-The page identifies the collection as demo data. No user profile, audio or music
-database is opened. The existing Wispa SVG is copied during the build.
+Eight WebP posters and four H.264 MP4 demonstrations are intentional site assets,
+not test reports. They capture the actual redesigned client—not reconstructed
+interface artwork. The workflow is Library → Crate Digger/Wanted → Mix Plans →
+USB → Mix Review. Soulseek is optional background functionality, not a main pitch.
 
-To refresh them, first run `npm run build` in `../Wisp.Client`, then run
-`npm run capture:app` here. The capture script launches its own isolated client
-preview on port 19601, intercepts API requests, captures the real components and
-stops that child server. It does not launch the WISP API or native desktop shell.
-Review the resulting images before committing them.
+The owner approved public artist/title labels from their Garage / Old Skool House
+playlist and the actual waveform of Robin S — Show Me Love (Tonka's 2002 Club Mix).
+The capture uses a read-only SQLite connection for these selected tracks and reads
+their active audio files. FFmpeg decodes audio in memory; the real WISP client
+calculates its library waveform. The review example uses min/max peaks from the
+same real song, **not a recording of a DJ mix**. Notes, sources, discovery results,
+USB and dates are illustrative. No account, real file path, database, credentials,
+or track audio is published. The script never starts the backend/native shell,
+changes library/cue data, queries a provider or writes to a USB.
+
+To refresh, first run `npm run build` in `../Wisp.Client`, then explicitly supply
+an owner-approved library and an existing FFmpeg binary (Node 22.16+):
+
+```powershell
+npm run capture:app -- --library "C:/path/to/approved/wisp.db" --ffmpeg "C:/path/to/ffmpeg.exe"
+```
+
+The existing project `tools/get-ffmpeg.ps1` can provide FFmpeg when needed. Paths
+can alternatively be supplied via `WISP_CAPTURE_LIBRARY_PATH` and
+`WISP_FFMPEG_PATH`. There is no automatic private-library discovery or synthetic
+waveform fallback. The capture launches an isolated client preview on port 19601
+and always stops it. Intermediate PNGs/WebMs go to ignored `artifacts/marketing-capture`;
+no intermediate audio file is written. Inspect posters **and decoded video frames**
+before committing. Update HTML width/height attributes if capture sizes change.
+
+`assets/capture-provenance.json` records the client Git tree, approved waveform,
+dimensions, durations, SHA-256 and byte sizes. Build/tests verify all 12 assets,
+reject an MP4 with an audio stream, and enforce a 2 MB individual / 3 MB total
+media budget. Production deployment verifies the new WebP/MP4 MIME types too.
+The existing Wispa SVG/fonts are retained.
+
+The app currently omits a separately stored track version from some tracklist
+titles. The capture explicitly combines title/version so the Tonka mix is correctly
+identified; **this marketing PR does not fix that separate app defect**.
+
+### Motion behaviour
+
+- Each demo loads near the viewport, plays once, never loops, and has accessible
+  keyboard Play/Pause/Resume/Replay controls. Only one demo plays at a time.
+- Leaving the viewport, hiding the tab or enabling reduced motion pauses playback.
+  Reduced motion, Save-Data and slow connections retain posters until explicit play.
+- Without JavaScript the complete page and posters remain usable. Failed media
+  retains the poster with a working retry; blocked autoplay offers manual play.
+- Layout and media tests cover 360–1920 px, 200% text, no-JS, reduced motion,
+  data-saving, failed media, byte-range seeking and keyboard controls.
 
 ## Production release and deployment
 

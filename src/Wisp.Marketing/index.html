@@ -38,8 +38,7 @@
         ></a
       >
       <nav aria-label="Main navigation">
-        <a href="#workflow">The workflow</a><a href="#usb">USB prep</a
-        ><a href="https://github.com/scottrmains/Wisp">GitHub ↗</a>
+        <a href="#workflow">Explore WISP</a><a href="#usb">USB export</a>
       </nav>
       <a class="header-download" href="#download"
         >Get WISP <span aria-hidden="true">↓</span></a
@@ -52,12 +51,12 @@
           <h1 id="hero-title">LESS ADMIN.<br /><span>MORE MIXING.</span></h1>
           <div class="hero-aside">
             <p>
-              For the digging, the planning<br class="desktop-break" />
-              and everything after the mix.
+              From the track you just found<br class="desktop-break" />
+              to the set you can’t wait to play.
             </p>
             <p class="body-copy">
-              Your music library, set preparation and recorded mixes. Together
-              in one Windows app.
+              Dig deeper. Join the dots. Take it to the decks. Your collection
+              and your next idea, together in one Windows app.
             </p>
             <a class="button primary" href="#download"
               >Download for Windows <span aria-hidden="true">↓</span></a
@@ -66,17 +65,23 @@
             >
           </div>
         </div>
-        <figure class="hero-shot">
-          <img
-            src="./assets/screenshots/library.png"
-            width="1680"
-            height="1050"
-            fetchpriority="high"
-            alt="WISP’s music library with track titles, BPM, musical keys and playlists in its sidebar."
-          />
+        <figure class="hero-shot" data-reveal>
+          <picture
+            ><source
+              media="(max-width: 679px)"
+              srcset="./assets/screenshots/hero-mobile.webp"
+              width="320"
+              height="550" />
+            <img
+              src="./assets/screenshots/hero-focus.webp"
+              width="1196"
+              height="620"
+              fetchpriority="high"
+              alt="The redesigned WISP library: organised tracks beside a focused preparation panel for Show Me Love (Tonka’s 2002 Club Mix) by Robin S."
+          /></picture>
           <figcaption>
-            <span>Your collection. A little more together.</span
-            ><span>WISP / Library</span>
+            <span>Your collection. Your next idea.</span
+            ><span>Inside WISP / Demo collection</span>
           </figcaption>
         </figure>
       </section>
@@ -85,119 +90,340 @@
         id="workflow"
         aria-labelledby="workflow-title"
       >
-        <div class="section-intro">
-          <p class="eyebrow">The workflow</p>
-          <h2 id="workflow-title">GOOD SETS START<br />BEFORE YOU PLAY.</h2>
+        <div class="section-intro" data-reveal>
+          <div>
+            <p class="eyebrow">The workflow</p>
+            <h2 id="workflow-title">GOOD SETS START<br />BEFORE YOU PLAY.</h2>
+          </div>
           <p>
-            That tune you just found. The next track that fits.<br />The
-            transition you want to try again. Keep it all here.
+            Follow the channels you love. Keep the tracks worth finding. Shape a
+            running order, prepare your cues and take it to the decks.
           </p>
         </div>
-        <article class="feature feature-find">
-          <div class="feature-copy">
-            <p class="section-number">01 / Find &amp; file</p>
-            <h3>LESS LOST.<br />MORE FOUND.</h3>
+        <nav class="workflow-route" aria-label="Explore the workflow">
+          <a href="#library"><span>01</span> Organise</a
+          ><span aria-hidden="true">↗</span>
+          <a href="#dig"><span>02</span> Discover</a
+          ><span aria-hidden="true">↗</span>
+          <a href="#plan"><span>03</span> Plan</a
+          ><span aria-hidden="true">↗</span>
+          <a href="#usb"><span>04</span> Export</a
+          ><span aria-hidden="true">↗</span>
+          <a href="#mixes"><span>05</span> Review</a>
+        </nav>
+        <article class="feature feature-library" id="library">
+          <div class="feature-copy" data-reveal>
+            <p class="section-number">01 / Your library</p>
+            <h3>A COLLECTION.<br />NOT A PILE.</h3>
             <p>
-              Give your collection a home. Browse by BPM, key and date added.
-              Build playlists that make sense to you.
+              Find the right track without losing your train of thought. Sort by
+              date added, narrow by BPM or key, and bring your favourites into
+              playlists.
             </p>
             <p>
-              Still digging? Search Soulseek from WISP, follow your downloads
-              and bring new finds into your library.
+              Open a track to prepare its cues and notes. Keep the detail close
+              without losing sight of the rest of your collection.
             </p>
-          </div>
-          <figure>
-            <img
-              src="./assets/screenshots/search.png"
-              width="1680"
-              height="1050"
-              loading="lazy"
-              alt="WISP Soulseek search displaying downloadable files with format, bitrate, user and queue information."
-            />
-            <figcaption>Find a track. Keep the good version.</figcaption>
-          </figure>
-        </article>
-        <article class="feature feature-plan">
-          <div class="feature-copy">
-            <p class="section-number">02 / Build the set</p>
-            <h3>A PLAN.<br />NOT A RULEBOOK.</h3>
-            <p>
-              Try a running order, mark your cues and leave yourself transition
-              notes. Make room for the track you hadn’t planned on playing.
-            </p>
-            <p>
-              Keep the blueprint separate from what you actually played. A
-              better next set starts with knowing the difference.
+            <p class="feature-detail">
+              BPM &amp; key · Playlists · Cue preparation
             </p>
           </div>
-          <figure>
-            <img
-              src="./assets/screenshots/plan.png"
-              width="1680"
-              height="1050"
-              loading="lazy"
-              alt="A WISP mix plan showing a running order of tracks, BPM, key and transition notes."
-            />
-            <figcaption>
-              A little preparation. Plenty of room to improvise.
+          <figure class="product-demo" data-demo="library" data-reveal>
+            <div class="demo-screen">
+              <img
+                src="./assets/screenshots/library-focus.webp"
+                width="876"
+                height="706"
+                loading="lazy"
+                alt="Focused WISP library rows showing real track titles, BPM, key and the search field."
+              /><video
+                muted
+                playsinline
+                preload="none"
+                data-src="./assets/demos/library.mp4"
+                aria-label="Library demonstration: search for Show Me Love (Tonka’s 2002 Club Mix), then return to the collection."
+                aria-describedby="library-caption"
+              ></video>
+            </div>
+            <figcaption id="library-caption">
+              <span>Find a track. Keep your place.</span
+              ><button
+                type="button"
+                class="demo-toggle"
+                hidden
+                aria-label="Play Library demonstration"
+              >
+                <span aria-hidden="true">▶</span> Play demo
+              </button>
             </figcaption>
           </figure>
         </article>
-        <article class="feature feature-mix">
-          <div class="feature-copy">
-            <p class="section-number">03 / Keep the take</p>
-            <h3>LISTEN BACK.<br />GET BETTER.</h3>
+        <article class="feature feature-dig" id="dig">
+          <div class="feature-copy" data-reveal>
+            <p class="section-number">02 / Crate Digger &amp; Wanted</p>
+            <h3>FOLLOW THE FINDS.<br />NOT THE TABS.</h3>
             <p>
-              Record from your mixer’s audio input. Save a lossless master, then
-              export a 320 kbps MP3 when it’s time to share.
+              Your favourite YouTube channels and playlists, gathered in one
+              place. Refresh a source, browse its newest uploads and audition
+              something that catches your ear.
             </p>
             <p>
-              Rate the mix, leave timestamped notes and build the actual
-              tracklist. Take what worked into your next plan.
+              Mark it Wanted so it doesn't disappear into another forgotten
+              bookmark. Check release matches and explore digital stores when
+              you're ready to find a copy.
+            </p>
+            <p class="feature-detail">
+              Channel sources · Newest uploads · A proper wishlist
             </p>
           </div>
-          <figure>
+          <figure class="product-demo" data-demo="dig" data-reveal>
+            <div class="demo-screen">
+              <img
+                src="./assets/screenshots/dig-focus.webp"
+                width="1196"
+                height="698"
+                loading="lazy"
+                alt="Crate Digger showing a YouTube source, newest discoveries and Show Me Love (Tonka’s 2002 Club Mix) selected with its Wanted action."
+              /><video
+                muted
+                playsinline
+                preload="none"
+                data-src="./assets/demos/dig.mp4"
+                aria-label="Crate Digger demonstration: mark Show Me Love (Tonka’s 2002 Club Mix) Wanted and check release matches and store search links."
+                aria-describedby="dig-caption"
+              ></video>
+            </div>
+            <figcaption id="dig-caption">
+              <span>A good find deserves somewhere to go.</span
+              ><button
+                type="button"
+                class="demo-toggle"
+                hidden
+                aria-label="Play Crate Digger demonstration"
+              >
+                <span aria-hidden="true">▶</span> Play demo
+              </button>
+            </figcaption>
+          </figure>
+          <div class="wanted-followup" data-reveal>
+            <div>
+              <p class="eyebrow">Don't lose the good ones.</p>
+              <h4>A wishlist that stays with you.</h4>
+              <p>
+                Wanted connects discoveries with the tracks you already own.
+                Discogs matches and search links for Bandcamp, Beatport, Juno
+                and Traxsource give you a starting point—not a promise that
+                every track is for sale.
+              </p>
+            </div>
             <img
-              src="./assets/screenshots/mix.png"
-              width="1680"
-              height="1050"
+              src="./assets/screenshots/wanted-focus.webp"
+              width="1196"
+              height="340"
               loading="lazy"
-              alt="WISP’s mix review workspace with a recorded waveform, rating and timestamped listening notes."
+              alt="Wanted list showing Show Me Love (Tonka’s 2002 Club Mix) still to find and Street Player already matched to the local library."
             />
-            <figcaption>
-              The good bits. The rough bits. The next idea.
+          </div>
+        </article>
+        <article class="feature feature-plan" id="plan">
+          <div class="feature-copy" data-reveal>
+            <p class="section-number">03 / Mix Plans</p>
+            <h3>FIND YOUR FLOW.<br />THEN FOLLOW IT.</h3>
+            <p>
+              Chain tracks into a running order. See how BPM, key and energy
+              move through the set, spot awkward jumps and audition the
+              transition before committing to it.
+            </p>
+            <p>
+              Reorder, leave a cue or a note, and try another route. It's a
+              blueprint, not a rulebook: your actual recorded tracklist can tell
+              a different story.
+            </p>
+            <p class="feature-detail">
+              Track chains · Transition previews · Notes that stay put
+            </p>
+          </div>
+          <figure class="product-demo" data-demo="plan" data-reveal>
+            <div class="demo-screen">
+              <img
+                src="./assets/screenshots/plan-focus.webp"
+                width="956"
+                height="624"
+                loading="lazy"
+                alt="WISP Chain view showing track cards, BPM and key progression and transition notes."
+              /><video
+                muted
+                playsinline
+                preload="none"
+                data-src="./assets/demos/plan.mp4"
+                aria-label="Mix Plan demonstration: reorder the chain and inspect a transition."
+                aria-describedby="plan-caption"
+              ></video>
+            </div>
+            <figcaption id="plan-caption">
+              <span>The right next track makes all the difference.</span
+              ><button
+                type="button"
+                class="demo-toggle"
+                hidden
+                aria-label="Play Mix Plan demonstration"
+              >
+                <span aria-hidden="true">▶</span> Play demo
+              </button>
             </figcaption>
           </figure>
         </article>
       </section>
       <section class="usb-section" id="usb" aria-labelledby="usb-title">
         <div class="wrap usb-inner">
-          <div>
-            <p class="eyebrow">From library to USB</p>
-            <h2 id="usb-title">TAKE THE SET<br />WITH YOU.</h2>
+          <div data-reveal>
+            <p class="section-number">04 / From WISP to the decks</p>
+            <h2 id="usb-title">PREPARED HERE.<br />PLAYED OUT THERE.</h2>
+            <p class="usb-lead">
+              Pick your playlist. Choose your USB. Take the set with you.
+            </p>
           </div>
-          <div class="usb-copy">
+          <figure class="usb-shot" data-reveal>
+            <img
+              src="./assets/screenshots/usb-focus.webp"
+              width="576"
+              height="570"
+              loading="lazy"
+              alt="WISP's USB selector showing a fictional connected USB, available space and checked drive layout."
+            />
+            <figcaption>
+              The actual export selector. A fictional demo USB.
+            </figcaption>
+          </figure>
+          <div class="usb-copy" data-reveal>
             <p>
-              Pick a playlist. Choose your USB. Take your tracks, running order
-              and memory cues to the decks.
+              Export your tracks, playlists, metadata, saved Memory Cues and
+              overview waveforms directly from WISP to USB for compatible CDJs.
             </p>
             <p>
-              WISP exports legacy CDJ playlists and analysis data, including
-              overview waveforms. Playback, overview waveforms and memory cues
-              have been confirmed by the owner on a CDJ-900.
+              A familiar playlist-to-USB workflow, without a separate rekordbox
+              export step. Prepare the collection where you organise it.
             </p>
-            <p class="compatibility-note">
-              That is one tested setup, not a guarantee for every player or
-              format. Test your export on your own decks before relying on it
-              for a gig. WISP is independent software, not affiliated with
-              Pioneer DJ or rekordbox.
-            </p>
-            <a
-              href="https://github.com/scottrmains/Wisp/issues"
-              class="quiet-link"
-              >Questions about your setup? <span aria-hidden="true">↗</span></a
+            <a href="#compatibility" class="quiet-link"
+              >Read the compatibility notes <span aria-hidden="true">↘</span></a
             >
           </div>
+        </div>
+      </section>
+      <section
+        class="wrap review-section"
+        id="mixes"
+        aria-labelledby="mixes-title"
+      >
+        <article class="feature feature-mix">
+          <div class="feature-copy" data-reveal>
+            <p class="section-number">05 / Record &amp; review</p>
+            <h2 id="mixes-title">LISTEN BACK.<br />MOVE FORWARD.</h2>
+            <p>
+              Record from your mixer's audio input. Keep a lossless master and
+              export a 320 kbps MP3 when it's time to share.
+            </p>
+            <p>
+              Rate the take, put comments on the exact moments you want to
+              revisit, and build the tracklist you actually played. Keep the
+              good pairings. Learn from the rough ones. Take both into your next
+              plan.
+            </p>
+            <p class="feature-detail">
+              Mix ratings · Timestamped feedback · Actual tracklists
+            </p>
+          </div>
+          <figure class="product-demo" data-demo="mix" data-reveal>
+            <div class="demo-screen">
+              <img
+                src="./assets/screenshots/mix-focus.webp"
+                width="1140"
+                height="712"
+                loading="lazy"
+                alt="Mix review with its waveform, four-star rating and feedback attached to a specific timestamp."
+              /><video
+                muted
+                playsinline
+                preload="none"
+                data-src="./assets/demos/mix.mp4"
+                aria-label="Mix review demonstration: select a timestamped comment to seek to that moment in the waveform."
+                aria-describedby="mix-caption"
+              ></video>
+            </div>
+            <figcaption id="mix-caption">
+              <span>An example review, using a real track waveform.</span
+              ><button
+                type="button"
+                class="demo-toggle"
+                hidden
+                aria-label="Play Mix Review demonstration"
+              >
+                <span aria-hidden="true">▶</span> Play demo
+              </button>
+            </figcaption>
+          </figure>
+        </article>
+      </section>
+      <section class="notes-section wrap" aria-labelledby="notes-title">
+        <div>
+          <p class="eyebrow">A few useful things to know.</p>
+          <h2 id="notes-title">YOUR MUSIC.<br />YOUR WORKFLOW.</h2>
+        </div>
+        <div class="questions">
+          <details id="compatibility">
+            <summary>What should I know about CDJ export?</summary>
+            <div>
+              <p>
+                WISP's direct export has hardware-confirmed playlist playback,
+                overview waveforms and Memory Cue recall on the original
+                CDJ-900. This is not certification for every CDJ or audio
+                format. Test your export on your own decks before a gig.
+              </p>
+              <p>
+                The current exporter uses a reference database; extra reference
+                entries can remain. Beat grids and detailed scrolling waveforms
+                are not included. WISP is independent software, not affiliated
+                with Pioneer DJ or rekordbox.
+              </p>
+              <a
+                href="https://github.com/scottrmains/Wisp/blob/main/WISP_IMPLEMENTATION_STATUS.md"
+                >Read the implementation and testing notes ↗</a
+              >
+            </div>
+          </details>
+          <details>
+            <summary>Does Crate Digger download YouTube audio?</summary>
+            <div>
+              <p>
+                No. It imports discovery metadata from channels and playlists
+                and lets you preview videos. Availability checks query Discogs
+                and provide digital-store search links. Obtain music from
+                sources you're entitled to use.
+              </p>
+            </div>
+          </details>
+          <details>
+            <summary>Can I keep using my existing music workflow?</summary>
+            <div>
+              <p>
+                WISP works with your local collection. You can drag audio files
+                into other desktop apps, and optional Soulseek integration adds
+                search and transfer management when you configure your own
+                account. Use files you have permission to download or share.
+              </p>
+            </div>
+          </details>
+          <details>
+            <summary>What do I need to get started?</summary>
+            <div>
+              <p>
+                A 64-bit Windows 10 or 11 computer and your music collection.
+                Recording needs a compatible audio input; online discovery needs
+                internet access and the relevant provider setup in WISP
+                Settings. The app itself runs on your desktop.
+              </p>
+            </div>
+          </details>
         </div>
       </section>
       <section
@@ -233,10 +459,6 @@
               <dt>For recording</dt>
               <dd>A compatible audio input</dd>
             </div>
-            <div>
-              <dt>For Soulseek</dt>
-              <dd>Your Soulseek account + internet</dd>
-            </div>
           </dl>
           <div class="download-links">
             <a
@@ -268,7 +490,10 @@
         <div>
           <a href="https://github.com/scottrmains/Wisp"
             >Made by Scott. Built for the collection. ↗</a
-          ><span>Screenshots show a demo collection.</span>
+          ><span
+            >Real WISP UI. Illustrative sessions and results. Silent
+            demonstrations.</span
+          >
         </div>
       </div>
     </footer>
