@@ -1,5 +1,52 @@
 @import 'tailwindcss';
 
+/* UI 2: deliberate preparation, content-first library and compact transport. */
+.library-heading { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-height: 64px; padding: 8px 16px; border-bottom: 1px solid var(--color-border); }
+.library-heading h1 { font-family: var(--ui-font-display); font-size: 1.75rem; line-height: 1; font-weight: 900; }
+.library-body { display: grid; grid-template-columns: minmax(0,1fr); flex: 1; min-height: 0; }
+.library-body--inspector-open { grid-template-columns: minmax(0,1fr) 320px; }
+.library-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.library-inspector-host { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+.library-inspector-host[hidden] { display: none; }
+.library-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0; min-height: 52px; padding: 8px 16px; border-bottom: 1px solid var(--color-border); }
+.library-search { display: flex; gap: 8px; align-items: center; flex: 1; min-width: 200px; border: 1px solid var(--ui-control-border); padding: 6px 8px; border-radius: var(--ui-radius); color: var(--color-muted); }
+.library-search input { width: 100%; min-width: 0; color: var(--color-text); background: transparent; font-size: .875rem; }
+.library-search:focus-within { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+.library-selection-actions { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+.library-advanced-filters { max-height: 112px; overflow: auto; flex-shrink: 0; background: var(--color-surface); }
+.library-column-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; border-right: 1px solid var(--ui-control-border); }
+.library-column-resize:hover { background: var(--ui-selected); }
+.library-workspace select { border: 1px solid var(--ui-control-border); border-radius: var(--ui-radius); background: var(--color-bg); padding: 4px; color: var(--color-text); }
+.compact-player { position: relative; flex-shrink: 0; min-height: 80px; border-top: 1px solid var(--color-border); background: var(--color-surface); padding: 6px 16px; }
+.compact-player-waveform { position: relative; height: 32px; }
+.compact-player-controls { display: flex; gap: 12px; align-items: center; min-height: 36px; margin-top: 4px; }
+.preparation-workspace { display: flex; height: 100%; min-height: 0; flex-direction: column; background: var(--color-surface); }
+.preparation-body { display: flex; flex: 1; min-height: 0; }
+.preparation-transport { flex-wrap: wrap; }
+.preparation-main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; padding: 8px 12px; gap: 8px; overflow: auto; }
+.preparation-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex-shrink: 0; }
+.preparation-waveform { flex: 1; min-height: 72px; }
+.preparation-caption { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .6875rem; color: var(--color-muted); flex-shrink: 0; }
+.preparation-sidebar { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; background: var(--color-surface); border-left: 1px solid var(--color-border); }
+.preparation-sidebar-heading { display: flex; align-items: flex-start; gap: 8px; padding: 16px; flex-shrink: 0; border-bottom: 1px solid var(--color-border); }
+.preparation-sidebar .ui-tabs { overflow-x: auto; flex-shrink: 0; gap: 0; padding-inline: 4px; }
+.preparation-sidebar .ui-tab { padding-inline: 6px; font-size: .75rem; }
+.preparation-details { flex: 1; min-height: 0; overflow: auto; }
+.preparation-details > div { height: auto; min-height: 100%; }
+.preparation-details > div > ul { flex: none; overflow: visible; }
+.cue-editor-row input { min-width: 120px; }
+.chain-dock { flex-shrink: 0; }
+.chain-dock--expanded { position: fixed; z-index: 40; right: 12px; top: 72px; bottom: 100px; width: min(680px, calc(100vw - 100px)); border: 1px solid var(--ui-control-border); box-shadow: -8px 8px 0 #0f0d1380; }
+@media (max-width: 1100px) {
+  .library-body--inspector-open { grid-template-columns: minmax(0,1fr) 280px; }
+  .library-heading { gap: 8px; }
+}
+@media (max-width: 800px) {
+  .library-heading { flex-wrap: wrap; }
+  .library-body--inspector-open { grid-template-columns: minmax(0,1fr) 240px; }
+  .preparation-caption { display: none; }
+}
+
 @theme {
   --color-bg: #17151b;
   --color-surface: #201d24;

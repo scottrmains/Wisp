@@ -6,6 +6,12 @@ export function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+export function formatCueTime(seconds: number): string {
+  if (!Number.isFinite(seconds)) return '—'
+  const milliseconds = Math.round(Math.max(0, seconds) * 1000)
+  return `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, '0')}.${String(milliseconds % 1000).padStart(3, '0')}`
+}
+
 export function formatBpm(bpm: number | null): string {
   if (bpm === null) return '—'
   return bpm.toFixed(bpm % 1 === 0 ? 0 : 1)

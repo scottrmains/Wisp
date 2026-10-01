@@ -2,6 +2,94 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: Restore the approved full-height preparation sidebar
+
+- **Correction in PR #43:** the initial UI 2 implementation placed the cue/details
+  area inside the height-limited top preparation pane, diverging from the approved
+  prototype. Restored a separate right column spanning both waveform and track
+  list. It contains the track summary, saved Memory Cue bank and existing Markers,
+  Notes, Tags, Metadata and Matches sections; no cue/export semantics change.
+- **Independent controls:** Collapse track sidebar gives the left workspace its
+  full width without closing the waveform. Show track sidebar reopens it. Focus
+  list still hides both preparation areas without stopping playback. Stable portal
+  placement retains editor/tab state and the existing table/audio owners; collapse
+  returns keyboard focus to the reopen control. Existing shared tokens, controls
+  and Lucide icons were reused under the frontend-design/normalize skills.
+- **Measured:** the inspector is 602px high at 1024/1366 by 768 and 914px at
+  1920 by 1080, independent of waveform resizing. Compact browsing remains 11/11/19
+  complete rows. Narrow preparation tables scroll locally rather than overflowing
+  the whole window. Ignored screenshots remain under `artifacts/ui-phase-two`.
+- **Verified:** client build, browser-test TypeScript check, 58 unit tests and
+  all 109 browser tests pass; lint has zero errors and 12 existing warnings.
+  Added geometric coverage for full-height placement and independent resizing,
+  plus collapse/reopen focus, scroll, zoom, audio and unsaved-notes retention.
+  Existing drag, playlist, cue, recording, export UI and Soulseek suites pass.
+- **Limits:** owner/native visual and drag acceptance remain open. No backend,
+  real library/profile, music, USB, recording capture or installer changes. Client
+  build retains the existing approximately 514KB initial-chunk warning. This updates
+  the same open develop PR; no merge, auto-merge or production promotion.
+
+## 2026-10-01: UI 2 Library, playlists and precision preparation implemented
+
+- **Actual application migration:** implemented the approved Library direction
+  on `codex/ui-phase-two-library`, following merged UI 1/PR #42. A clear All
+  tracks/playlist header, primary search, optional advanced filters and one
+  selection toolbar replace the stacked action bars. Frequent Add to mix/Add
+  to playlist actions stay visible; Library actions contains maintenance,
+  loudness/versions, playlist removal and duplicate scan. Normalised/original
+  version feedback stays visible even when the File column is hidden.
+- **Playback versus preparation:** ordinary Play/double-click browsing uses a
+  compact full-width bottom overview. Prepare deliberately opens a wide top
+  waveform and right-hand cue/details sidebar. Focus list hides preparation
+  without stopping audio or resetting zoom, height or in-session editor drafts.
+  The single application-lifetime audio deck remains mounted across navigation.
+  Zoom offers whole track and 60/20/6/2-second playhead-centred windows; existing
+  beatgrid, beat snapping, hover/wheel magnifier and cue seeking remain. Keyboard
+  seeking and 10ms nudges update paused position immediately.
+- **Cue clarity:** separate saved Memory Cue/loop bank and editorial WISP
+  markers, millisecond timestamps, counts and explicit save/remove/error feedback.
+  Saving means selected in WISP for the next export, never automatic USB sync.
+  Hot Cues remain explicitly unsupported on CDJ-850; no new cue type/export
+  format is invented. Marker-generation tools are collapsible. Existing structural
+  suggestions run only during explicit preparation; failed cue reads cannot
+  masquerade as an empty list and trigger automatic writes.
+- **Space and columns:** active plan defaults to a 40px summary and expands
+  into a drawer without shrinking the track list. Existing drops, ordering,
+  notes and transition preview remain. DJ preparation/Recently added/File
+  management presets and selectable, pointer/keyboard-resizable columns persist
+  with bounded defaults; Recently added selects newest-first track sorting.
+  Track dates remain distinct from playlist-entry dates. Keyboard row actions,
+  context-menu navigation/Escape/focus return and table semantics are provided.
+- **Measured actual-client layouts:** 1,205 fictional tracks, playing audio,
+  selection and compact plan show 11 complete rows at 1024 by 768 and 1366 by
+  768 (429px list), and 19 at 1920 by 1080. Core DJ columns fit without horizontal
+  overflow. The default 328px preparation plus 12px handle leaves a 174px list/
+  four rows at the laptop sizes. Only 24 rows are mounted there; virtualisation
+  and the existing scroll owner are retained. Ignored screenshots are under
+  `artifacts/ui-phase-two`; no user library data is used.
+- **Verified:** 58 unit tests and all 108 browser tests pass; client build and
+  browser-test TypeScript checks pass. Lint has zero errors and the 12 existing
+  warnings. New browser coverage includes real WAV/audio ownership and paused
+  position retention across search/sort/paging, zoom/beatgrid/fine seek, pointer
+  and keyboard resize, preference persistence, Memory Cue save/remove/failure,
+  missing-audio recovery, failed library/track/cue reads and retry, plan multi-drop/
+  keyboard reorder, and equivalent 125/150 percent CSS viewports/reduced motion.
+  Existing native-drag-contract, duplicate/occurrence removal, loudness, recording,
+  Soulseek and CDJ-export UI suites still pass.
+- **Limits and safety:** native Windows OLE/folder/rekordbox dragging, Photino/
+  WebView2 focus, physical Windows scaling and Xone/audio-device acceptance remain
+  owner checks. Existing 4096-bucket peaks are reused: millisecond controls do
+  not promise sample-accurate waveform analysis. Build retains an approximately
+  512 KB initial-chunk warning and existing lazy feature loading. No backend,
+  database/profile, working music/cues, USB, website, pipeline or installer/publish
+  changes. Removed only the unused client BulkActionBar component; its source is
+  recoverable from Git. The two design skills guided reuse of UI 1 tokens, shared
+  controls and the approved content-first layout rather than a second design system.
+- **Next gate:** owner reviews the UI 2 PR into develop and checks playback,
+  Prepare/Focus list, cue editing and internal/external dragging locally. Phase
+  implementation items are checked; native/owner acceptance and production
+  promotion remain open. UI 3 then covers Mix Plans and discovery workspaces.
+
 ## 2026-10-01: UI 1 application foundations and navigation implemented
 
 - **Implemented in PR #42:** approved dark editorial direction in the actual

@@ -1,43 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { Track } from '../../api/types'
 import { tracks as tracksApi } from '../../api/library'
 import { usePlayer } from '../../state/player'
 import { useUiPrefs, type InspectorTab as Tab } from '../../state/uiPrefs'
+import { useCurrentPage } from '../../state/currentPage'
+import { cues as cuesApi } from '../../api/cues'
+import { Button, IconButton } from '../../components/ui/Button'
+import { ActionMenu } from '../../components/ui/ActionMenu'
+import { SectionTabs } from '../../components/ui/SectionTabs'
+import { StatusMessage } from '../../components/ui/StatusMessage'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { useCues } from '../cues/useCues'
 import { useTrackFileDialog } from './TrackFileDialog'
 import { PlaybackError } from '../player/PlaybackError'
 import { useAudioFiles } from '../../audio/audioFiles'
 import {
-  AlertTriangle,
-  Archive,
-  ArchiveRestore,
-  ChevronDown,
   ChevronUp,
-  ExternalLink,
   Pause,
   Play,
   Plus,
-  Sparkles,
-  StickyNote,
-  Tag as TagIcon,
   X,
+  MoreHorizontal,
+  PanelRight,
+  PanelRightClose,
 } from 'lucide-react'
-import { CueBank, CuesTab, MetadataTab, NotesTab, OverviewTab, TagsTab } from '../inspector/tabContent'
+import { CueBank, CuesTab, MetadataTab, NotesTab, TagsTab } from '../inspector/tabContent'
 import { BandedWaveform } from '../player/BandedWaveform'
 import { ConvertToMp3Button } from '../transcoder/ConvertToMp3'
 import { RecommendationsList } from './RecommendationPanel'
-import { BpmPill, EnergyPill, KeyPill } from './pills'
-import { formatDuration } from './format'
-import { detectDownbeatFromPeaks, detectFirstBeatFromPeaks, loadBandedPeaks } from '../../audio/peaks'
+import { BpmPill, KeyPill } from './pills'
+import { formatCueTime, formatDuration } from './format'
+import {
+  detectDownbeatFromPeaks,
+  detectFirstBeatFromPeaks,
+  loadBandedPeaks,
+} from '../../audio/peaks'
 import { snapToBeat } from '../../audio/snap'
 import { detectStructuralCues } from '../../audio/structure'
 
 interface Props {
-  /// Drives off the App-level player state — workspace appears whenever a track
-  /// is loaded into the player (whether playback was started or not). Caller
-  /// just renders this; it self-hides if no track is loaded.
+  active: boolean
+  // Render details beside the entire library, not inside the height-limited
+  // waveform pane. A stable host preserves the same cue/editor state.
+  inspectorHost: HTMLDivElement | null
   onAddToChain?: (trackId: string) => void
   onCleanup?: (track: Track) => void
   onArchive?: (track: Track) => void
@@ -46,30 +53,18 @@ interface Props {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'recommendations', label: 'Recommendations' },
-  { id: 'cues', label: 'Cues' },
+  { id: 'cues', label: 'Markers' },
   { id: 'notes', label: 'Notes' },
   { id: 'tags', label: 'Tags' },
   { id: 'metadata', label: 'Metadata' },
-  { id: 'overview', label: 'Overview' },
+  { id: 'recommendations', label: 'Matches' },
 ]
 
-/// Top-of-Library workspace for the *currently loaded* track — the one in the
-/// player. Single-click selection on a library row no longer opens this; users
-/// have to either play the track (double-click / row ▶) or use a context menu
-/// item that explicitly loads it (e.g. "Notes…" / "Tag…"). That keeps casual
-/// browsing free of workspace pop-ups.
-///
-/// Layout (top → bottom):
-///   1. Big banded waveform (re-uses BandedWaveform; cue markers come in 20c)
-///   2. Title row + close button (close clears the player → workspace hides)
-///   3. Pill row (Key / BPM / Energy / Cues / Duration)
-///   4. Action row (Play / Add to mix / Find matches / Tag / Notes / Archive / Reveal / Cleanup)
-///   5. Tab bar
-///   6. Tab content (max-height ~14rem so library table below stays usable)
-///
-/// The whole thing collapses to a slim title + play strip via the chevron at the top right.
+/// Deliberately opened preparation view. Its audio controller stays at App level.
+/// Focus list hides this presentation, preserving zoom and in-session drafts.
 export function TrackPrepWorkspace({
+  active,
+  inspectorHost,
   onAddToChain,
   onCleanup,
   onArchive,
@@ -89,18 +84,29 @@ export function TrackPrepWorkspace({
   const track = trackQuery.data ?? null
   const lastTab = useUiPrefs((s) => s.lastInspectorTab)
   const setLastTab = useUiPrefs((s) => s.setLastInspectorTab)
-  const collapsed = useUiPrefs((s) => s.inspectorCollapsed)
-  const toggleCollapsed = useUiPrefs((s) => s.toggleInspectorCollapsed)
-  const waveformVisible = useUiPrefs((s) => s.prepWaveformVisible)
-  const detailsVisible = useUiPrefs((s) => s.prepDetailsVisible)
-  const toggleWaveform = useUiPrefs((s) => s.togglePrepWaveform)
-  const toggleDetails = useUiPrefs((s) => s.togglePrepDetails)
+  const inspectorCollapsed = useUiPrefs((s) => s.inspectorCollapsed)
+  const setInspectorCollapsed = useUiPrefs((s) => s.setInspectorCollapsed)
+  const sidebarToggle = useRef<HTMLButtonElement>(null)
 
-  // The "Overview" tab made sense in the side panel — it summarised key metadata
-  // because the side panel was narrow. In the wide workspace, Overview's content
-  // is already visible (chips + actions are on the workspace itself), so default
-  // to Recommendations instead. We still honour whatever the user last picked.
-  const [tab, setTab] = useState<Tab>(lastTab === 'overview' ? 'recommendations' : lastTab)
+  // Retire the duplicate Overview tab; keep existing tab preferences compatible.
+  const [tab, setTab] = useState<Tab>(lastTab === 'overview' ? 'cues' : lastTab)
+  const [windowSeconds, setWindowSeconds] = useState(0)
+  const waveformRoot = useRef<HTMLDivElement>(null)
+  const [waveformHeight, setWaveformHeight] = useState(140)
+  useEffect(() => {
+    const node = waveformRoot.current
+    if (!node) return
+    const observer = new ResizeObserver(() =>
+      setWaveformHeight(Math.max(60, Math.round(node.clientHeight))),
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [trackId, track?.id])
+  const deviceCues = useQuery({
+    queryKey: ['device-cues', trackId],
+    queryFn: () => cuesApi.listDeviceCues(trackId!),
+    enabled: !!trackId,
+  })
 
   const switchTab = (next: Tab) => {
     useUiPrefs.getState().setInspectorCollapsed(false)
@@ -125,8 +131,6 @@ export function TrackPrepWorkspace({
   const togglePlay = usePlayer((s) => s.togglePlay)
   const seek = usePlayer((s) => s.seek)
   const playTrack = usePlayer((s) => s.playTrack)
-  const playerTrackId = usePlayer((s) => s.trackId)
-  const clear = usePlayer((s) => s.clear)
   const liveTime = usePlayer((s) => s.position)
   const liveDuration = usePlayer((s) => s.duration)
 
@@ -134,25 +138,18 @@ export function TrackPrepWorkspace({
   // useCues already exposes the create/update/delete mutations the CuesTab consumes;
   // we hook into the same hook so the workspace's add-cue and the tab share state.
   const cuesHook = useCues(trackId)
-  const cueCount = cuesHook.cues.length
   const cueMarkers = useMemo(
-    () => cuesHook.cues.map((c) => ({
-      id: c.id,
-      timeSeconds: c.timeSeconds,
-      label: c.label || c.type,
-      isAutoSuggested: c.isAutoSuggested,
-    })),
+    () =>
+      cuesHook.cues.map((c) => ({
+        id: c.id,
+        timeSeconds: c.timeSeconds,
+        label: c.label || c.type,
+        isAutoSuggested: c.isAutoSuggested,
+      })),
     [cuesHook.cues],
   )
 
   const playLabel = isPlaying ? 'Pause' : 'Play'
-
-  const handleClose = () => {
-    // Closing the workspace stops + unloads the player. (If the user just wanted
-    // to free vertical space without losing playback, the ▴ collapse button is
-    // the right tool — the workspace stays mounted, just visually slim.)
-    clear()
-  }
 
   const handleSeek = (t: number) => seek(t)
 
@@ -170,14 +167,12 @@ export function TrackPrepWorkspace({
   // grid even with the magnifier zoomed to the floor. Pass `bypassSnap` to
   // place exactly where the cursor / playhead is (Shift+Q from the keyboard).
   const addCueAtCursorOrPlayhead = (opts?: { bypassSnap?: boolean }) => {
-    if (!trackId || !track) return
-    const rawTime = hoverTimeRef.current ?? (liveTime > 0 ? liveTime : null)
-    if (rawTime === null || rawTime < 0) return
+    if (!active || !trackId || !track) return
+    const rawTime = hoverTimeRef.current ?? liveTime
+    if (rawTime < 0) return
 
     const firstBeat = cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null
-    const snapped = opts?.bypassSnap
-      ? rawTime
-      : snapToBeat(rawTime, track.bpm, firstBeat)
+    const snapped = opts?.bypassSnap ? rawTime : snapToBeat(rawTime, track.bpm, firstBeat)
 
     cuesHook.create.mutate({ timeSeconds: snapped, type: 'Custom' })
   }
@@ -197,10 +192,10 @@ export function TrackPrepWorkspace({
   // for that role, when cues haven't loaded yet, or when peaks fail.
   const autoCueAttemptedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
-    if (!trackId || !track) return
+    if (!active || !trackId || !track) return
     // Relinking preserves prep; do not generate new suggestions over it.
     if (audioRevision > 0) return
-    if (cuesHook.loading) return
+    if (cuesHook.loading || cuesHook.error) return
     if (autoCueAttemptedRef.current.has(trackId)) return
 
     let cancelled = false
@@ -208,7 +203,9 @@ export function TrackPrepWorkspace({
     autoCueAttemptedRef.current.add(tid)
 
     const hasFirstBeat = cuesHook.cues.some((c) => c.type === 'FirstBeat')
-    const hasStructural = cuesHook.cues.some((c) => c.type === 'Drop' || c.type === 'Breakdown' || c.type === 'Outro')
+    const hasStructural = cuesHook.cues.some(
+      (c) => c.type === 'Drop' || c.type === 'Breakdown' || c.type === 'Outro',
+    )
 
     loadBandedPeaks(tid)
       .then((peaks) => {
@@ -235,8 +232,8 @@ export function TrackPrepWorkspace({
         // first-beat anchor (use the existing cue if present, else the freshly
         // detected one). Without either we can't snap, so skip — the user can
         // tag BPM and reload to retry.
-        const anchor = cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds
-          ?? detectedFirstBeat
+        const anchor =
+          cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? detectedFirstBeat
         if (!hasStructural && track.bpm && anchor !== null && anchor !== undefined) {
           const structural = detectStructuralCues(peaks, track.durationSeconds, track.bpm, anchor)
           for (const cue of structural) {
@@ -256,18 +253,25 @@ export function TrackPrepWorkspace({
     return () => {
       cancelled = true
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId, cuesHook.loading, audioRevision])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, trackId, track, cuesHook.loading, cuesHook.error, audioRevision])
 
   // Hotkeys: Q adds a cue (at the magnifier hover position if the cursor is
   // over the waveform, otherwise at the playhead); 1-8 jump to the Nth cue.
   // Skipped while the user is typing in inputs (notes textarea, tag input, etc.)
   // so they don't fire when the user means to type Q or a digit.
   useEffect(() => {
-    if (!trackId) return
+    if (!active || !trackId) return
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (
+        e.defaultPrevented ||
+        document.querySelector('dialog:modal') ||
+        (target &&
+          (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) ||
+            target.isContentEditable))
+      )
+        return
       if (e.key === 'q' || e.key === 'Q') {
         // Shift-Q skips beat-snap so you can drop a cue at the exact hovered
         // / playhead time (useful when a track has off-grid moments worth
@@ -287,271 +291,286 @@ export function TrackPrepWorkspace({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId, cuesHook.cues, liveTime])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, trackId, cuesHook.cues, liveTime])
 
-  // Self-hide if no track loaded. App.tsx still renders us, but we render nothing.
-  if (!trackId || !track) return null
+  if (!trackId) return null
+  // A failed metadata read must not hide the only usable transport or trap
+  // the user in an empty preparation pane while the deck keeps playing.
+  if (!track)
+    return (
+      <div className="preparation-workspace">
+        <header className="flex items-center gap-3 border-b border-[var(--color-border)] p-4">
+          <IconButton small variant="primary" label={playLabel} onClick={togglePlay}>
+            {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+          </IconButton>
+          <h2 className="min-w-0 flex-1 text-sm">
+            {trackQuery.isError ? 'Track details unavailable' : 'Loading track details…'}
+          </h2>
+          <Button small onClick={() => useCurrentPage.getState().setPreparationOpen(false)}>
+            Focus list
+          </Button>
+        </header>
+        {trackQuery.isError && (
+          <StatusMessage tone="error">
+            Could not load track details: {trackQuery.error.message}{' '}
+            <Button small onClick={() => void trackQuery.refetch()}>
+              Retry track details
+            </Button>
+          </StatusMessage>
+        )}
+      </div>
+    )
 
   const duration = liveDuration > 0 ? liveDuration : track.durationSeconds
 
-  // Collapsed mode — slim strip with title + play + close. Keeps the workspace
-  // mounted (waveform component cached) but reclaims most vertical space.
+  /* UI 2: compact browsing lives in MiniPlayer. This view is deliberately
+     opened, and closing it never clears the application-lifetime audio deck. */
+  const focusList = () => useCurrentPage.getState().setPreparationOpen(false)
+  const nudge = (delta: number) => seek(Math.max(0, Math.min(duration, liveTime + delta)))
+  const markers = [
+    ...cueMarkers,
+    ...(deviceCues.data ?? []).map((c) => ({
+      id: `device-${c.id}`,
+      timeSeconds: c.startSeconds,
+      label: `${c.kind === 'Loop' ? 'Loop' : 'Memory'} · ${c.comment ?? ''}`,
+      isAutoSuggested: false,
+      isDeviceCue: true,
+    })),
+  ].sort((a, b) => a.timeSeconds - b.timeSeconds)
   const transport = (
-      <div className="flex min-h-12 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
-        <button
-          onClick={togglePlay}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-white"
-          title={playLabel}
-          aria-label={playLabel}
-        >
-          {isPlaying
-            ? <Pause size={12} fill="currentColor" />
-            : <Play size={12} fill="currentColor" className="translate-x-[1px]" />}
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium" title={track.title ?? ''}>
-            {track.title ?? track.fileName}
-          </p>
-          <p className="truncate text-xs text-[var(--color-muted)]">
-            {track.artist ?? 'Unknown'}
-            {track.version ? ` · ${track.version}` : ''}
-          </p>
-        </div>
-        {!collapsed && <>
-          <button aria-pressed={waveformVisible} title={waveformVisible ? 'Hide waveform and cue bank' : 'Show waveform and cue bank'} onClick={toggleWaveform} className="rounded border border-[var(--color-border)] px-2 py-1 text-xs aria-pressed:bg-[var(--color-accent)]/15 aria-pressed:text-[var(--color-accent)]">Waveform</button>
-          <button aria-pressed={detailsVisible} title={detailsVisible ? 'Hide detail tabs' : 'Show detail tabs'} onClick={toggleDetails} className="rounded border border-[var(--color-border)] px-2 py-1 text-xs aria-pressed:bg-[var(--color-accent)]/15 aria-pressed:text-[var(--color-accent)]">Details</button>
-        </>}
-        <span className="text-xs tabular-nums text-[var(--color-muted)]">{formatDuration(liveTime)} / {formatDuration(duration)}</span>
-        <button
-          onClick={toggleCollapsed}
-          className="inline-flex items-center gap-1 rounded border border-[var(--color-border)] px-2 py-1 text-xs hover:text-white"
-          title={collapsed ? 'Expand track preparation' : 'Focus on the list without stopping playback'}
-          aria-expanded={!collapsed}
-        >
-          {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-          {collapsed ? 'Expand prep' : 'Focus list'}
-        </button>
-        <button
-          onClick={handleClose}
-          className="text-[var(--color-muted)] hover:text-white"
-          title="Close workspace (stops playback)"
-          aria-label="Close workspace"
-        >
-          <X size={16} strokeWidth={1.75} />
-        </button>
+    <div className="preparation-transport flex min-h-12 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
+      <IconButton small variant="primary" onClick={togglePlay} label={playLabel}>
+        {isPlaying ? (
+          <Pause size={12} fill="currentColor" />
+        ) : (
+          <Play size={12} fill="currentColor" className="translate-x-[1px]" />
+        )}
+      </IconButton>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium" title={track.title ?? ''}>
+          {track.title ?? track.fileName}
+        </p>
+        <p className="truncate text-xs text-[var(--color-muted)]">
+          {track.artist ?? 'Unknown'}
+          {track.version ? ` · ${track.version}` : ''}
+        </p>
       </div>
-    )
-  if (collapsed) return transport
-
-  return (
-    <div className="flex h-full min-h-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-      {transport}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-      <PlaybackError track={track} error={playbackError} />
-      {/* Top: waveform + close/collapse buttons floating top-right */}
-      {waveformVisible && <div className="relative flex gap-3 px-3 pt-3">
-        <div className="min-w-0 flex-1">
-          <BandedWaveform
-            trackId={track.id}
-            duration={duration}
-            currentTime={liveTime}
-            onSeek={handleSeek}
-            cues={cueMarkers}
-          // Click on a cue marker / section → seek + start playback from that
-          // cue (matches Mixed-in-Key's "click section, play from there"
-          // pattern). If the user wants to edit a cue's label/type, the Cues
-          // tab is right there in the tab bar.
-            onCueClick={(id) => {
-              const c = cuesHook.cues.find((x) => x.id === id)
-              if (!c) return
-              // playTrack on the same id is a no-op for "load" but kicks audio
-              // back into play if it was paused; then seek lands the playhead.
-              playTrack(track.id)
-              setTimeout(() => seek(c.timeSeconds), 50)
-            }}
-            onHoverChange={(t) => { hoverTimeRef.current = t }}
-            bpm={track.bpm}
-            firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
-            height={120}
-          />
-        </div>
-        <CueBank
-          track={track}
-          onJump={(seconds) => {
-            if (playerTrackId !== track.id) playTrack(track.id)
-            setTimeout(() => seek(seconds), 50)
-          }}
-        />
-      </div>}
-
-      {/* Pill row */}
-      <div className="flex flex-wrap items-center gap-2 px-4 pt-2 text-xs">
-        <KeyPill musicalKey={track.musicalKey} />
-        <BpmPill bpm={track.bpm} />
-        <EnergyPill energy={track.energy} />
-        <Pill>{formatDuration(track.durationSeconds)}</Pill>
-        <Pill>{cueCount} {cueCount === 1 ? 'cue' : 'cues'}</Pill>
-        {track.genre && <Pill muted>{track.genre}</Pill>}
-        {track.releaseYear && <Pill muted>{track.releaseYear}</Pill>}
-      </div>
-
-      {/* Action row */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        <button
-          onClick={togglePlay}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
-        >
-          {isPlaying
-            ? <Pause size={12} fill="currentColor" />
-            : <Play size={12} fill="currentColor" className="translate-x-[1px]" />}
-          {playLabel}
-        </button>
-        {onAddToChain && (
-          <ActionButton onClick={() => onAddToChain(track.id)} title="Add to active mix plan" icon={Plus}>
-            Add to mix
-          </ActionButton>
-        )}
-        <ActionButton
-          onClick={() => addCueAtCursorOrPlayhead()}
-          icon={Plus}
-          title={track.bpm
-            ? 'Add a cue at the hovered waveform position (or playhead), snapped to the nearest beat. Same as pressing Q. Shift+Q to place off-grid.'
-            : 'Add a cue at the hovered waveform position (or playhead). Same as pressing Q.'}
-        >
-          Cue
-        </ActionButton>
-        <ActionButton onClick={() => switchTab('recommendations')} title="Find compatible tracks" icon={Sparkles}>
-          Find matches
-        </ActionButton>
-        <ActionButton onClick={() => switchTab('tags')} title="Edit tags" icon={TagIcon}>
-          Tag
-        </ActionButton>
-        <ActionButton onClick={() => switchTab('notes')} title="Edit notes" icon={StickyNote}>
-          Notes
-        </ActionButton>
-        {(track.isDirtyName || track.isMissingMetadata) && onCleanup && (
-          <ActionButton
-            onClick={() => onCleanup(track)}
-            tone="warn"
-            icon={AlertTriangle}
-            title="Cleanup suggested"
-          >
-            Cleanup
-          </ActionButton>
-        )}
-        {onArchive && (
-          <ActionButton
-            onClick={() => onArchive(track)}
-            icon={track.isArchived ? ArchiveRestore : Archive}
-            title={track.isArchived ? 'Restore to active library' : 'Retire from active library'}
-          >
-            {track.isArchived ? 'Restore' : 'Archive'}
-          </ActionButton>
-        )}
-        {bridgeAvailable() && (
-          <ActionButton
-            onClick={() => { void bridge.openInExplorer(track.filePath) }}
-            icon={ExternalLink}
-            title="Reveal in Explorer"
-          >
-            Reveal
-          </ActionButton>
-        )}
-        <ConvertToMp3Button track={track} />
-        <button onClick={() => useTrackFileDialog.getState().open(track, 'relink')} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs">Relink audio file…</button>
-        <button onClick={() => useTrackFileDialog.getState().open(track, 'remove')} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs text-red-300">Remove from WISP…</button>
-      </div>
-
-      {/* Tab bar */}
-      {detailsVisible && <><nav className="flex overflow-x-auto border-t border-[var(--color-border)] text-xs">
-        {TABS.map((t) => (
-          <TabButton
-            key={t.id}
-            active={tab === t.id}
-            onClick={() => switchTab(t.id)}
-          >
-            {t.label}
-          </TabButton>
-        ))}
-      </nav>
-
-      {/* Tab content — capped height so the library table below stays usable.
-          Each tab is internally scrollable. */}
-      <div className="min-h-0 border-t border-[var(--color-border)]">
-        {tab === 'recommendations' && (
-          <RecommendationsList seed={track} onAddToChain={onAddToChain} />
-        )}
-        {tab === 'cues' && <CuesTab track={track} />}
-        {tab === 'notes' && <NotesTab track={track} />}
-        {tab === 'tags' && <TagsTab track={track} />}
-        {tab === 'metadata' && <MetadataTab track={track} />}
-        {tab === 'overview' && <OverviewTab track={track} />}
-      </div></>}
-      </div>
+      <KeyPill musicalKey={track.musicalKey} />
+      <BpmPill bpm={track.bpm} />
+      <span className="text-xs tabular-nums text-[var(--color-muted)]">
+        {formatDuration(liveTime)} / {formatDuration(duration)}
+      </span>
+      <IconButton
+        ref={sidebarToggle}
+        small
+        label={inspectorCollapsed ? 'Show track sidebar' : 'Hide track sidebar'}
+        aria-expanded={!inspectorCollapsed}
+        aria-controls="track-preparation-sidebar"
+        onClick={() => setInspectorCollapsed(!inspectorCollapsed)}
+      >
+        <PanelRight size={16} />
+      </IconButton>
+      <Button small onClick={focusList} tooltip="Focus on the list without stopping playback">
+        <ChevronUp size={14} /> Focus list
+      </Button>
+      <IconButton
+        small
+        variant="quiet"
+        onClick={focusList}
+        label="Close preparation"
+        tooltip="Close preparation without stopping playback"
+      >
+        <X size={16} strokeWidth={1.75} />
+      </IconButton>
     </div>
   )
-}
-
-function Pill({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
-    <span className={[
-      'rounded bg-[var(--color-bg)] px-2 py-0.5 text-[11px] tabular-nums',
-      muted ? 'text-[var(--color-muted)]' : '',
-    ].join(' ')}>
-      {children}
-    </span>
-  )
-}
-
-function ActionButton({
-  onClick,
-  title,
-  tone,
-  icon: Icon,
-  children,
-}: {
-  onClick: () => void
-  title?: string
-  tone?: 'warn'
-  icon?: import('lucide-react').LucideIcon
-  children: React.ReactNode
-}) {
-  const cls = tone === 'warn'
-    ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
-    : 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white'
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs ${cls}`}
-    >
-      {Icon && <Icon size={12} strokeWidth={1.75} />}
-      {children}
-    </button>
-  )
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={[
-        'shrink-0 px-4 py-2 transition-colors',
-        active
-          ? 'border-b-2 border-[var(--color-accent)] text-white'
-          : 'border-b-2 border-transparent text-[var(--color-muted)] hover:text-white',
-      ].join(' ')}
-    >
-      {children}
-    </button>
+    <div className="preparation-workspace">
+      {transport}
+      <div className="preparation-body">
+        <div className="preparation-main">
+          <PlaybackError track={track} error={playbackError} />
+          {cuesHook.create.error && (
+            <StatusMessage tone="error">
+              Could not save marker: {cuesHook.create.error.message}. Try Cue again.
+            </StatusMessage>
+          )}
+          <div className="preparation-tools">
+            <Button
+              small
+              onClick={() => addCueAtCursorOrPlayhead()}
+              tooltip="Add WISP marker at cursor/playhead, snapped to beat (Q). Shift+Q bypasses snap."
+            >
+              <Plus size={16} />
+              Cue
+            </Button>
+            {onAddToChain && (
+              <Button small onClick={() => onAddToChain(track.id)}>
+                <Plus size={16} />
+                Add to mix
+              </Button>
+            )}
+            <label className="flex items-center gap-2 text-xs">
+              Zoom
+              <select
+                aria-label="Preparation waveform zoom"
+                value={windowSeconds}
+                onChange={(e) => setWindowSeconds(Number(e.target.value))}
+              >
+                <option value={0}>Whole track</option>
+                {[60, 20, 6, 2].map((seconds) => (
+                  <option key={seconds} value={seconds}>
+                    {seconds}s window
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              small
+              onClick={() => nudge(-0.01)}
+              tooltip="Move playback position back 10 milliseconds"
+            >
+              −10 ms
+            </Button>
+            <span className="text-xs tabular-nums" aria-label="Precise playback position">
+              {formatCueTime(liveTime)}
+            </span>
+            <Button
+              small
+              onClick={() => nudge(0.01)}
+              tooltip="Move playback position forward 10 milliseconds"
+            >
+              +10 ms
+            </Button>
+            <ActionMenu
+              label="Track actions"
+              icon={<MoreHorizontal />}
+              items={[
+                { label: 'Find matches', onSelect: () => switchTab('recommendations') },
+                { label: 'Edit tags', onSelect: () => switchTab('tags') },
+                { label: 'Edit notes', onSelect: () => switchTab('notes') },
+                ...(onArchive
+                  ? [
+                      {
+                        label: track.isArchived ? 'Restore track' : 'Archive track',
+                        onSelect: () => onArchive(track),
+                      },
+                    ]
+                  : []),
+                ...(onCleanup && (track.isDirtyName || track.isMissingMetadata)
+                  ? [{ label: 'Cleanup…', onSelect: () => onCleanup(track) }]
+                  : []),
+                ...(bridgeAvailable()
+                  ? [
+                      {
+                        label: 'Reveal in Explorer',
+                        onSelect: () => {
+                          void bridge.openInExplorer(track.filePath)
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  label: 'Relink audio file…',
+                  onSelect: () => useTrackFileDialog.getState().open(track, 'relink'),
+                },
+                {
+                  label: 'Remove from WISP…',
+                  danger: true,
+                  onSelect: () => useTrackFileDialog.getState().open(track, 'remove'),
+                },
+              ]}
+            />
+          </div>
+          <div className="preparation-waveform" ref={waveformRoot}>
+            <BandedWaveform
+              trackId={track.id}
+              duration={duration}
+              currentTime={liveTime}
+              onSeek={handleSeek}
+              cues={markers}
+              onHoverChange={(t) => {
+                hoverTimeRef.current = t
+              }}
+              bpm={track.bpm}
+              firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
+              height={waveformHeight}
+              windowSeconds={windowSeconds}
+              onCueClick={(id) => {
+                const cue = markers.find((c) => c.id === id)
+                if (!cue) return
+                playTrack(track.id)
+                setTimeout(() => seek(cue.timeSeconds), 50)
+              }}
+            />
+          </div>
+          <div className="preparation-caption">
+            <span>
+              {track.bpm && cuesHook.cues.some((c) => c.type === 'FirstBeat')
+                ? 'Beatgrid anchored to FirstBeat marker'
+                : 'Set BPM and a FirstBeat marker to anchor the beatgrid'}
+            </span>
+            <span>Hover + wheel: magnifier zoom · Q: marker · Shift+Q: unsnapped</span>
+            <ConvertToMp3Button track={track} />
+          </div>
+        </div>
+      </div>
+      {inspectorHost &&
+        createPortal(
+          <aside
+            id="track-preparation-sidebar"
+            className="preparation-sidebar"
+            aria-label="Track cues and details"
+          >
+            <header className="preparation-sidebar-heading">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase tracking-widest text-[var(--color-muted)]">
+                  Track preparation
+                </p>
+                <h2
+                  className="truncate text-base font-medium"
+                  title={track.title ?? track.fileName}
+                >
+                  {track.title ?? track.fileName}
+                </h2>
+                <p className="truncate text-xs text-[var(--color-muted)]">
+                  {track.artist ?? 'Unknown artist'}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <KeyPill musicalKey={track.musicalKey} />
+                  <BpmPill bpm={track.bpm} />
+                  <span className="text-xs text-[var(--color-muted)]">
+                    {formatDuration(duration)}
+                  </span>
+                </div>
+              </div>
+              <IconButton
+                small
+                variant="quiet"
+                label="Collapse track sidebar"
+                onClick={() => {
+                  sidebarToggle.current?.focus()
+                  setInspectorCollapsed(true)
+                }}
+              >
+                <PanelRightClose size={16} />
+              </IconButton>
+            </header>
+            <CueBank track={track} onJump={(seconds) => seek(seconds)} />
+            <SectionTabs label="Track details" active={tab} onSelect={switchTab} items={TABS} />
+            <div className="preparation-details" key={track.id}>
+              {tab === 'cues' && <CuesTab track={track} />}
+              {tab === 'notes' && <NotesTab track={track} />}
+              {tab === 'tags' && <TagsTab track={track} />}
+              {(tab === 'metadata' || tab === 'overview') && <MetadataTab track={track} />}
+              {tab === 'recommendations' && (
+                <RecommendationsList seed={track} onAddToChain={onAddToChain} />
+              )}
+            </div>
+          </aside>,
+          inspectorHost,
+        )}
+    </div>
   )
 }

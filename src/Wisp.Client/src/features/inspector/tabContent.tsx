@@ -9,7 +9,7 @@ import { detectFirstBeatFromPeaks, getCachedBandedPeaks } from '../../audio/peak
 import { confirmDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
 import { useCues } from '../cues/useCues'
-import { formatBpm, formatDuration } from '../library/format'
+import { formatBpm, formatCueTime, formatDuration } from '../library/format'
 
 /// Shared tab content components for the track inspector / track prep workspace.
 /// Each tab is a self-contained, scrollable region — host components decide how
@@ -63,7 +63,7 @@ const CUE_TYPES = ['FirstBeat', 'Intro', 'MixIn', 'Breakdown', 'Drop', 'VocalIn'
 type CueTypeName = typeof CUE_TYPES[number]
 
 export function CuesTab({ track }: { track: Track }) {
-  const { cues, loading, update, remove, removeAll, generatePhraseMarkers } = useCues(track.id)
+  const { cues, loading, error, refetch, update, remove, removeAll, generatePhraseMarkers } = useCues(track.id)
   const queryClient = useQueryClient()
   const deviceCues = useQuery({
     queryKey: ['device-cues', track.id],
@@ -170,8 +170,12 @@ export function CuesTab({ track }: { track: Track }) {
   }
   const header = (
     <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)]/40 px-5 py-2 text-xs">
+      <strong className="basis-full">WISP markers · {cues.length}</strong>
+      <details className="basis-full">
+      <summary className="cursor-pointer py-1 text-[var(--color-muted)]">Marker tools</summary>
+      <div className="flex flex-wrap items-center gap-2 py-2">
       <span className="text-[var(--color-muted)]">Anchor</span>
-      <span className="tabular-nums text-white">{formatDuration(phraseAnchorTime)}</span>
+      <span className="tabular-nums text-white">{formatCueTime(phraseAnchorTime)}</span>
       <span
         className="rounded bg-[var(--color-bg)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
         title={
@@ -184,10 +188,10 @@ export function CuesTab({ track }: { track: Track }) {
         {anchorLabel[anchorSource]}
       </span>
       <span className="text-[var(--color-muted)]">
-        {noBpm ? '· no BPM tag' : `· ${Number(track.bpm).toFixed(0)} BPM · 16-beat phrases`}
+        {noBpm ? '· no BPM tag' : `· ${Number(track.bpm).toFixed(0)} BPM · 16-bar phrases`}
       </span>
       <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">
-        {memoryCueCount} selected for CDJ export
+        {memoryCueCount} Memory Cues saved for next export
       </span>
       <div className="ml-auto flex items-center gap-1.5">
         <button
@@ -213,10 +217,16 @@ export function CuesTab({ track }: { track: Track }) {
           {generatePhraseMarkers.isPending ? 'Generating…' : 'Generate phrases'}
         </button>
       </div>
+      </div>
+      </details>
+      {deviceCues.isError && <p role="alert" className="basis-full text-red-300">Memory Cues could not be loaded. <button className="underline" onClick={() => void deviceCues.refetch()}>Retry Memory Cues</button></p>}
+      {(promoteToDeviceCue.error || removeDeviceCue.error || update.error || remove.error || removeAll.error || generatePhraseMarkers.error) && <p role="alert" className="basis-full text-red-300">{(promoteToDeviceCue.error || removeDeviceCue.error || update.error || remove.error || removeAll.error || generatePhraseMarkers.error)?.message}</p>}
+      {(promoteToDeviceCue.isSuccess || removeDeviceCue.isSuccess) && <p role="status" className="basis-full text-[var(--ui-success)]">{promoteToDeviceCue.isSuccess && promoteToDeviceCue.submittedAt > removeDeviceCue.submittedAt ? 'Memory Cue saved in WISP for the next USB export.' : 'Memory Cue removed from WISP. Existing USB exports are unchanged.'}</p>}
     </div>
   )
 
   if (loading) return <p className="px-5 py-6 text-sm text-[var(--color-muted)]">Loading cues…</p>
+  if (error) return <p role="alert" className="px-3 py-3 text-sm text-red-300">Could not load WISP markers: {error.message} <button className="underline" onClick={() => void refetch()}>Retry markers</button></p>
   if (cues.length === 0) {
     return (
       <div className="flex h-full min-h-0 flex-col">
@@ -227,7 +237,7 @@ export function CuesTab({ track }: { track: Track }) {
           </p>
           {!noBpm && (
             <p className="text-xs">
-              For phrase markers across the whole track: pause at the kick on bar 1, then click <strong>Generate phrases</strong> above — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
+              For phrase markers across the whole track: pause at the kick on bar 1, then open <strong>Marker tools → Generate phrases</strong> — Wisp uses the playhead as the first beat and extrapolates from your BPM tag.
             </p>
           )}
         </div>
@@ -247,7 +257,7 @@ export function CuesTab({ track }: { track: Track }) {
       {cues.map((c, i) => (
         <li
           key={c.id}
-          className="flex items-center gap-2 border-b border-[var(--color-border)]/30 px-5 py-1.5 text-sm hover:bg-white/5"
+          className="cue-editor-row flex flex-wrap items-center gap-2 border-b border-[var(--color-border)]/30 px-3 py-2 text-sm hover:bg-white/5"
         >
           {/* Index badge — matches the 1-8 hotkey assignment so the user sees
               which number jumps to which cue. */}
@@ -261,6 +271,7 @@ export function CuesTab({ track }: { track: Track }) {
 
           {/* Type dropdown — quick way to re-classify a cue without going through a modal. */}
           <select
+            aria-label={`Marker ${i + 1} type`}
             value={c.type}
             onChange={(e) => update.mutate({ id: c.id, type: e.target.value as CueTypeName })}
             className="shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1.5 py-0.5 text-[11px]"
@@ -276,7 +287,7 @@ export function CuesTab({ track }: { track: Track }) {
           />
 
           <span className="shrink-0 tabular-nums text-xs text-[var(--color-muted)]">
-            {formatDuration(c.timeSeconds)}
+            {formatCueTime(c.timeSeconds)}
           </span>
           {deviceCueBySource.has(c.id) ? (
             <button
@@ -285,16 +296,16 @@ export function CuesTab({ track }: { track: Track }) {
               className="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-400/50 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] text-emerald-200 hover:bg-red-500/15 hover:text-red-200 disabled:opacity-50"
               title="This cue is selected as a CDJ Memory Cue. Click to remove it from CDJ export."
             >
-              <Check size={10} strokeWidth={2} /> CDJ selected
+              <Check size={10} strokeWidth={2} /> Memory saved
             </button>
           ) : (
             <button
               onClick={() => promoteToDeviceCue.mutate(c.id)}
-              disabled={promoteToDeviceCue.isPending}
+              disabled={promoteToDeviceCue.isPending || deviceCues.isLoading || deviceCues.isError}
               className="shrink-0 rounded border border-[var(--color-accent)]/50 px-1.5 py-0.5 text-[10px] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 disabled:opacity-50"
               title="Add this WISP cue as a CDJ Memory Cue for export."
             >
-              Add CDJ Memory
+              Add Memory Cue
             </button>
           )}
           <button
@@ -339,16 +350,17 @@ export function CueBank({
     .sort((a, b) => a.startSeconds - b.startSeconds)
 
   return (
-    <aside className="flex h-[120px] w-56 shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-bg)]/65 text-[11px]">
+    <aside aria-label="Saved device cues" style={{ height: memoryCues.length ? 128 : 104 }} className="cue-bank flex shrink-0 flex-col border-b border-[var(--color-border)] bg-[var(--color-bg)] text-[11px]">
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-2.5 py-1.5">
         <span className="font-semibold tracking-wide text-emerald-200">MEMORY CUES</span>
-        <span className="tabular-nums text-[var(--color-muted)]">{memoryCues.length}/10</span>
+        <span className="tabular-nums text-[var(--color-muted)]">{deviceCues.isError ? 'Unavailable' : `${memoryCues.length}/10`}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
+        {deviceCues.isError && <p role="alert" className="p-2">Could not load saved cues. <button className="underline" onClick={() => void deviceCues.refetch()}>Retry cues</button></p>}
         {deviceCues.isLoading ? (
           <p className="px-2.5 py-2 text-[var(--color-muted)]">Loading…</p>
-        ) : memoryCues.length === 0 ? (
-          <p className="px-2.5 py-2 leading-relaxed text-[var(--color-muted)]">No Memory Cues selected. Use the Cues tab to add one for the next USB export.</p>
+        ) : !deviceCues.isError && memoryCues.length === 0 ? (
+          <p className="px-2.5 py-2 leading-relaxed text-[var(--color-muted)]">No Memory Cues selected. Use the Markers tab to add one for the next USB export.</p>
         ) : memoryCues.map((cue, index) => (
           <button
             key={cue.id}
@@ -357,7 +369,7 @@ export function CueBank({
             title={`Jump to Memory Cue ${index + 1}`}
           >
             <span className="w-7 text-[10px] font-semibold text-emerald-300">{cue.kind === 'Loop' ? 'LOOP' : `MEM ${index + 1}`}</span>
-            <span className="tabular-nums text-white">{formatDuration(cue.startSeconds)}</span>
+            <span className="tabular-nums text-white">{formatCueTime(cue.startSeconds)}</span>
             <span className="min-w-0 flex-1 truncate text-[var(--color-muted)]">{cue.comment ?? 'Memory Cue'}</span>
           </button>
         ))}
@@ -384,6 +396,7 @@ function InlineLabelEdit({
 
   return (
     <input
+      aria-label={`Marker label (${placeholder})`}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => {

@@ -2,10 +2,11 @@
 
 Updated: 2026-10-01
 
-Status: UI 1 shared foundations and navigation are implemented in PR #42,
-with automated verification complete. Owner review and native acceptance remain
-pending. UI 2 is next: migrate the approved wide, resizable top preparation
-waveform and compact bottom playback overview from the isolated prototype.
+Status: UI 1 shared foundations/navigation (PR #42) are merged into develop.
+UI 2 Library/playlists/preparation is implemented on `codex/ui-phase-two-library`,
+including the approved full-height right inspector, wide, resizable preparation waveform and compact bottom
+playback overview. Automated evidence is recorded below and in the status log;
+owner visual review and native acceptance remain separate gates.
 
 ## Product outcome
 
@@ -115,8 +116,9 @@ The prototype has no WISP API, native bridge, storage or audio connections.
 Selection, playlist filtering, cue feedback and playback presentation are
 fictional demonstrations, not implemented app features. Settings in the actual
 application now uses the shared native modal and contains/restores focus.
-Its Library/player/preparation layout proposes UI 2 direction for approval, not
-an early implementation of UI 2. No installer or production asset includes it.
+Its Library/player/preparation layout supplied the approved UI 2 direction.
+That direction is now implemented separately in the actual client; the prototype
+itself is still disconnected and is not included in any production asset.
 
 ## Delivery workflow
 
@@ -178,28 +180,29 @@ activate content behind the modal.
 
 ## Phase UI 2 Library playlists and track preparation
 
-- [ ] Replace stacked permanent action bars with a clear Library/playlist
+- [x] Replace stacked permanent action bars with a clear Library/playlist
   header, primary search, optional advanced filters and one selection toolbar.
   Replace scope jargon with ordinary playlist and All tracks labels.
-- [ ] Create a compact persistent playback presentation and deliberately opened
-  top preparation waveform with the cue bank on the right. Support zoom around
+- [x] Create a compact persistent playback presentation and deliberately opened
+  top preparation waveform with a full-height, independently collapsible cue/details
+  sidebar on the right of both waveform and track list. Support zoom around
   the playhead, clear cue markers, precise seeking and fine position adjustment.
   Preserve resizing and remember the preferred dock height, focus-list behaviour,
   cue seeking, playback position and the application-level audio controller.
-- [ ] Make the active plan a compact summary/drawer by default, retaining an
+- [x] Make the active plan a compact summary/drawer by default, retaining an
   explicit expanded view. Its presence must not reduce browsing to one row.
-- [ ] Offer selectable, resizable columns and remembered presets for DJ
+- [x] Offer selectable, resizable columns and remembered presets for DJ
   preparation, Recently added and File management. Keep virtualisation and
   useful sorting; track dates remain distinct from playlist membership dates.
-- [ ] Keep Play, Cue and Add to plan prominent. Move less frequent maintenance
+- [x] Keep Play, Cue and Add to plan prominent. Move less frequent maintenance
   actions into an accessible menu without hiding the reason for unavailable
   audio. Reduce duplicated Overview/Metadata and action/tab content.
-- [ ] Make WISP markers, saved Memory Cues and Hot Cues visibly distinct with
+- [x] Make WISP markers, saved Memory Cues and Hot Cues visibly distinct with
   timestamps, counts and add/remove feedback. Do not introduce an inferred
   exported state or pretend unsupported player cue types work.
-- [ ] Preserve internal and external multi-file dragging, Ctrl+A across pages,
+- [x] Preserve internal and external multi-file dragging, Ctrl+A across pages,
   row/occurrence identity, duplicate prompts, playlist removal and plan reorder.
-- [ ] Verify sorting/filtering/pagination and panel resizing do not lose the
+- [x] Verify sorting/filtering/pagination and panel resizing do not lose the
   user's position or inadvertently change the playing track.
 
 Acceptance: at 1366 by 768, the compact browsing layout with playback, active
@@ -210,6 +213,28 @@ record the remaining list space rather than shrinking the cue editor to meet
 the compact browsing target.
 At 1024px wide, core DJ columns remain usable without forcing the complete file
 management grid onto the screen. Record actual dimensions and screenshots.
+
+UI 2 implementation evidence: fictional 1,205-track fixtures in the real client
+show 11 complete rows at both 1024 by 768 and 1366 by 768 with playback,
+selection and the compact plan. The list container is 429px high; default expanded
+preparation is 328px plus its 12px resize handle, leaving a 174px list/four rows.
+At 1920 by 1080 compact browsing has 19 complete rows. The full-height right
+inspector measures 602px at the laptop sizes and 914px at 1920 by 1080; changing
+waveform height does not change inspector height. It collapses independently,
+retaining tabs, notes drafts, zoom, audio and the track-list scroll owner.
+The compact browsing DJ view fits the two laptop widths without horizontal
+scrolling; with the sidebar open at 1024px, or with optional file-management
+columns, the table uses its own horizontal scroll. Only 24 rows are mounted at the laptop
+sizes. Screenshots are ignored diagnostics under `artifacts/ui-phase-two`.
+
+Verified automated controls include real browser audio/paused seeking, whole-track
+and playhead-centred zoom, anchored beatgrid/magnifier, 10ms adjustment, both resize
+methods, persistent sizes/columns, Focus list/audio/zoom retention, saved Memory Cue
+feedback/errors, cross-page selection, keyboard menus/reorder and existing dual-format
+drag contracts. All 109 browser and 58 unit tests pass. Browser bridge fixtures are
+not Windows OLE, rekordbox or Xone acceptance. Cue precision still uses the existing
+4096-bucket analysis; millisecond controls do not imply sample-accurate peaks.
+Implementation boxes above do not close the owner/native acceptance gate below.
 
 ## Phase UI 3 Mix Plans and discovery
 
