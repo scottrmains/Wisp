@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises'
 const library = Array.from({ length: 1205 }, (_, i) => ({
   id: `ui2-${i}`,
   title: i ? `Track ${String(i).padStart(4, '0')}` : 'Moving Through',
+  version: i === 1 ? 'Extended Mix' : null,
   artist: 'Sunday Club',
   filePath: `D:/Demo Music/Track ${i}.wav`,
   fileName: `Track ${i}.wav`,
@@ -205,6 +206,100 @@ async function play(page: Page) {
     .toBe(false)
 }
 
+test('title actually shrinks with pointer and keyboard, includes version and persists', async ({
+  page,
+}) => {
+  const state = await setup(page)
+  const row = page.locator('[data-track-id="ui2-1"]')
+  await expect(row).toContainText('Track 0001 (Extended Mix)')
+  const header = page
+    .getByRole('columnheader')
+    .filter({ has: page.getByRole('separator', { name: 'Resize Title column', exact: true }) })
+  const edge = header.getByRole('separator')
+  const initial = (await header.boundingBox())!.width
+  const box = (await edge.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 - 110, box.y + box.height / 2, { steps: 5 })
+  await page.mouse.up()
+  const narrower = (await header.boundingBox())!.width
+  expect(narrower).toBeLessThan(initial - 60)
+  await edge.focus()
+  await page.keyboard.press('ArrowLeft')
+  expect((await header.boundingBox())!.width).toBe(narrower - 16)
+  await page.reload()
+  expect((await header.boundingBox())!.width).toBe(narrower - 16)
+  await expect(
+    row.getByRole('cell').nth(3).locator('[title="Track 0001 (Extended Mix)"]'),
+  ).toBeVisible()
+  expect(state.calls).toEqual([])
+  expect(state.errors).toEqual([])
+})
+
+test('whole-track beatgrid toggles and persists without changing cues or snapping anchor', async ({
+  page,
+}) => {
+  const state = await setup(page)
+  await play(page)
+  await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+  const prep = page.getByLabel('Track preparation', { exact: true })
+  const waveform = prep.getByRole('slider', { name: 'Seek', exact: true })
+  const toggle = prep.getByRole('button', { name: /^Beatgrid/ })
+  await expect(waveform).toHaveAttribute('data-beatgrid', 'anchored')
+  expect(Number(await waveform.getAttribute('data-beatgrid-ticks'))).toBeGreaterThan(0)
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await toggle.click()
+  await expect(waveform).toHaveAttribute('data-beatgrid', 'hidden')
+  await prep.getByLabel('Preparation waveform zoom').selectOption('2')
+  await expect(waveform).toHaveAttribute('data-beatgrid-ticks', '0')
+  await page.reload()
+  await play(page)
+  await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await toggle.click()
+  await expect(waveform).toHaveAttribute('data-beatgrid', 'anchored')
+  await page.route('**/api/tracks/ui2-0/cues', (route) =>
+    route.fulfill({ json: state.cues.filter((c) => c.type !== 'FirstBeat') }),
+  )
+  await page.reload()
+  await play(page)
+  await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+  await expect(waveform).toHaveAttribute('data-beatgrid', 'estimated')
+  await expect(prep).toContainText('Estimated grid from 0:00')
+  expect(state.calls).toEqual([])
+  expect(state.errors).toEqual([])
+})
+
+for (const width of [1024, 1366, 1920])
+  test(`bottom chain and preparation leave library rows reachable at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 768 })
+    const state = await setup(page)
+    await play(page)
+    await page.getByRole('button', { name: 'Expand chain', exact: true }).click()
+    await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+    const list = page.locator('[data-library-scroll]')
+    await expect.poll(async () => (await list.boundingBox())!.height).toBeGreaterThanOrEqual(100)
+    const dock = page.getByRole('region', { name: 'Active mix plan', exact: true })
+    const listBox = (await list.boundingBox())!,
+      dockBox = (await dock.boundingBox())!
+    expect(dockBox.y).toBeGreaterThanOrEqual(listBox.y + listBox.height)
+    await expect(
+      page
+        .getByLabel('Track preparation', { exact: true })
+        .getByRole('button', { name: 'Focus list', exact: true }),
+    ).toBeVisible()
+    await mkdir('../../artifacts/library-mixplan-fixes', { recursive: true })
+    await page.screenshot({
+      path: `../../artifacts/library-mixplan-fixes/chain-preparation-${width}.png`,
+    })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    )
+    expect(state.errors).toEqual([])
+  })
+
 for (const width of [1024, 1366, 1920]) {
   test(`actual Library layout, playing selection and compact plan at ${width}`, async ({
     page,
@@ -292,7 +387,10 @@ test('explicit preparation preserves audio, zoom/seek/beatgrid/nudge, height and
     .toBeCloseTo(1.5, 1)
   await page.mouse.move(box.x + box.width * 0.4, box.y + box.height - 16)
   await expect(
-    page.getByText('Beatgrid anchored to FirstBeat marker', { exact: true }),
+    page.getByText(
+      'Beatgrid anchored to FirstBeat · overview shows bars/phrases; zoom in for beats',
+      { exact: true },
+    ),
   ).toBeVisible()
   const resize = page.getByRole('separator', { name: 'Resize player and track list', exact: true })
   const before = Number(await resize.getAttribute('aria-valuenow'))
@@ -414,15 +512,20 @@ test('full-height sidebar collapses independently and retains notes, tabs, zoom 
   expect(state.errors).toEqual([])
 })
 
-test('plan drawer does not shrink list, accepts multi-track drops and keeps keyboard reorder', async ({
+test('bottom chain reserves space, accepts multi-track drops and keeps keyboard reorder', async ({
   page,
 }) => {
   const state = await setup(page)
   const list = page.locator('[data-library-scroll]'),
     before = (await list.boundingBox())!.height
   await page.getByRole('button', { name: 'Expand chain', exact: true }).click()
-  expect((await list.boundingBox())!.height).toBeGreaterThanOrEqual(before)
+  expect((await list.boundingBox())!.height).toBeLessThan(before - 100)
   const dock = page.getByRole('region', { name: 'Active mix plan', exact: true })
+  const listBox = (await list.boundingBox())!,
+    dockBox = (await dock.boundingBox())!
+  expect(dockBox.y).toBeGreaterThanOrEqual(listBox.y + listBox.height)
+  expect(dockBox.width).toBeGreaterThan(listBox.width - 10)
+  expect(await dock.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed')
   await dock.evaluate((el) => {
     const data = new DataTransfer()
     data.setData('application/x-wisp-track-ids', JSON.stringify(['ui2-4', 'ui2-5']))

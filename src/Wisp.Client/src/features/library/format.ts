@@ -18,7 +18,11 @@ export function formatBpm(bpm: number | null): string {
 }
 
 const trackDateFormat = new Intl.DateTimeFormat(undefined, {
-  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
 })
 
 export function formatTrackDate(value: string | null): string {
@@ -26,4 +30,23 @@ export function formatTrackDate(value: string | null): string {
   // Older SQLite timestamps lacked the UTC suffix; they were still written in UTC.
   const date = new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`)
   return Number.isNaN(date.getTime()) ? '—' : trackDateFormat.format(date)
+}
+/// Presentation only: keep TITLE/VERSION tags separate, but identify the actual mix everywhere.
+export function trackDisplayTitle(track: {
+  title?: string | null
+  version?: string | null
+  fileName: string
+}): string {
+  const title = track.title?.trim() || track.fileName
+  const version = track.version
+    ?.trim()
+    .replace(/^\((.*)\)$/, '$1')
+    .trim()
+  if (!version || !track.title?.trim()) return title
+  const words = (value: string) =>
+    ` ${value
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()} `
+  return words(title).includes(words(version)) ? title : `${title} (${version})`
 }

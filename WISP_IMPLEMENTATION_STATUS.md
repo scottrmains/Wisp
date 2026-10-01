@@ -2,6 +2,77 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: Library and Mix Plan usability fixes
+
+- **Bottom chain restored:** expanding the active plan now reserves a bounded,
+  full-width area below the Library/playlists rather than covering them with a
+  floating right-hand drawer. Collapsing/Escape, ordered multi-track drops,
+  keyboard reordering, notes, rename and transition audition are preserved.
+  Its heading is not duplicated; card content scrolls on shorter windows.
+- **Recommendations made actionable:** “Find next tracks” beside “Recommend
+  from” opens an audition/add panel. Match the last track or choose another plan
+  entry, choose a recommendation mode and candidate playlist, then explicitly
+  append a suggestion. Existing plan tracks are marked “In plan”; additions are
+  single-flight, failures remain visible, and failed reads have a Retry action.
+  An empty plan explains that it needs a first track. The existing backend
+  scoring/scope implementation is reused, not replaced with invented matches.
+- **Title column fix:** title fills spare space only until a custom width is
+  set. Pointer/keyboard resizing starts from its rendered width, then applies
+  an exact saved width to headers and rows. The previous unconditional `1fr`
+  was swallowing reductions. Double-click reset and existing presets remain.
+- **Version-aware titles:** Library/playlists, preparation, compact playback,
+  chain cards and recommendation rows include the version/mix in the title.
+  Already-embedded versions are not duplicated (including curly/straight
+  apostrophes). This is display formatting; it does not rewrite tags or files.
+- **Toggleable main beatgrid:** a persisted Beatgrid on/off control covers the
+  whole-track waveform, preparation zoom and magnifier. Spacing adapts to width
+  and zoom: overview bars/phrases rather than thousands of dense lines, individual
+  beats when zoomed. FirstBeat anchors the grid; with BPM alone the display is
+  explicitly **estimated from 0:00**. Hiding lines does not disable cue snapping.
+  Estimated lines do not invent a FirstBeat marker or enable snapping. This is
+  a fixed-tempo, 4/4 display, not variable-tempo audio analysis.
+- **Data/verification boundaries:** client tests use fabricated audio, tracks,
+  playlists and mocked APIs/bridge. Backend tests use isolated profiles and
+  temporary media with the existing FFmpeg dependency. No owner's music, DB,
+  USB data or discovery-worker edit is changed; no installer is generated.
+- **Verified:** 65 client unit cases, 145 Chromium/Photino-UA browser cases and
+  all 500 backend cases pass. Client and browser-test TypeScript builds pass;
+  lint has zero errors (12 pre-existing warnings). Browser coverage includes
+  pointer/keyboard title resizing and persisted widths, versions, scoped/mode/
+  seed recommendations and save/read failures, empty plans, grid persistence,
+  internal/native drag regression, and chain + preparation at 1024/1366/1920
+  widths. Screenshots were inspected. The existing large-bundle advisory remains.
+
+### Built-in BPM/key analysis assessment — not implemented in this fix
+
+WISP currently imports TBPM/INITIALKEY tags through MetadataReader. Its local
+waveform/downbeat/structural-marker processing can use a supplied BPM, but does
+not yet detect tempo or key independently. Local/offline analysis is feasible;
+the existing audio decode pipeline is groundwork, not an analyser by itself.
+
+Recommended next stages:
+
+1. Evaluate an audio-analysis engine and its Windows packaging/licensing against
+   a representative labelled set (house/garage, old vinyl rips, intros/breakdowns).
+   Established algorithms already expose BPM/beat positions and key/scale;
+   Essentia is a candidate to evaluate, **not an approved dependency**. Its
+   licensing/distribution terms need review before selection:
+   https://essentia.upf.edu/reference/std_RhythmExtractor2013.html,
+   https://essentia.upf.edu/reference/std_KeyExtractor.html,
+   https://essentia.upf.edu/licensing_information.html.
+2. Add a cancellable background batch queue with progress, bounded decoding,
+   per-track failures, content-identity caching and analyser-version provenance.
+   Store suggested tempo/key, beat anchor and confidence separately from accepted
+   values. Existing user/Mixed In Key tags must not be silently overwritten.
+3. Provide review/apply controls, half/double-tempo correction, first-beat/grid
+   adjustment and Camelot display. Treat ambiguous keys and drifting vinyl tempo
+   as uncertain; validate supported formats and later USB propagation separately.
+
+This is a medium-to-large feature, not another small UI patch. A first useful
+offline analyser is achievable, but matching commercial analysis reliability
+requires measured validation; no accuracy or delivery-time promise is made.
+
+
 ## 2026-10-01: marketing presentation refinement (PR #50 follow-up)
 
 - **Clearer product presentation:** Library, Crate Digger, Mix Plans and Review
