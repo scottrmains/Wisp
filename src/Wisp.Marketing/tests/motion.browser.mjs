@@ -150,17 +150,35 @@ test("blocked autoplay offers manual play, not a false broken-media message", as
 }) => {
   await page.addInitScript(() => {
     const play = HTMLMediaElement.prototype.play;
+    // Model the policy deterministically: CI's headless userActivation state can
+    // differ from desktop Chromium. Still require a real trusted control click,
+    // and wait for the blocked automatic attempt before interacting.
+    let manuallyAllowed = false;
+    window.blockedDemoAttempts = 0;
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (event.isTrusted && event.target.closest(".demo-toggle"))
+          manuallyAllowed = true;
+      },
+      true,
+    );
     HTMLMediaElement.prototype.play = function () {
-      if (!navigator.userActivation.isActive)
+      if (!manuallyAllowed) {
+        window.blockedDemoAttempts++;
         return Promise.reject(
           new DOMException("Autoplay blocked", "NotAllowedError"),
         );
+      }
       return play.call(this);
     };
   });
   await setup(page);
   const figure = demo(page);
   await figure.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => page.evaluate(() => window.blockedDemoAttempts))
+    .toBe(1);
   await expect(figure.getByRole("button")).toHaveAccessibleName(
     "Play Library demonstration",
   );

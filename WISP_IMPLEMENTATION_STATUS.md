@@ -38,6 +38,10 @@ Last reviewed: 2026-10-01
   (existing large-bundle warning unchanged). Desktop/mobile layouts and decoded
   video frames were inspected; all 12 media assets total about 1 MB. The original
   checkout's unrelated DiscoveryScanWorker edit remains untouched.
+- **CI test hardening:** the first marketing CI run exposed a timing/policy
+  assumption in the blocked-autoplay test. It now waits for the rejected automatic
+  attempt and permits native playback only after a trusted control click, without
+  depending on headless Chromium's transient userActivation state.
 - **Separate app follow-up (not implemented here):** tracklist titles can omit
   a stored Version, making different mixes indistinguishable. The capture labels
   the Tonka version explicitly; this is not a fix to app tracklist rendering.
