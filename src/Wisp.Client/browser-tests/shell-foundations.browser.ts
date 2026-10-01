@@ -494,6 +494,29 @@ test('compact playlist drawer keeps Library usable for internal drops and restor
   expect(fixture.errors).toEqual([])
 })
 
+test('compact sidebar tooltips remain hoverable without blocking adjacent navigation', async ({ page }) => {
+  const fixture = await setup(page)
+  await page.setViewportSize({ width: 910, height: 600 })
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  const discover = nav.getByRole('button', { name: 'Discover', exact: true })
+  const crate = nav.getByRole('button', { name: 'Crate Digger', exact: true })
+  await discover.hover()
+  const tip = page.getByRole('tooltip')
+  await expect(tip).toHaveText('Discover')
+  const buttonBounds = await crate.boundingBox()
+  const tipBounds = await tip.boundingBox()
+  expect(tipBounds!.x).toBeGreaterThan(buttonBounds!.x + buttonBounds!.width)
+  await tip.hover()
+  await expect(tip).toBeVisible()
+  await crate.click()
+  await expect(page.locator('.app-breadcrumb strong')).toHaveText('Crate Digger')
+  await crate.focus()
+  await expect(tip).toHaveText('Crate Digger')
+  await page.keyboard.press('Escape')
+  await expect(tip).toBeHidden()
+  expect(fixture.errors).toEqual([])
+})
+
 test('shared colour tokens meet contrast and reduced-motion/zoom layout remains usable', async ({
   page,
 }) => {

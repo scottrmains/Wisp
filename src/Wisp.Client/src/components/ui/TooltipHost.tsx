@@ -32,8 +32,17 @@ export function TooltipHost() {
         node.setAttribute('aria-describedby', [previous, id].filter(Boolean).join(' '))
         const box = node.getBoundingClientRect(),
           bounds = tip.getBoundingClientRect()
-        tip.style.left = `${Math.max(8, Math.min(box.left, innerWidth - bounds.width - 8))}px`
-        tip.style.top = `${box.bottom + bounds.height + 8 > innerHeight ? Math.max(8, box.top - bounds.height - 6) : box.bottom + 6}px`
+        // In the compact sidebar a below-anchor popover covers the next row.
+        // Keep hints hoverable, but place them outside the navigation hit area.
+        const besideSidebar = node.closest('.app-sidebar') !== null
+        const left = besideSidebar ? box.right + 8 : box.left
+        const top = besideSidebar
+          ? Math.min(box.top, innerHeight - bounds.height - 8)
+          : box.bottom + bounds.height + 8 > innerHeight
+            ? box.top - bounds.height - 6
+            : box.bottom + 6
+        tip.style.left = `${Math.max(8, Math.min(left, innerWidth - bounds.width - 8))}px`
+        tip.style.top = `${Math.max(8, top)}px`
       }, 350)
     }
     const enter = (event: Event) => {
