@@ -106,6 +106,8 @@ export function LibraryPage() {
   const setPage = useCurrentPage((s) => s.setPage)
   const setLibraryWorkspaceActive = useCurrentPage((s) => s.setLibraryWorkspaceActive)
   const preparationOpen = useCurrentPage((s) => s.preparationOpen)
+  const inspectorCollapsed = useUiPrefs((s) => s.inspectorCollapsed)
+  const [inspectorHost, setInspectorHost] = useState<HTMLDivElement | null>(null)
   const setPreparationOpen = useCurrentPage((s) => s.setPreparationOpen)
   const activePlaylistId = useActivePlaylist((s) => s.activePlaylistId)
   const setActivePlaylistId = useActivePlaylist((s) => s.setActivePlaylistId)
@@ -648,185 +650,205 @@ export function LibraryPage() {
           Columns
         </Button>
       </header>
-      {/* Preparation is explicit. Keep it mounted after first opening so
+      <div
+        className={`library-body${workspaceActive && !inspectorCollapsed ? ' library-body--inspector-open' : ''}`}
+      >
+        <div className="library-main">
+          {/* Preparation is explicit. Keep it mounted after first opening so
           Focus list preserves zoom and unsaved editor drafts. */}
-      {prepMounted && playerTrackId && (
-        <ResizablePrepPane visible={workspaceActive}>
-          <TrackPrepWorkspace
-            active={workspaceActive}
-            onAddToChain={activePlanId ? addToActivePlan : undefined}
-            onCleanup={setCleanupTarget}
-            onArchive={onArchiveOrRestore}
-            focusTab={focusTab ?? undefined}
-          />
-        </ResizablePrepPane>
-      )}
+          {prepMounted && playerTrackId && (
+            <ResizablePrepPane visible={workspaceActive}>
+              <TrackPrepWorkspace
+                active={workspaceActive}
+                inspectorHost={inspectorHost}
+                onAddToChain={activePlanId ? addToActivePlan : undefined}
+                onCleanup={setCleanupTarget}
+                onArchive={onArchiveOrRestore}
+                focusTab={focusTab ?? undefined}
+              />
+            </ResizablePrepPane>
+          )}
 
-      <div className="library-toolbar">
-        {selectedIds.size === 0 ? (
-          <label className="library-search">
-            <Search size={16} aria-hidden="true" />
-            <span className="sr-only">Search tracks</span>
-            <input
-              value={query.search ?? ''}
-              onChange={(e) =>
-                changeQuery({ ...query, search: e.target.value || undefined, page: 1 })
-              }
-              placeholder="Search artist / title / album"
-            />
-          </label>
-        ) : (
-          <div className="library-selection-actions">
-            <span className="whitespace-nowrap text-sm">{selectedIds.size} tracks selected</span>
+          <div className="library-toolbar">
+            {selectedIds.size === 0 ? (
+              <label className="library-search">
+                <Search size={16} aria-hidden="true" />
+                <span className="sr-only">Search tracks</span>
+                <input
+                  value={query.search ?? ''}
+                  onChange={(e) =>
+                    changeQuery({ ...query, search: e.target.value || undefined, page: 1 })
+                  }
+                  placeholder="Search artist / title / album"
+                />
+              </label>
+            ) : (
+              <div className="library-selection-actions">
+                <span className="whitespace-nowrap text-sm">
+                  {selectedIds.size} tracks selected
+                </span>
+                <Button
+                  small
+                  disabled={!activePlanId}
+                  tooltip={
+                    activePlanId ? 'Add selection to active plan' : 'Choose a mix plan first'
+                  }
+                  onClick={bulkAddToMix}
+                >
+                  <Plus size={16} />
+                  Add to mix
+                </Button>
+                <Button small onClick={bulkAddToPlaylist}>
+                  <ListMusic size={16} />
+                  Add to playlist…
+                </Button>
+                <IconButton small label="Clear selection" variant="quiet" onClick={clearSelection}>
+                  <X size={16} />
+                </IconButton>
+              </div>
+            )}
             <Button
               small
-              disabled={!activePlanId}
-              tooltip={activePlanId ? 'Add selection to active plan' : 'Choose a mix plan first'}
-              onClick={bulkAddToMix}
+              disabled={selectingAll || total === 0}
+              onClick={() => void selectAll()}
+              tooltip="Select every matching track, across all pages (Ctrl+A)"
             >
-              <Plus size={16} />
-              Add to mix
+              {selectingAll
+                ? 'Selecting all pages…'
+                : `Select all ${total.toLocaleString()} tracks`}
             </Button>
-            <Button small onClick={bulkAddToPlaylist}>
-              <ListMusic size={16} />
-              Add to playlist…
-            </Button>
-            <IconButton small label="Clear selection" variant="quiet" onClick={clearSelection}>
-              <X size={16} />
-            </IconButton>
+            {selectingAll && (
+              <button onClick={() => selectionRequest.current?.abort()} className="underline">
+                Cancel selection
+              </button>
+            )}
+            <ExternalFileDrag key={scopeKey} ids={selectedTrackIds} controller={fileDrag} />
+            <ActionMenu
+              label="Library actions"
+              icon={<MoreHorizontal />}
+              items={[
+                ...(selectedIds.size === 1 && selected
+                  ? [{ label: 'Prepare track', onSelect: () => loadTrack(selected.id) }]
+                  : []),
+                ...(selectedTrackIds.length
+                  ? [
+                      {
+                        label: 'Loudness & versions…',
+                        onSelect: () => setLoudnessIds(selectedTrackIds),
+                      },
+                      { label: 'Tag selection…', onSelect: bulkTag },
+                      { label: 'Archive selection…', onSelect: bulkArchive },
+                    ]
+                  : []),
+                ...(activePlaylistId && selectedRows.length
+                  ? [
+                      {
+                        label: 'Remove from playlist…',
+                        onSelect: () => removeFromPlaylist(selectedRows),
+                      },
+                    ]
+                  : []),
+                ...(activePlaylist
+                  ? [
+                      {
+                        label: 'Scan for duplicates…',
+                        onSelect: () =>
+                          setDuplicateScan({ id: activePlaylist.id, name: activePlaylist.name }),
+                      },
+                    ]
+                  : []),
+                {
+                  label: 'Reset filters',
+                  onSelect: () => changeQuery({ page: 1, size: query.size, sort: query.sort }),
+                },
+              ]}
+            />
+            {selectionError && (
+              <span role="alert" className="basis-full text-red-300">
+                {selectionError}
+              </span>
+            )}
+            {playlistNotice?.scope === scopeKey && (
+              <span role="status" className="basis-full text-[var(--color-muted)]">
+                {playlistNotice.message}
+              </span>
+            )}
           </div>
-        )}
-        <Button
-          small
-          disabled={selectingAll || total === 0}
-          onClick={() => void selectAll()}
-          tooltip="Select every matching track, across all pages (Ctrl+A)"
-        >
-          {selectingAll ? 'Selecting all pages…' : `Select all ${total.toLocaleString()} tracks`}
-        </Button>
-        {selectingAll && (
-          <button onClick={() => selectionRequest.current?.abort()} className="underline">
-            Cancel selection
-          </button>
-        )}
-        <ExternalFileDrag key={scopeKey} ids={selectedTrackIds} controller={fileDrag} />
-        <ActionMenu
-          label="Library actions"
-          icon={<MoreHorizontal />}
-          items={[
-            ...(selectedIds.size === 1 && selected
-              ? [{ label: 'Prepare track', onSelect: () => loadTrack(selected.id) }]
-              : []),
-            ...(selectedTrackIds.length
-              ? [
-                  {
-                    label: 'Loudness & versions…',
-                    onSelect: () => setLoudnessIds(selectedTrackIds),
-                  },
-                  { label: 'Tag selection…', onSelect: bulkTag },
-                  { label: 'Archive selection…', onSelect: bulkArchive },
-                ]
-              : []),
-            ...(activePlaylistId && selectedRows.length
-              ? [
-                  {
-                    label: 'Remove from playlist…',
-                    onSelect: () => removeFromPlaylist(selectedRows),
-                  },
-                ]
-              : []),
-            ...(activePlaylist
-              ? [
-                  {
-                    label: 'Scan for duplicates…',
-                    onSelect: () =>
-                      setDuplicateScan({ id: activePlaylist.id, name: activePlaylist.name }),
-                  },
-                ]
-              : []),
-            {
-              label: 'Reset filters',
-              onSelect: () => changeQuery({ page: 1, size: query.size, sort: query.sort }),
-            },
-          ]}
-        />
-        {selectionError && (
-          <span role="alert" className="basis-full text-red-300">
-            {selectionError}
-          </span>
-        )}
-        {playlistNotice?.scope === scopeKey && (
-          <span role="status" className="basis-full text-[var(--color-muted)]">
-            {playlistNotice.message}
-          </span>
-        )}
-      </div>
-      {filtersVisible && (
-        <div className="library-advanced-filters">
-          <LibraryFilters query={query} onChange={changeQuery} total={total} />
+          {filtersVisible && (
+            <div className="library-advanced-filters">
+              <LibraryFilters query={query} onChange={changeQuery} total={total} />
+            </div>
+          )}
+          {tracksQuery.isError && (
+            <StatusMessage tone="error">
+              Could not load the library: {tracksQuery.error.message}{' '}
+              <Button small onClick={() => void tracksQuery.refetch()}>
+                Retry library
+              </Button>
+            </StatusMessage>
+          )}
+          {columnsOpen && (
+            <LibraryColumnsDialog
+              onClose={() => setColumnsOpen(false)}
+              onPreset={(preset) => {
+                if (preset === 'recent') changeQuery({ ...query, page: 1, sort: '-added' })
+              }}
+            />
+          )}
+          <div className="min-h-20 flex-1" aria-label="Library track list">
+            <LibraryTable
+              tracks={items}
+              loading={tracksQuery.isLoading}
+              error={tracksQuery.isError}
+              selectedId={selected ? trackRowId(selected) : null}
+              selectedIds={selectedIds}
+              sort={query.sort}
+              onSortChange={(next) => changeQuery({ ...query, sort: next, page: 1 })}
+              onSelect={onSelectRow}
+              onActivate={onActivateRow}
+              onAddToChain={activePlanId ? addToActivePlan : undefined}
+              onCleanup={setCleanupTarget}
+              onContextMenu={onContextMenuRow}
+              onDragStartRow={onDragStartRow}
+              onNativeDrag={
+                fileDrag.unified
+                  ? (ids) => {
+                      void fileDrag.begin(ids, true)
+                    }
+                  : undefined
+              }
+            />
+          </div>
+          {total > (query.size ?? 500) && (
+            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-1 text-xs">
+              <span>
+                Page {query.page ?? 1} of {Math.ceil(total / (query.size ?? 500))}
+              </span>
+              <button
+                disabled={(query.page ?? 1) <= 1}
+                onClick={() => changeQuery({ ...query, page: (query.page ?? 1) - 1 })}
+                className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40"
+              >
+                Previous page
+              </button>
+              <button
+                disabled={(query.page ?? 1) * (query.size ?? 500) >= total}
+                onClick={() => changeQuery({ ...query, page: (query.page ?? 1) + 1 })}
+                className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40"
+              >
+                Next page
+              </button>
+            </div>
+          )}
         </div>
-      )}
-      {tracksQuery.isError && (
-        <StatusMessage tone="error">
-          Could not load the library: {tracksQuery.error.message}{' '}
-          <Button small onClick={() => void tracksQuery.refetch()}>
-            Retry library
-          </Button>
-        </StatusMessage>
-      )}
-      {columnsOpen && (
-        <LibraryColumnsDialog
-          onClose={() => setColumnsOpen(false)}
-          onPreset={(preset) => {
-            if (preset === 'recent') changeQuery({ ...query, page: 1, sort: '-added' })
-          }}
-        />
-      )}
-      <div className="min-h-20 flex-1" aria-label="Library track list">
-        <LibraryTable
-          tracks={items}
-          loading={tracksQuery.isLoading}
-          error={tracksQuery.isError}
-          selectedId={selected ? trackRowId(selected) : null}
-          selectedIds={selectedIds}
-          sort={query.sort}
-          onSortChange={(next) => changeQuery({ ...query, sort: next, page: 1 })}
-          onSelect={onSelectRow}
-          onActivate={onActivateRow}
-          onAddToChain={activePlanId ? addToActivePlan : undefined}
-          onCleanup={setCleanupTarget}
-          onContextMenu={onContextMenuRow}
-          onDragStartRow={onDragStartRow}
-          onNativeDrag={
-            fileDrag.unified
-              ? (ids) => {
-                  void fileDrag.begin(ids, true)
-                }
-              : undefined
-          }
+        {/* Keep the portal host mounted while hidden: collapsing never discards
+          the inspector's tab/editor state or recreates the audio controller. */}
+        <div
+          ref={setInspectorHost}
+          className="library-inspector-host"
+          hidden={!workspaceActive || inspectorCollapsed}
         />
       </div>
-      {total > (query.size ?? 500) && (
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-1 text-xs">
-          <span>
-            Page {query.page ?? 1} of {Math.ceil(total / (query.size ?? 500))}
-          </span>
-          <button
-            disabled={(query.page ?? 1) <= 1}
-            onClick={() => changeQuery({ ...query, page: (query.page ?? 1) - 1 })}
-            className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40"
-          >
-            Previous page
-          </button>
-          <button
-            disabled={(query.page ?? 1) * (query.size ?? 500) >= total}
-            onClick={() => changeQuery({ ...query, page: (query.page ?? 1) + 1 })}
-            className="rounded border border-[var(--color-border)] px-2 py-1 disabled:opacity-40"
-          >
-            Next page
-          </button>
-        </div>
-      )}
 
       {cleanupTarget && (
         <CleanupModal

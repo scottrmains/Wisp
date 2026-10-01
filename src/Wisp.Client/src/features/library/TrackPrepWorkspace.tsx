@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { Track } from '../../api/types'
 import { tracks as tracksApi } from '../../api/library'
@@ -15,7 +16,16 @@ import { useCues } from '../cues/useCues'
 import { useTrackFileDialog } from './TrackFileDialog'
 import { PlaybackError } from '../player/PlaybackError'
 import { useAudioFiles } from '../../audio/audioFiles'
-import { ChevronUp, Pause, Play, Plus, X, MoreHorizontal } from 'lucide-react'
+import {
+  ChevronUp,
+  Pause,
+  Play,
+  Plus,
+  X,
+  MoreHorizontal,
+  PanelRight,
+  PanelRightClose,
+} from 'lucide-react'
 import { CueBank, CuesTab, MetadataTab, NotesTab, TagsTab } from '../inspector/tabContent'
 import { BandedWaveform } from '../player/BandedWaveform'
 import { ConvertToMp3Button } from '../transcoder/ConvertToMp3'
@@ -32,6 +42,9 @@ import { detectStructuralCues } from '../../audio/structure'
 
 interface Props {
   active: boolean
+  // Render details beside the entire library, not inside the height-limited
+  // waveform pane. A stable host preserves the same cue/editor state.
+  inspectorHost: HTMLDivElement | null
   onAddToChain?: (trackId: string) => void
   onCleanup?: (track: Track) => void
   onArchive?: (track: Track) => void
@@ -51,6 +64,7 @@ const TABS: { id: Tab; label: string }[] = [
 /// Focus list hides this presentation, preserving zoom and in-session drafts.
 export function TrackPrepWorkspace({
   active,
+  inspectorHost,
   onAddToChain,
   onCleanup,
   onArchive,
@@ -70,6 +84,9 @@ export function TrackPrepWorkspace({
   const track = trackQuery.data ?? null
   const lastTab = useUiPrefs((s) => s.lastInspectorTab)
   const setLastTab = useUiPrefs((s) => s.setLastInspectorTab)
+  const inspectorCollapsed = useUiPrefs((s) => s.inspectorCollapsed)
+  const setInspectorCollapsed = useUiPrefs((s) => s.setInspectorCollapsed)
+  const sidebarToggle = useRef<HTMLButtonElement>(null)
 
   // Retire the duplicate Overview tab; keep existing tab preferences compatible.
   const [tab, setTab] = useState<Tab>(lastTab === 'overview' ? 'cues' : lastTab)
@@ -322,7 +339,7 @@ export function TrackPrepWorkspace({
     })),
   ].sort((a, b) => a.timeSeconds - b.timeSeconds)
   const transport = (
-    <div className="flex min-h-12 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
+    <div className="preparation-transport flex min-h-12 shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
       <IconButton small variant="primary" onClick={togglePlay} label={playLabel}>
         {isPlaying ? (
           <Pause size={12} fill="currentColor" />
@@ -344,6 +361,16 @@ export function TrackPrepWorkspace({
       <span className="text-xs tabular-nums text-[var(--color-muted)]">
         {formatDuration(liveTime)} / {formatDuration(duration)}
       </span>
+      <IconButton
+        ref={sidebarToggle}
+        small
+        label={inspectorCollapsed ? 'Show track sidebar' : 'Hide track sidebar'}
+        aria-expanded={!inspectorCollapsed}
+        aria-controls="track-preparation-sidebar"
+        onClick={() => setInspectorCollapsed(!inspectorCollapsed)}
+      >
+        <PanelRight size={16} />
+      </IconButton>
       <Button small onClick={focusList} tooltip="Focus on the list without stopping playback">
         <ChevronUp size={14} /> Focus list
       </Button>
@@ -488,20 +515,62 @@ export function TrackPrepWorkspace({
             <ConvertToMp3Button track={track} />
           </div>
         </div>
-        <aside className="preparation-sidebar" aria-label="Track cues and details">
-          <CueBank track={track} onJump={(seconds) => seek(seconds)} />
-          <SectionTabs label="Track details" active={tab} onSelect={switchTab} items={TABS} />
-          <div className="preparation-details" key={track.id}>
-            {tab === 'cues' && <CuesTab track={track} />}
-            {tab === 'notes' && <NotesTab track={track} />}
-            {tab === 'tags' && <TagsTab track={track} />}
-            {(tab === 'metadata' || tab === 'overview') && <MetadataTab track={track} />}
-            {tab === 'recommendations' && (
-              <RecommendationsList seed={track} onAddToChain={onAddToChain} />
-            )}
-          </div>
-        </aside>
       </div>
+      {inspectorHost &&
+        createPortal(
+          <aside
+            id="track-preparation-sidebar"
+            className="preparation-sidebar"
+            aria-label="Track cues and details"
+          >
+            <header className="preparation-sidebar-heading">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase tracking-widest text-[var(--color-muted)]">
+                  Track preparation
+                </p>
+                <h2
+                  className="truncate text-base font-medium"
+                  title={track.title ?? track.fileName}
+                >
+                  {track.title ?? track.fileName}
+                </h2>
+                <p className="truncate text-xs text-[var(--color-muted)]">
+                  {track.artist ?? 'Unknown artist'}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <KeyPill musicalKey={track.musicalKey} />
+                  <BpmPill bpm={track.bpm} />
+                  <span className="text-xs text-[var(--color-muted)]">
+                    {formatDuration(duration)}
+                  </span>
+                </div>
+              </div>
+              <IconButton
+                small
+                variant="quiet"
+                label="Collapse track sidebar"
+                onClick={() => {
+                  sidebarToggle.current?.focus()
+                  setInspectorCollapsed(true)
+                }}
+              >
+                <PanelRightClose size={16} />
+              </IconButton>
+            </header>
+            <CueBank track={track} onJump={(seconds) => seek(seconds)} />
+            <SectionTabs label="Track details" active={tab} onSelect={switchTab} items={TABS} />
+            <div className="preparation-details" key={track.id}>
+              {tab === 'cues' && <CuesTab track={track} />}
+              {tab === 'notes' && <NotesTab track={track} />}
+              {tab === 'tags' && <TagsTab track={track} />}
+              {(tab === 'metadata' || tab === 'overview') && <MetadataTab track={track} />}
+              {tab === 'recommendations' && (
+                <RecommendationsList seed={track} onAddToChain={onAddToChain} />
+              )}
+            </div>
+          </aside>,
+          inspectorHost,
+        )}
     </div>
   )
 }

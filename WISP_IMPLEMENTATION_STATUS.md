@@ -2,6 +2,33 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: Restore the approved full-height preparation sidebar
+
+- **Correction in PR #43:** the initial UI 2 implementation placed the cue/details
+  area inside the height-limited top preparation pane, diverging from the approved
+  prototype. Restored a separate right column spanning both waveform and track
+  list. It contains the track summary, saved Memory Cue bank and existing Markers,
+  Notes, Tags, Metadata and Matches sections; no cue/export semantics change.
+- **Independent controls:** Collapse track sidebar gives the left workspace its
+  full width without closing the waveform. Show track sidebar reopens it. Focus
+  list still hides both preparation areas without stopping playback. Stable portal
+  placement retains editor/tab state and the existing table/audio owners; collapse
+  returns keyboard focus to the reopen control. Existing shared tokens, controls
+  and Lucide icons were reused under the frontend-design/normalize skills.
+- **Measured:** the inspector is 602px high at 1024/1366 by 768 and 914px at
+  1920 by 1080, independent of waveform resizing. Compact browsing remains 11/11/19
+  complete rows. Narrow preparation tables scroll locally rather than overflowing
+  the whole window. Ignored screenshots remain under `artifacts/ui-phase-two`.
+- **Verified:** client build, browser-test TypeScript check, 58 unit tests and
+  all 109 browser tests pass; lint has zero errors and 12 existing warnings.
+  Added geometric coverage for full-height placement and independent resizing,
+  plus collapse/reopen focus, scroll, zoom, audio and unsaved-notes retention.
+  Existing drag, playlist, cue, recording, export UI and Soulseek suites pass.
+- **Limits:** owner/native visual and drag acceptance remain open. No backend,
+  real library/profile, music, USB, recording capture or installer changes. Client
+  build retains the existing approximately 514KB initial-chunk warning. This updates
+  the same open develop PR; no merge, auto-merge or production promotion.
+
 ## 2026-10-01: UI 2 Library, playlists and precision preparation implemented
 
 - **Actual application migration:** implemented the approved Library direction

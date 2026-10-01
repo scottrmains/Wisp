@@ -4,7 +4,7 @@ Updated: 2026-10-01
 
 Status: UI 1 shared foundations/navigation (PR #42) are merged into develop.
 UI 2 Library/playlists/preparation is implemented on `codex/ui-phase-two-library`,
-including the approved wide, resizable preparation waveform and compact bottom
+including the approved full-height right inspector, wide, resizable preparation waveform and compact bottom
 playback overview. Automated evidence is recorded below and in the status log;
 owner visual review and native acceptance remain separate gates.
 
@@ -184,7 +184,8 @@ activate content behind the modal.
   header, primary search, optional advanced filters and one selection toolbar.
   Replace scope jargon with ordinary playlist and All tracks labels.
 - [x] Create a compact persistent playback presentation and deliberately opened
-  top preparation waveform with the cue bank on the right. Support zoom around
+  top preparation waveform with a full-height, independently collapsible cue/details
+  sidebar on the right of both waveform and track list. Support zoom around
   the playhead, clear cue markers, precise seeking and fine position adjustment.
   Preserve resizing and remember the preferred dock height, focus-list behaviour,
   cue seeking, playback position and the application-level audio controller.
@@ -217,16 +218,20 @@ UI 2 implementation evidence: fictional 1,205-track fixtures in the real client
 show 11 complete rows at both 1024 by 768 and 1366 by 768 with playback,
 selection and the compact plan. The list container is 429px high; default expanded
 preparation is 328px plus its 12px resize handle, leaving a 174px list/four rows.
-At 1920 by 1080 compact browsing has 19 complete rows. The DJ view fits the two
-laptop widths without horizontal scrolling; optional file-management columns
-use the table's own horizontal scroll. Only 24 rows are mounted at the laptop
+At 1920 by 1080 compact browsing has 19 complete rows. The full-height right
+inspector measures 602px at the laptop sizes and 914px at 1920 by 1080; changing
+waveform height does not change inspector height. It collapses independently,
+retaining tabs, notes drafts, zoom, audio and the track-list scroll owner.
+The compact browsing DJ view fits the two laptop widths without horizontal
+scrolling; with the sidebar open at 1024px, or with optional file-management
+columns, the table uses its own horizontal scroll. Only 24 rows are mounted at the laptop
 sizes. Screenshots are ignored diagnostics under `artifacts/ui-phase-two`.
 
 Verified automated controls include real browser audio/paused seeking, whole-track
 and playhead-centred zoom, anchored beatgrid/magnifier, 10ms adjustment, both resize
 methods, persistent sizes/columns, Focus list/audio/zoom retention, saved Memory Cue
 feedback/errors, cross-page selection, keyboard menus/reorder and existing dual-format
-drag contracts. All 108 browser and 58 unit tests pass. Browser bridge fixtures are
+drag contracts. All 109 browser and 58 unit tests pass. Browser bridge fixtures are
 not Windows OLE, rekordbox or Xone acceptance. Cue precision still uses the existing
 4096-bucket analysis; millisecond controls do not imply sample-accurate peaks.
 Implementation boxes above do not close the owner/native acceptance gate below.

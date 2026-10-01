@@ -244,12 +244,21 @@ for (const width of [1024, 1366, 1920]) {
     await page.getByRole('button', { name: 'Clear selection', exact: true }).click()
     await page.getByRole('button', { name: 'Prepare', exact: true }).click()
     const prep = page.getByLabel('Track preparation', { exact: true })
-    await expect(prep.getByLabel('Track cues and details')).toBeVisible()
+    const sidebar = page.getByLabel('Track cues and details')
+    await expect(sidebar).toBeVisible()
+    const sidebarBox = (await sidebar.boundingBox())!,
+      prepBox = (await prep.boundingBox())!
+    const mainBox = (await page.locator('.library-main').boundingBox())!
+    expect(sidebarBox.y).toBe(prepBox.y)
+    expect(sidebarBox.height).toBeCloseTo(mainBox.height, 0)
+    expect(sidebarBox.y + sidebarBox.height).toBeGreaterThan(prepBox.y + prepBox.height + 100)
+    expect(prepBox.x + prepBox.width).toBeLessThanOrEqual(sidebarBox.x)
     await expect(prep.getByRole('slider', { name: 'Seek', exact: true })).toBeVisible()
     console.info(
       JSON.stringify({
         viewport: width,
         preparation: await prep.boundingBox(),
+        sidebar: sidebarBox,
         remainingList: await page.locator('[data-library-scroll]').boundingBox(),
       }),
     )
@@ -265,6 +274,7 @@ test('explicit preparation preserves audio, zoom/seek/beatgrid/nudge, height and
   await play(page)
   await page.getByRole('button', { name: 'Prepare', exact: true }).click()
   const prep = page.getByLabel('Track preparation', { exact: true })
+  const sidebar = page.getByLabel('Track cues and details')
   await prep.getByRole('button', { name: 'Pause', exact: true }).click()
   await prep.getByLabel('Preparation waveform zoom').selectOption('2')
   const slider = prep.getByRole('slider', { name: 'Seek', exact: true })
@@ -286,27 +296,30 @@ test('explicit preparation preserves audio, zoom/seek/beatgrid/nudge, height and
   ).toBeVisible()
   const resize = page.getByRole('separator', { name: 'Resize player and track list', exact: true })
   const before = Number(await resize.getAttribute('aria-valuenow'))
+  const sidebarHeight = (await sidebar.boundingBox())!.height
   await resize.focus()
   await page.keyboard.press('ArrowDown')
   const after = Number(await resize.getAttribute('aria-valuenow'))
   expect(after).toBeGreaterThan(before)
+  expect((await sidebar.boundingBox())!.height).toBe(sidebarHeight)
   state.failMemory(true)
-  await prep.getByRole('button', { name: 'Add Memory Cue', exact: true }).first().click()
-  await expect(prep.getByRole('alert')).toContainText('Memory save unavailable')
+  await sidebar.getByRole('button', { name: 'Add Memory Cue', exact: true }).first().click()
+  await expect(sidebar.getByRole('alert')).toContainText('Memory save unavailable')
   state.failMemory(false)
-  await prep.getByRole('button', { name: 'Add Memory Cue', exact: true }).first().click()
-  await expect(prep.getByRole('button', { name: 'Memory saved', exact: true })).toBeVisible()
-  await expect(prep.getByLabel('Saved device cues')).toContainText('MEM 1')
-  await expect(prep.getByLabel('Saved device cues')).toContainText(
+  await sidebar.getByRole('button', { name: 'Add Memory Cue', exact: true }).first().click()
+  await expect(sidebar.getByRole('button', { name: 'Memory saved', exact: true })).toBeVisible()
+  await expect(sidebar.getByLabel('Saved device cues')).toContainText('MEM 1')
+  await expect(sidebar.getByLabel('Saved device cues')).toContainText(
     'HOT CUES · not supported on CDJ-850',
   )
-  await prep.getByRole('button', { name: 'Memory saved', exact: true }).click()
-  await expect(prep.getByRole('status')).toContainText('Existing USB exports are unchanged')
+  await sidebar.getByRole('button', { name: 'Memory saved', exact: true }).click()
+  await expect(sidebar.getByRole('status')).toContainText('Existing USB exports are unchanged')
   await prep.getByRole('button', { name: 'Cue', exact: true }).click()
   await expect.poll(() => state.cues.length).toBe(3)
   await prep.getByRole('button', { name: 'Play', exact: true }).click()
   await prep.getByRole('button', { name: 'Focus list', exact: true }).click()
   await expect(prep).not.toBeVisible()
+  await expect(sidebar).not.toBeVisible()
   await expect
     .poll(() =>
       page.evaluate(
@@ -355,6 +368,49 @@ test('columns/presets/resize persist without replacing scroll owner or playing t
   await dialog.getByRole('checkbox', { name: 'Genre', exact: true }).check()
   await dialog.getByRole('button', { name: 'Done', exact: true }).click()
   await expect(page.getByRole('columnheader', { name: /Genre/ })).toBeVisible()
+  expect(state.errors).toEqual([])
+})
+
+test('full-height sidebar collapses independently and retains notes, tabs, zoom and audio', async ({
+  page,
+}) => {
+  const state = await setup(page)
+  // A failed save must retain the local draft across panel visibility changes.
+  await page.route('**/api/tracks/ui2-0/notes', (route) =>
+    route.fulfill({ status: 500, json: { message: 'Offline notes' } }),
+  )
+  await play(page)
+  await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+  const prep = page.getByLabel('Track preparation', { exact: true })
+  const sidebar = page.getByLabel('Track cues and details')
+  const list = page.locator('[data-library-scroll]')
+  await list.evaluate((el) => {
+    el.scrollTop = 200
+  })
+  await prep.getByLabel('Preparation waveform zoom').selectOption('6')
+  await sidebar.getByRole('button', { name: 'Notes', exact: true }).click()
+  const notes = sidebar.getByRole('textbox')
+  await notes.fill('Try a longer blend on the next take')
+  const withSidebar = (await prep.boundingBox())!.width
+  await sidebar.getByRole('button', { name: 'Collapse track sidebar', exact: true }).click()
+  await expect(sidebar).not.toBeVisible()
+  const reopen = prep.getByRole('button', { name: 'Show track sidebar', exact: true })
+  await expect(reopen).toBeFocused()
+  await expect(prep).toBeVisible()
+  expect((await prep.boundingBox())!.width).toBeGreaterThan(withSidebar + 200)
+  expect(await list.evaluate((el) => el.scrollTop)).toBe(200)
+  await expect(prep.getByLabel('Preparation waveform zoom')).toHaveValue('6')
+  await reopen.click()
+  await expect(sidebar).toBeVisible()
+  await expect(notes).toHaveValue('Try a longer blend on the next take')
+  await prep.getByRole('button', { name: 'Focus list', exact: true }).click()
+  await expect(sidebar).not.toBeVisible()
+  await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+  await expect(notes).toHaveValue('Try a longer blend on the next take')
+  const audio = await page.evaluate(() =>
+    (window as unknown as { ui2Audio: HTMLMediaElement[] }).ui2Audio.map((a) => a.paused),
+  )
+  expect(audio).toEqual([false])
   expect(state.errors).toEqual([])
 })
 
@@ -538,11 +594,12 @@ test('failed cue and library reads show retry, never empty or auto-create cues',
   )
   await page.getByRole('button', { name: 'Prepare', exact: true }).click()
   const prep = page.getByLabel('Track preparation', { exact: true })
-  await expect(prep.getByRole('alert')).toContainText('Could not load WISP markers')
+  const sidebar = page.getByLabel('Track cues and details')
+  await expect(sidebar.getByRole('alert')).toContainText('Could not load WISP markers')
   expect(state.calls).toEqual([])
   await page.unroute('**/api/tracks/ui2-0/cues')
-  await prep.getByRole('button', { name: 'Retry markers', exact: true }).click()
-  await expect(prep.getByLabel('Marker 1 type')).toBeVisible()
+  await sidebar.getByRole('button', { name: 'Retry markers', exact: true }).click()
+  await expect(sidebar.getByLabel('Marker 1 type')).toBeVisible()
   await prep.getByRole('button', { name: 'Focus list', exact: true }).click()
   await page.route('**/api/tracks?*', (route) =>
     route.fulfill({ status: 500, json: { message: 'Library unavailable' } }),
@@ -569,6 +626,13 @@ for (const scale of [1.25, 1.5]) {
     const prep = page.getByLabel('Track preparation', { exact: true })
     await expect(prep.getByRole('slider', { name: 'Seek', exact: true })).toBeVisible()
     await expect(prep.getByRole('button', { name: 'Focus list', exact: true })).toBeVisible()
+    await expect(page.getByLabel('Track cues and details')).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Collapse track sidebar', exact: true }),
+    ).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      Math.floor(1366 / scale),
+    )
     await prep.getByRole('button', { name: 'Focus list', exact: true }).click()
     await expect(page.locator('[data-track-id="ui2-0"]')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
