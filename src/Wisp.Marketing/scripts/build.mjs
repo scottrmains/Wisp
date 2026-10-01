@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, stat, writeFile, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { validateMedia } from "./media.mjs";
 import { renderProductionPage, validateManifest } from "./production.mjs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -21,13 +22,7 @@ await cp(
   join(root, "../../src/Wisp.Client/public/branding/wispa.svg"),
   join(root, "assets/wispa.svg"),
 );
-for (const name of ["library", "search", "plan", "mix"]) {
-  await stat(join(root, `assets/screenshots/${name}.png`)).catch(() => {
-    throw new Error(
-      `Missing ${name} screenshot. See README.md for the isolated capture procedure.`,
-    );
-  });
-}
+await validateMedia(root);
 // Only remove this generated site output, never desktop output or user data.
 await rm(join(root, "dist"), { recursive: true, force: true });
 await mkdir(join(root, "dist"), { recursive: true });
@@ -35,6 +30,7 @@ for (const name of [
   "index.html",
   "site.css",
   "site.mjs",
+  "motion.mjs",
   "release.mjs",
   "assets",
   "staticwebapp.config.json",

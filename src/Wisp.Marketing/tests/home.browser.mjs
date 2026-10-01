@@ -68,13 +68,13 @@ test("navigation reaches workflow, USB and an honest unpublished download fallba
     "Public releases are being set up",
   );
   await page
-    .getByRole("navigation")
-    .getByRole("link", { name: "The workflow" })
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "Explore WISP" })
     .click();
   await expect(page).toHaveURL(/#workflow$/);
   await page
-    .getByRole("navigation")
-    .getByRole("link", { name: "USB prep" })
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "USB export" })
     .click();
   await expect(page).toHaveURL(/#usb$/);
   await page.getByRole("link", { name: "Get WISP" }).click();
@@ -207,6 +207,8 @@ for (const width of [360, 390, 768, 1440, 1920])
   test(`layout and assets are intact at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     const errors = await setup(page);
+    for (const img of await page.locator("img[loading=lazy]").all())
+      await img.scrollIntoViewIfNeeded();
     await page.locator(".site-footer").scrollIntoViewIfNeeded();
     await expect
       .poll(() =>
@@ -223,7 +225,8 @@ for (const width of [360, 390, 768, 1440, 1920])
       ),
     ).toBe(true);
     expect(errors).toEqual([]);
-    await page.goto("/");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.locator(".site-header").scrollIntoViewIfNeeded();
     if ([390, 1440].includes(width))
       await page.screenshot({
         path: `../../artifacts/marketing-${width}.png`,
@@ -231,6 +234,11 @@ for (const width of [360, 390, 768, 1440, 1920])
       });
     if (width === 1440)
       await page.screenshot({ path: "../../artifacts/marketing-hero.png" });
+    if (width === 1440)
+      for (const id of ["library", "dig", "plan", "usb", "mixes"])
+        await page.locator(`#${id}`).screenshot({
+          path: `../../artifacts/marketing-feature-${id}.png`,
+        });
   });
 
 test("200% text size does not crop navigation or the download area", async ({

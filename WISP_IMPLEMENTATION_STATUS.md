@@ -2,6 +2,78 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: marketing presentation refinement (PR #50 follow-up)
+
+- **Clearer product presentation:** Library, Crate Digger, Mix Plans and Review
+  demonstrations now sit beneath their copy in wide product stages. Rounded
+  framing and restrained depth replace hard-edged thumbnails. The plan capture
+  focuses on the BPM/key/energy journey and transition notes rather than unrelated
+  headers; the Wanted crop focuses on titles and waiting/found states.
+- **Sharper assets:** recaptured the same actual client and approved Tonka audio
+  at 2x pixel density as lossless WebP. Audio/library data stays read-only and
+  private. Static image dimensions and capture provenance are updated together.
+- **Visible, restrained motion:** content enters with a one-time 650 ms fade and
+  16 px rise when it reaches the viewport. Hero copy is included. Reduced motion
+  immediately reveals pending content and disables these animations; the no-JS
+  baseline remains visible. Completed demos restore their crisp static poster.
+- **Preview clarification:** opening index.html as a file can block module scripts;
+  use the served HTTP preview for animations and demo controls. This is not a
+  reason to bypass browser security, and does not affect the served production site.
+- **CI limitation observed on the preceding revision:** marketing validation
+  passed, but the unchanged backend TrackFileDateBackfillTests case timed out.
+  Its isolated regression passes locally. No backend/library recovery code is
+  changed by this presentation refinement.
+- **Refinement verification:** marketing build, all 26 Node cases and all 30
+  Chromium cases pass, including new entrance timing, live reduced-motion,
+  high-density/wide framing and finished-demo poster checks. Desktop/mobile
+  screenshots and all four decoded demo frames were inspected. Actual posters
+  are 2x lossless; clips remain native CSS-pixel video (not falsely upscaled).
+
+## 2026-10-01: marketing workflow, focused media and purposeful motion
+
+- **Implemented on the marketing feature branch:** retained the approved paper,
+  ink, condensed typography, purple and Wispa identity. Reworked the story into
+  Library → Crate Digger / YouTube sources → Wanted / store searches → Mix Plans
+  → direct USB export → recording / feedback. The previously bare “Good sets
+  start before you play” section now provides a usable workflow route.
+- **Current UI, real song waveform:** replaced all four old full-window PNGs with
+  eight focused WebPs and four short silent recordings of actual client actions.
+  The owner approved names from Garage / Old Skool House and actual waveform
+  analysis for Robin S — Show Me Love (Tonka's 2002 Club Mix). Capture reads
+  selected metadata through read-only SQLite and decodes the active audio in RAM;
+  no music, databases, real paths, credentials or accounts are published or altered.
+  The review example uses that same song's real min/max waveform, with illustrative
+  feedback; it does not pretend to be a recorded DJ mix. USB/provider results are
+  illustrative, not live external operations. Provenance and media integrity/size
+  checks are included; MP4s containing an audio stream are rejected at build time.
+- **Accessible motion:** subtle one-time reveals and on-arrival demonstrations,
+  explicit keyboard pause/resume/replay, offscreen/background pause, reduced-motion
+  and data-saving opt-outs, static no-JS/error fallbacks, actual reload on retry.
+  No looping, tracking, remote media or framework dependency was introduced.
+- **Truthful product copy:** more emphasis on discovery/Wanted and planning;
+  Soulseek is optional secondary copy. Availability means Discogs matches and
+  store search links, not guaranteed stock. Main USB copy says compatible CDJs;
+  the disclosure retains the documented original CDJ-900 hardware baseline and
+  reference-entry / beatgrid / detailed-waveform limitations, not universal support.
+- **Release scope:** existing latest-installer rendering and develop/main release
+  gates remain intact. Deployment checks now cover all updated media/MIME types;
+  no production deployment, installer build or merge is part of this feature work.
+- **Local verification:** static marketing build, all 26 Node cases and all 27
+  Chromium browser cases pass, including production/no-JS download behaviour,
+  360–1920 px layouts, 200% text, media MIME/ranges, reduced motion, data-saving,
+  retry and keyboard replay. The current client production build also passed
+  (existing large-bundle warning unchanged). Desktop/mobile layouts and decoded
+  video frames were inspected; all 12 media assets total about 1 MB. The original
+  checkout's unrelated DiscoveryScanWorker edit remains untouched.
+- **CI test hardening:** the first marketing CI run exposed a timing/policy
+  assumption in the blocked-autoplay test. It now waits for the rejected automatic
+  attempt and permits native playback only after a trusted control click, without
+  depending on headless Chromium's transient userActivation state.
+- **Separate app follow-up (not implemented here):** tracklist titles can omit
+  a stored Version, making different mixes indistinguishable. The capture labels
+  the Tonka version explicitly; this is not a fix to app tracklist rendering.
+  Physical mobile and additional CDJ compatibility tests remain outside this pass.
+
 ## 2026-10-01: desktop upgrade serves the current UI
 
 - **Confirmed cause:** owner installed 0.1.111 / production commit `d891e09`.

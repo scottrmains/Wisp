@@ -1,6 +1,6 @@
 {
   "globalHeaders": {
-    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; media-src 'self'; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin"
   },
@@ -18,5 +18,10 @@
       "headers": { "Cache-Control": "public, max-age=3600" }
     }
   ],
-  "mimeTypes": { ".mjs": "text/javascript", ".woff2": "font/woff2" }
+  "mimeTypes": {
+    ".mjs": "text/javascript",
+    ".woff2": "font/woff2",
+    ".webp": "image/webp",
+    ".mp4": "video/mp4"
+  }
 }
