@@ -43,6 +43,7 @@ export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         {editing && onRename ? (
           <input
+            aria-label="Mix plan name"
             autoFocus
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -58,6 +59,7 @@ export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
           />
         ) : (
           <button
+            aria-label={onRename ? `Rename ${plan.name}` : undefined}
             onClick={() => onRename && setEditing(true)}
             className={[
               'truncate text-left text-base font-semibold',
@@ -76,7 +78,13 @@ export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
           {summary.firstEnergy !== null && summary.lastEnergy !== null && (
             <Stat
               label={`E${summary.firstEnergy} → E${summary.lastEnergy}`}
-              tone={summary.lastEnergy > summary.firstEnergy ? 'up' : summary.lastEnergy < summary.firstEnergy ? 'down' : 'flat'}
+              tone={
+                summary.lastEnergy > summary.firstEnergy
+                  ? 'up'
+                  : summary.lastEnergy < summary.firstEnergy
+                    ? 'down'
+                    : 'flat'
+              }
             />
           )}
           {summary.warnings.length > 0 && (
@@ -103,14 +111,15 @@ export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
       )}
 
       {!compact && onScopeChange && (
-        <div className="mt-2 flex items-center gap-2 text-xs">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-[var(--color-muted)]">Recommend from:</span>
           <select
+            aria-label="Recommendation playlist"
             value={plan.recommendationScopePlaylistId ?? ''}
             onChange={(e) => onScopeChange(e.target.value || null)}
             className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-0.5 text-xs"
           >
-            <option value="">All tracks (no scope)</option>
+            <option value="">All tracks</option>
             {(playlistList.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.trackCount})
@@ -119,7 +128,7 @@ export function PlanHeader({ plan, onRename, onScopeChange, compact }: Props) {
           </select>
           {plan.recommendationScopePlaylistId && (
             <span className="text-[10px] text-[var(--color-muted)]">
-              ↳ recommendations + suggest-route only consider tracks from this playlist
+              Suggestions use this playlist only
             </span>
           )}
         </div>
@@ -148,7 +157,10 @@ function Stat({
           ? 'border-sky-500/40 bg-sky-500/10 text-sky-200'
           : 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-muted)]'
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${cls}`} title={title}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${cls}`}
+      title={title}
+    >
       {Icon && <Icon size={11} strokeWidth={1.75} />}
       {label}
     </span>

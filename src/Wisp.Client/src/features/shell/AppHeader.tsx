@@ -54,7 +54,7 @@ export function AppHeader({ scanActive, onScan, onOpenSettings }: Props) {
       </div>
       <div className="app-global-actions">
         <SoulseekStatusIndicator />
-        {!recordingPage && <PlanSwitcher />}
+        {!recordingPage && page !== 'mix-plans' && <PlanSwitcher />}
         {!recordingPage && (
           <Button
             onClick={onScan}

@@ -2,6 +2,66 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: UI 3 Mix Plans and discovery workspaces implemented
+
+- **Delivery:** `codex/ui-phase-three-workspaces`, based on current develop after
+  merged PR #43. Implements all seven UI 3 items; owner visual/native acceptance
+  remains open. No merge, auto-merge or production promotion is authorised.
+- **Shared workspace layout:** editorial headers, flat readable results and
+  existing shared buttons/tabs/status/dialogs/Lucide icons, following the
+  frontend-design and normalize skills. Plans/artists/sources have independent
+  collapsible, pointer/keyboard-resizable navigators. Persisted widths are bounded
+  to 180–360px/default 240px; invalid saved values fall back safely without
+  resetting existing preferences. No new font, theme or backend contract.
+- **Mix Plans:** ordered Tracklist is the default; Chain view remains available.
+  Optional transition details expose BPM/key warnings, preview and anchored filler
+  suggestions. Notes and energy/key/BPM charts are deliberately expanded.
+  Removed duplicate page-level plan selection from the global header. Preserved
+  entry identities, internal multi-drop ordering, anchors, notes, recording links,
+  recommendation playlist and export. Failed writes/partial adds are visible;
+  plan rename refreshes the selected plan as well as its navigator. Preview and
+  suggestions use native shared modals; local cue shortcuts remain active inside
+  preview without activating Library shortcuts. Closing details restores focus.
+- **Discover:** explicit My artists/Search anywhere modes precede the input;
+  local artist filtering is not described as track search. Existing provider
+  settings/debounce/budgets/direct YouTube URL search remain unchanged. Track/video
+  results precede artist results, with persistent Watch/Soulseek/Want controls.
+  Compact source matching replaces repeated provider tiles. Release status has
+  shared New/Wanted/In library/Dismissed controls; follow/save/refresh/matching
+  failures are actionable. Artist matching now contains and restores modal focus.
+- **Crate Digger:** clear active-source context, common All/New/Want/Already have
+  filters plus More filters; existing upload-date ordering/paging/SSE scan reports
+  remain. Scan completion explicitly reports no new tracks and updated dates.
+  Details use a scrollable non-modal right inspector, with corrections collapsed
+  until needed. Close/track/source changes confirm discarding edited metadata;
+  failed correction/status/availability writes retain retry controls. Correction
+  inputs lock during saving to prevent a completed request clearing newer edits.
+  Newly created sources enter the cached navigator before selection, avoiding a
+  stale-list reset during refetch; a deliberately delayed refresh test covers it.
+- **Wanted:** flat searchable wishlist with newest/oldest/artist sorting and
+  All/Waiting/Found states. Soulseek and source handoffs remain. Removing a wish
+  never deletes audio and still asks for confirmation: no misleading undo is
+  offered without an API capable of restoring original identity/history.
+- **Measured:** fictional-data renders at 1024/1366 by 768 and 1920 by 1080,
+  with playback active. Open plan navigator plus transition details leaves list
+  areas of 420x290, 602x326 and 1156x638px. All four pages avoid whole-window
+  horizontal overflow; independent scroll areas and collapse controls remain.
+  Ignored screenshots: `artifacts/ui-phase-three`. Equivalent CSS viewports at
+  125/150 percent and reduced-motion checks are not native Windows scaling tests.
+- **Verified:** 61 unit tests, 128 browser tests, client build and browser-test
+  TypeScript checks pass. Includes existing dual-drag, playlist/duplicate, cue,
+  loudness, recorder, Soulseek and CDJ-export UI suites; 19 new phase-three tests
+  cover page interactions/failures/playback/layout. Lint: zero errors, 12 existing
+  warnings. Build retains the existing approximately 512KB initial-chunk warning.
+- **Limits/safety:** no real library/profile/music/cue/USB writes, recording
+  capture, external provider requests, website/pipeline changes or installers.
+  Native Windows OLE/folder/rekordbox dragging, Photino focus, physical scaling,
+  live-provider results and Xone/device playback remain owner checks. Backend
+  and native APIs are unchanged; mock-bridge tests imply no CDJ compatibility.
+  Global page navigation still unmounts existing feature-local drafts: Crate
+  discard protection covers inspector/source changes, not navigation away from
+  the page. These edits are not represented as durable cross-page drafts.
+
 ## 2026-10-01: Restore the approved full-height preparation sidebar
 
 - **Correction in PR #43:** the initial UI 2 implementation placed the cue/details

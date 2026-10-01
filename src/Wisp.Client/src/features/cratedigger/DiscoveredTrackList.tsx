@@ -6,6 +6,7 @@ interface Props {
   tracks: DiscoveredTrack[]
   loading: boolean
   onSelect: (t: DiscoveredTrack) => void
+  selectedId?: string
 }
 
 const STATUS_PILL: Record<DiscoveryStatus, { label: string; tone: string }> = {
@@ -19,7 +20,7 @@ const STATUS_PILL: Record<DiscoveryStatus, { label: string; tone: string }> = {
   PossibleMatch: { label: 'possible', tone: 'bg-amber-400/20 text-amber-300' },
 }
 
-export function DiscoveredTrackList({ tracks, loading, onSelect }: Props) {
+export function DiscoveredTrackList({ tracks, loading, onSelect, selectedId }: Props) {
   if (loading) return <p className="p-6 text-sm text-[var(--color-muted)]">Loading tracks…</p>
   if (tracks.length === 0) {
     return (
@@ -32,51 +33,79 @@ export function DiscoveredTrackList({ tracks, loading, onSelect }: Props) {
   return (
     <ul>
       {tracks.map((t) => (
-        <li
-          key={t.id}
-          onClick={() => onSelect(t)}
-          className="grid cursor-pointer grid-cols-[4rem_1fr_auto] items-center gap-3 border-b border-[var(--color-border)]/40 px-4 py-2 text-sm hover:bg-white/5"
-        >
-          {t.thumbnailUrl ? (
-            <img src={t.thumbnailUrl} alt="" className="h-9 w-16 rounded object-cover" loading="lazy" />
-          ) : (
-            <div className="h-9 w-16 rounded bg-[var(--color-surface)]" />
-          )}
-          <div className="min-w-0">
-            {t.parsedArtist && t.parsedTitle ? (
-              <p className="truncate text-sm font-medium leading-tight">
-                {t.parsedArtist} — {t.parsedTitle}
-                {t.mixVersion && (
-                  <span className="ml-1 font-normal text-[var(--color-muted)]">({t.mixVersion})</span>
+        <li key={t.id} data-discovery-track={t.id} className="workspace-discovery-row">
+          <button
+            onClick={() => onSelect(t)}
+            aria-pressed={t.id === selectedId}
+            className="grid cursor-pointer grid-cols-[4rem_1fr_auto] items-center gap-3 border-b border-[var(--color-border)]/40 px-4 py-2 text-sm hover:bg-white/5"
+          >
+            {t.thumbnailUrl ? (
+              <img
+                src={t.thumbnailUrl}
+                alt=""
+                className="h-9 w-16 rounded object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="h-9 w-16 rounded bg-[var(--color-surface)]" />
+            )}
+            <div className="min-w-0">
+              {t.parsedArtist && t.parsedTitle ? (
+                <p className="truncate text-sm font-medium leading-tight">
+                  {t.parsedArtist} — {t.parsedTitle}
+                  {t.mixVersion && (
+                    <span className="ml-1 font-normal text-[var(--color-muted)]">
+                      ({t.mixVersion})
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p
+                  className="truncate text-sm font-medium text-amber-300/90 leading-tight"
+                  title="Low-confidence parse — click to fix"
+                >
+                  {t.rawTitle}
+                </p>
+              )}
+              <p className="mt-0.5 truncate text-[11px] text-[var(--color-muted)]">
+                {t.parsedArtist && t.parsedTitle ? (
+                  <span className="truncate" title={t.rawTitle}>
+                    {t.rawTitle}
+                  </span>
+                ) : (
+                  <span className="text-amber-400/80">needs review</span>
+                )}
+                {t.releaseYear && <span> · {t.releaseYear}</span>}
+              </p>
+              <p
+                className="mt-1 text-[11px] text-[var(--color-muted)]"
+                title={`Imported into WISP: ${formatTrackDate(t.importedAt)}`}
+              >
+                {t.publishedAt ? (
+                  <>
+                    Uploaded <time dateTime={t.publishedAt}>{formatTrackDate(t.publishedAt)}</time>
+                  </>
+                ) : (
+                  'Upload date unknown'
                 )}
               </p>
-            ) : (
-              <p className="truncate text-sm font-medium text-amber-300/90 leading-tight" title="Low-confidence parse — click to fix">
-                {t.rawTitle}
-              </p>
-            )}
-            <p className="mt-0.5 truncate text-[11px] text-[var(--color-muted)]/70">
-              {t.parsedArtist && t.parsedTitle ? (
-                <span className="truncate" title={t.rawTitle}>{t.rawTitle}</span>
-              ) : (
-                <span className="text-amber-400/80">needs review</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {t.isAlreadyInLibrary && (
+                <span
+                  className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300"
+                  title="Matched against your local library"
+                >
+                  <Check size={10} strokeWidth={2} /> owned
+                </span>
               )}
-              {t.releaseYear && <span> · {t.releaseYear}</span>}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--color-muted)]" title={`Imported into WISP: ${formatTrackDate(t.importedAt)}`}>
-              {t.publishedAt ? <>Uploaded <time dateTime={t.publishedAt}>{formatTrackDate(t.publishedAt)}</time></> : 'Upload date unknown'}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {t.isAlreadyInLibrary && (
-              <span className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300" title="Matched against your local library">
-                <Check size={10} strokeWidth={2} /> owned
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL[t.status].tone}`}
+              >
+                {STATUS_PILL[t.status].label}
               </span>
-            )}
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL[t.status].tone}`}>
-              {STATUS_PILL[t.status].label}
-            </span>
-          </div>
+            </div>
+          </button>
         </li>
       ))}
     </ul>

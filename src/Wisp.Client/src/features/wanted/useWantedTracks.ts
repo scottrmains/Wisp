@@ -30,6 +30,8 @@ export function useWantedTracks() {
   return {
     items: (list.data ?? []) as WantedTrack[],
     loading: list.isLoading,
+    error: list.error,
+    retry: list.refetch,
     create,
     remove,
   }
