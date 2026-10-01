@@ -8,6 +8,7 @@ import { bridge, bridgeAvailable, invoke } from '../../bridge'
 import { alertDialog, confirmDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
 import { useCurrentPage } from '../../state/currentPage'
+import { Button } from '../../components/ui/Button'
 
 import { useRecorderStatus, statusKey, type Status } from './useRecorderStatus'
 const duration = (seconds: number) =>
@@ -174,9 +175,10 @@ export function MixRecorderPanel({
       {!busy ? (
         <>
           <div className="wm-record-fields">
-            <label>
+            <label htmlFor="mix-record-title">
               Mix title
               <input
+                id="mix-record-title"
                 className="wm-field"
                 value={title}
                 maxLength={200}
@@ -187,9 +189,10 @@ export function MixRecorderPanel({
                 }}
               />
             </label>
-            <label>
+            <label htmlFor="mix-record-folder">
               Recordings folder
               <input
+                id="mix-record-folder"
                 className="wm-field"
                 value={destination}
                 disabled={start.isPending}
@@ -199,9 +202,11 @@ export function MixRecorderPanel({
                 }}
               />
             </label>
-            <label>
+            <label htmlFor="mix-record-blueprint">
               Planned set (optional)
               <select
+                id="mix-record-blueprint"
+                aria-label="Planned set (optional)"
                 className="wm-field"
                 value={planId ?? ''}
                 disabled={start.isPending}
@@ -220,13 +225,9 @@ export function MixRecorderPanel({
                 ))}
               </select>
             </label>
-            <button
-              className="wm-button"
-              disabled={start.isPending || !bridgeAvailable()}
-              onClick={() => void pick()}
-            >
+            <Button disabled={start.isPending || !bridgeAvailable()} onClick={() => void pick()}>
               <FolderOpen /> Choose recordings folder
-            </button>
+            </Button>
           </div>
           {previous && (
             <p className="wm-subtitle">
@@ -244,8 +245,17 @@ export function MixRecorderPanel({
             actually played afterwards.
           </p>
           <div className="wm-record-start">
-            <button
-              className="wm-button wm-primary"
+            <Button
+              variant="primary"
+              tooltip={
+                !endpointId
+                  ? 'Select a stereo endpoint before starting a mix'
+                  : !destination
+                    ? 'Choose a recordings folder first'
+                    : inputTestBusy
+                      ? 'Stop the input test before recording a mix'
+                      : undefined
+              }
               disabled={
                 inputTestBusy ||
                 start.isPending ||
@@ -258,7 +268,7 @@ export function MixRecorderPanel({
               onClick={() => start.mutate()}
             >
               <CircleDot /> {start.isPending ? 'Starting…' : 'Start mix recording'}
-            </button>
+            </Button>
             <p className="wm-subtitle">
               Lossless stereo master. No live monitoring or automatic gain changes.
             </p>
@@ -293,8 +303,8 @@ export function MixRecorderPanel({
             </p>
           )}
           <div className="wm-record-start">
-            <button
-              className="wm-button wm-danger"
+            <Button
+              variant="danger"
               disabled={stop.isPending || status.data?.session?.state === 'Finalising'}
               onClick={() => stop.mutate()}
             >
@@ -302,7 +312,7 @@ export function MixRecorderPanel({
               {stop.isPending || status.data?.session?.state === 'Finalising'
                 ? 'Saving mix…'
                 : 'Stop and save mix'}
-            </button>
+            </Button>
           </div>
           <div className="wm-record-routing">
             <div>

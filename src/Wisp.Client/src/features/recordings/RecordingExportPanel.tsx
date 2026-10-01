@@ -40,7 +40,7 @@ export function RecordingExportPanel({ id, ready, busy }: { id: string; ready: b
   }
   return <section aria-label="Export finished mix" className="wm-export-panel">
     <h3>Make a listening copy</h3>
-    <div className="space-y-3 py-3">
+    <div className="space-y-2 py-3">
       <p className="text-sm text-[var(--color-muted)]">Create a separate audio file for listening or sharing. Your master, tracklist and review stay unchanged.</p>
       <div className="wm-export-options">
         <fieldset className="wm-format-options"><legend>Audio format</legend>{[{ value: 'mp3', label: 'MP3 · 320 kbps CBR', help: 'A smaller copy for sharing and everyday listening.' }, { value: 'wav', label: 'WAV · 24-bit PCM', help: 'Uncompressed audio at the recording’s sample rate.' }, { value: 'master', label: 'Original master · exact copy', help: 'A byte-identical copy of your source recording.' }].map(option => <label key={option.value}><input type="radio" name={`export-format-${id}`} value={option.value} checked={format === option.value} disabled={pending} onChange={() => setFormat(option.value)} /><span>{option.label}<span className="wm-subtitle">{option.help}</span></span></label>)}</fieldset>
@@ -53,7 +53,7 @@ export function RecordingExportPanel({ id, ready, busy }: { id: string; ready: b
       <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={include} disabled={pending} onChange={e => setInclude(e.target.checked)} /> Include saved actual tracklist (.txt)</label>
       {include && <p className="text-xs text-[var(--color-muted)]">{entries.filter(e => e.played && e.startSeconds != null).length} timed · {entries.filter(e => e.played && e.startSeconds == null).length} clearly labelled untimed · {entries.filter(e => !e.played).length} drafts excluded. Entrance times are sorted chronologically; repeated tracks are kept. Comments and ratings are not exported.</p>}
       {(error || exports.error || (include && tracklist.error)) && <p role="alert" className="text-sm text-red-400">{error ?? exports.error?.message ?? tracklist.error?.message} <button className="underline" onClick={() => { void tracklist.refetch(); void exports.refetch() }}>Refresh export data</button></p>}
-      <button className={`${button} bg-[var(--color-accent)]/20`} disabled={!ready || busy || running || pending || !folder.trim() || (include && !tracklist.data)} onClick={() => void begin()}>{pending ? 'Starting export…' : 'Create export'}</button>
+      <button className={`${button} wm-primary`} disabled={!ready || busy || running || pending || !folder.trim() || (include && !tracklist.data)} onClick={() => void begin()}>{pending ? 'Starting export…' : 'Create export'}</button>
       {!ready && <p className="text-xs text-amber-300">Save or recover the mix and reconnect its master before exporting.</p>}
       {busy && <p className="text-xs text-amber-300">Finish capture before exporting. Exporting blocks a new capture until it finishes or is cancelled.</p>}
       <div aria-label="Export history" className="space-y-2">

@@ -2,6 +2,61 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: UI 4 remaining workspaces and final consistency implemented
+
+- **Delivery:** `codex/ui-phase-four-workspaces` from current origin/develop,
+  after owner-approved/merged UI 3 PR #44. PR targets develop; no merge,
+  auto-merge, production promotion or installer release authorised.
+- **Design:** frontend-design and normalize skills guided reuse of approved
+  display/body typography, shared tokens, Lucide icons, controls, section tabs
+  and native modals. Flat lists and existing workspaces remain; no new theme.
+- **Mixes:** Review retains the full waveform/zoom/loop workspace. Tracklist
+  and Exports use compact transport without replacing the audio owner or
+  unmounting editors; waveform height/preferences and comment drafts survive.
+  Section navigation precedes playback. More compact export options expose the
+  create action in the initial 1024x768 fixture viewport. Existing actual versus
+  planned tracklists, ratings, comments, revised plans and RF64 paths remain.
+- **Recording:** visible input/title/folder/optional blueprint and shared Start/
+  Stop controls; technical capture format is collapsed help. Input failures and
+  request errors stay outside collapsed diagnostics. No capture, checkpoint,
+  recovery, endpoint identity, metering, monitoring or gain-processing changes.
+- **Soulseek:** consistent page header, readable sortable results with full
+  Download labels and keyboard-accessible local scrolling. Download completion
+  is not called library import completion. Transfer/filter/retry/cancel/clear and
+  sharing use shared controls while retaining existing contracts. Search state,
+  batch feedback and header dropdown remain. Contextual search gains native
+  modal focus containment/restoration and prevents dismissal during active or
+  starting search/queue requests; no new polling/provider requests added.
+- **Settings:** Library / Connections / Audio tools / About & diagnostics,
+  with mounted forms preserving drafts across categories. Masked accessible
+  credential controls, visible loading/read/save/remove errors and read retries;
+  failed reads disable configuration writes. Soulseek form hydrates once, not
+  on every settings refresh. Explorer errors are actionable. Removed the inert
+  Coming soon placeholder, not implemented functionality. Credential drafts
+  are not stored in browser persistence; existing plain-JSON credential storage
+  remains unchanged and is not represented as encrypted.
+- **CDJ:** shared selector and export controls, accurate overview-waveform/
+  Memory Cue copy and restored keyboard focus. Physical device ID, disconnect/
+  drive-letter-reuse handling, layout/preflight checks, single-flight export,
+  replacement/backups and success/error dialogs remain. Historical CDJ-900
+  evidence is preserved; full CDJ-850 acceptance, beat grids/detailed scrolling
+  waveforms and residual reference-catalogue limitations remain explicit.
+- **Verified:** 61 unit tests and all 136 browser tests pass, including eight
+  UI 4 additions for compact layouts, stable audio, retained credential drafts,
+  failed reads/saves, scaled-equivalent Settings, modal focus, USB scope and
+  pending-search dismissal. Client build and browser-test TypeScript checks
+  pass. Lint: zero errors and 12 pre-existing warnings. Existing approximately
+  511KB initial-chunk warning remains; no new backend/native contracts required
+  dotnet verification or local packaging.
+- **Safety/limits:** fictional browser fixtures only; no working profiles,
+  library/music/cues, USB contents, recording captures, external services,
+  website/pipeline or installer changes. Owner visual/native acceptance stays
+  open: Photino focus/scaling, Windows OLE/folder/rekordbox dragging, Xone input
+  and device playback are not proved by browser mocks. Existing feature-local
+  sharing draft lifecycle is unchanged; category-preserved Settings drafts
+  deliberately disappear when Settings closes. Ignored after-renders are in
+  `artifacts/ui-phase-four`; prior audit is the before baseline.
+
 ## 2026-10-01: UI 3 Mix Plans and discovery workspaces implemented
 
 - **Delivery:** `codex/ui-phase-three-workspaces`, based on current develop after

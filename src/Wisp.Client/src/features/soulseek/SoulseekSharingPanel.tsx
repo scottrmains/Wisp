@@ -5,7 +5,7 @@ import { soulseek, type SharingSettings } from '../../api/soulseek'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { transferPercent, transferState } from './transferState'
 
-const button = 'inline-flex min-h-9 items-center justify-center gap-2 rounded border border-[var(--color-border)] px-3 py-2 text-xs hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40'
+const button = 'ui-button ui-button--small'
 const input = 'min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm disabled:opacity-40'
 
 export function SoulseekSharingPanel() {
@@ -99,7 +99,7 @@ function SharingForm({ settings, canConfigure, restartRequired }: { settings: Sh
         <label className="space-y-1">Upload slots<input aria-label="Upload slots" className={`${input} block w-24`} type="number" min={1} max={20} value={slots} onChange={e => setSlots(Number(e.target.value))} /></label>
         <label className="space-y-1">Upload limit (KiB/s)<input aria-label="Upload speed limit" className={`${input} block w-32`} type="number" min={1} max={102400} value={speed} onChange={e => setSpeed(Number(e.target.value))} /></label>
       </div>
-      <button disabled={!valid || !changed} onClick={() => save.mutate()} className={`${button} bg-[var(--color-accent)] text-white`}>{save.isPending ? 'Saving…' : 'Save sharing settings'}</button>
+      <button disabled={!valid || !changed} onClick={() => save.mutate()} className={`${button} ui-button--primary`}>{save.isPending ? 'Saving…' : 'Save sharing settings'}</button>
     </fieldset>
     <p className="leading-relaxed text-[var(--color-muted)]">Restart WISP to apply folder changes, upload limits or disable sharing. Saving leaves the running connection unchanged and does not interrupt downloads. Remove a folder here to stop sharing it on the next launch.</p>
     {restartRequired && <p role="status" className="text-amber-200">Sharing settings saved. Restart WISP to apply them.</p>}
