@@ -667,6 +667,45 @@ test('Crate rescan completion reports no new tracks and corrected upload dates',
   expect(state.errors).toEqual([])
 })
 
+test('new discovery source stays selected while its navigator refreshes', async ({ page }) => {
+  const state = await setup(page)
+  await navigate(page, 'Crate Digger')
+  // Hold the refetch so a fast fixture cannot hide the stale-list selection race.
+  let releaseSources!: () => void
+  const sourcesRefresh = new Promise<void>((resolve) => {
+    releaseSources = resolve
+  })
+  await page.route('**/api/discovery/sources', async (route) => {
+    if (route.request().method() === 'GET') await sourcesRefresh
+    await route.fallback()
+  })
+  try {
+    await page.getByRole('button', { name: 'Add YouTube source', exact: true }).click()
+    const prompt = page.getByRole('dialog', { name: 'Add discovery source', exact: true })
+    await prompt.getByRole('textbox').fill('https://www.youtube.com/@fictional-new-source')
+    await prompt.getByRole('button', { name: 'Add', exact: true }).click()
+    await expect(
+      page.getByRole('heading', { name: 'New fixture source', exact: true }),
+    ).toBeVisible()
+    await expect
+      .poll(
+        () =>
+          state.reads.filter((url) => url.pathname === '/api/discovery/sources/new-source/tracks')
+            .length,
+      )
+      .toBeGreaterThan(0)
+    await expect(
+      page
+        .getByLabel('Sources', { exact: true })
+        .getByRole('button')
+        .filter({ hasText: 'New fixture source' }),
+    ).toHaveAttribute('aria-current', 'page')
+  } finally {
+    releaseSources()
+  }
+  expect(state.errors).toEqual([])
+})
+
 test('Wanted search/sort/status/removal never deletes local audio and failed removal can retry', async ({
   page,
 }) => {

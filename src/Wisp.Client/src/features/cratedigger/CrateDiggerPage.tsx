@@ -80,6 +80,13 @@ export function CrateDiggerPage() {
   const addSource = useMutation({
     mutationFn: (url: string) => discovery.createSource(url),
     onSuccess: (created) => {
+      // Keep the newly selected source in the cached navigator immediately.
+      // Otherwise the missing-source effect can reset selection before refetch.
+      qc.setQueryData<DiscoverySource[]>(['discovery-sources'], (previous) =>
+        previous?.some((source) => source.id === created.id)
+          ? previous
+          : [...(previous ?? []), created],
+      )
       qc.invalidateQueries({ queryKey: ['discovery-sources'] })
       setActiveSourceId(created.id)
       setPage(1)

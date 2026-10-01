@@ -36,6 +36,8 @@ Last reviewed: 2026-10-01
   until needed. Close/track/source changes confirm discarding edited metadata;
   failed correction/status/availability writes retain retry controls. Correction
   inputs lock during saving to prevent a completed request clearing newer edits.
+  Newly created sources enter the cached navigator before selection, avoiding a
+  stale-list reset during refetch; a deliberately delayed refresh test covers it.
 - **Wanted:** flat searchable wishlist with newest/oldest/artist sorting and
   All/Waiting/Found states. Soulseek and source handoffs remain. Removing a wish
   never deletes audio and still asks for confirmation: no misleading undo is
@@ -46,9 +48,9 @@ Last reviewed: 2026-10-01
   horizontal overflow; independent scroll areas and collapse controls remain.
   Ignored screenshots: `artifacts/ui-phase-three`. Equivalent CSS viewports at
   125/150 percent and reduced-motion checks are not native Windows scaling tests.
-- **Verified:** 61 unit tests, 127 browser tests, client build and browser-test
+- **Verified:** 61 unit tests, 128 browser tests, client build and browser-test
   TypeScript checks pass. Includes existing dual-drag, playlist/duplicate, cue,
-  loudness, recorder, Soulseek and CDJ-export UI suites; 18 new phase-three tests
+  loudness, recorder, Soulseek and CDJ-export UI suites; 19 new phase-three tests
   cover page interactions/failures/playback/layout. Lint: zero errors, 12 existing
   warnings. Build retains the existing approximately 512KB initial-chunk warning.
 - **Limits/safety:** no real library/profile/music/cue/USB writes, recording
