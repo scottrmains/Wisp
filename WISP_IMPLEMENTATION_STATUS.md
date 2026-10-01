@@ -2,6 +2,92 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: Optional local BPM/key analysis — experimental first phase
+
+- **Entry points:** select Library/playlist tracks, right-click → **Analyse audio
+  (BPM / key)…**, or use Library actions. Selected playlist occurrences are
+  deduplicated by track ID. BPM is enabled initially; key is an explicitly
+  experimental, initially disabled option. Nothing runs automatically on import.
+- **Missing fields only:** existing positive BPM and any nonblank key are skipped
+  independently, including non-Camelot keys. Fresh embedded tags are inspected
+  when a DB field is missing, so recent Mixed In Key edits are not overwritten.
+  Tag-only values explain that a rescan imports them; analysis does not rewrite
+  or silently import them. Optional **Compare existing values too** computes
+  suggestions alongside existing values, but still cannot replace them.
+- **Local background batch:** one bounded batch (up to 20,000 distinct tracks) at
+  a time, progress across navigation, cancellation of the current decoder and
+  remaining tracks, individual failures, and a global progress/review strip.
+  Decoder PCM is streamed; input is limited to two hours, with a ten-minute
+  processing timeout and bounded diagnostic memory. Library file operations are
+  serialised per track; browsing/playback remain available. No upload, rename,
+  audio conversion output, tag write, cue edit or USB operation occurs.
+- **Review and apply:** BPM can be edited or halved/doubled; key is shown as
+  Camelot. Uncertain suggestions are unchecked. BPM and key can be applied
+  independently, including a later second field. Apply fills missing WISP DB
+  fields only, rechecks current tags, linked path and SHA-256, and uses conditional
+  DB updates to protect concurrent edits. All track IDs, memberships, notes,
+  versions and existing FirstBeat/memory/hot cues remain intact. Accepted values
+  use the existing Library, recommendation, Mix Plan and USB metadata paths;
+  this adds **no new hardware-compatibility claim** or beatgrid alignment.
+- **Cache/provenance:** nullable `MusicAnalysisJson` migration stores suggestions,
+  source-byte hash, analyser version, timestamps and accepted values separately
+  from track metadata. Unchanged successfully detected fields are reused; changed
+  tags/audio invalidate cache conservatively. Suggestions survive WISP restart,
+  but in-flight jobs do not resume automatically. Re-analyse to recover saved
+  suggestions. Eight recent jobs are retained in memory; Clear results recovers
+  from expired/restarted job IDs without deleting stored suggestions or metadata.
+- **Engine choice:** `wisp-onset-chroma-v1` is WISP's experimental onset spectral
+  flux/autocorrelation baseline, whole-track phase refinement, and pitch-class
+  correlation against Krumhansl major/minor profiles, using existing FFmpeg/NAudio
+  primitives. Tempo octave preference is explicitly 90–180 BPM. Fixed A=440 Hz,
+  global major/minor key only; no tuning correction, variable-tempo grid or
+  calibrated confidence percentages. Essentia/libkeyfinder are **not bundled**;
+  their distribution/licensing decisions remain unresolved. Synthetic-test success
+  is not evidence of commercial analyser parity.
+- **Read-only real-music comparison:** 20 alphabetically selected tagged files
+  under the owner's music folder were examined (not a random/held-out benchmark;
+  includes two containers of the same audio). One decoder failure was reported,
+  not imported or changed. Of 12 BPM-comparable files, **10 agreed within 1 BPM**
+  and **7 within 0.1 BPM** with integer file tags. Of 18 Camelot-comparable files,
+  **5 had an exact key match**. Tags are comparison references, not verified
+  ground truth. These results do **not** establish rekordbox/Mixed In Key parity.
+  Key is not ready to replace a trusted analyser: off by default, warning shown,
+  and **all key suggestions require explicit selection**, irrespective of strength.
+  Broadening/whitening the baseline pitch extraction did not improve this sample
+  consistently; those experiments were not shipped. No owner's file/tag/DB was
+  changed during this comparison.
+- **Benchmark helper:** `tools/Wisp.MusicAnalysisBenchmark` reads music and emits
+  JSON-line tag comparisons to stdout; no DB/profile/tag writes or downloads.
+  Example (use your actual paths):
+
+  ```powershell
+  dotnet run --project tools/Wisp.MusicAnalysisBenchmark -- --ffmpeg tools/ffmpeg/ffmpeg.exe --folder "D:/Music" --limit 20
+  ```
+
+- **Verified:** 530 backend cases (115 Core / 201 Infrastructure / 214 API),
+  including 30 new analyser/safety cases; 69 client unit cases. Client build,
+  browser-test TypeScript and all 152 Chromium/Photino-UA browser cases pass,
+  including independent-field apply, navigation, cancellation, retries and paged
+  selections. Lint has zero errors (12 pre-existing warnings); the existing
+  large-bundle advisory remains. The review screen was visually inspected.
+  Tests use isolated DBs and generated media; real-file hash preservation is
+  asserted for WAV/AIFF/FLAC/MP3 decoder fixtures. The historical pre-audio schema
+  playlist-upgrade fixture explicitly excludes the new column before migration.
+  No installer/publish, owner DB migration or unrelated discovery-worker edit.
+
+### Remaining accuracy/engine phases
+
+- [x] Optional selected-track workflow, safe suggestions/apply, batch progress,
+  cancellation, cache/provenance and initial read-only comparison.
+- [ ] Resolve distribution-compatible established engine options, especially for
+  key; compare against a larger independently checked, held-out house/garage/
+  vinyl set (not just agreement with tags or synthetic examples).
+- [ ] Improve/benchmark drifting and ambiguous tempo, detuned vinyl and key
+  extraction; calibrate uncertainty before enabling any stronger acceptance default.
+- [ ] Manual desktop test: audition missing-field suggestions and comparison mode;
+  verify post-rescan/export metadata on the user's normal workflow. Accurate
+  downbeat/variable-tempo beatgrids and optional tag writing remain separate work.
+
 ## 2026-10-01: Library and Mix Plan usability fixes
 
 - **Bottom chain restored:** expanding the active plan now reserves a bounded,
@@ -45,9 +131,9 @@ Last reviewed: 2026-10-01
 
 ### Built-in BPM/key analysis assessment — not implemented in this fix
 
-WISP currently imports TBPM/INITIALKEY tags through MetadataReader. Its local
+At the time of this Library fix, WISP imported TBPM/INITIALKEY tags through MetadataReader. Its local
 waveform/downbeat/structural-marker processing can use a supplied BPM, but does
-not yet detect tempo or key independently. Local/offline analysis is feasible;
+not yet detect tempo or key independently. The experimental phase above now supersedes this assessment. Local/offline analysis is feasible;
 the existing audio decode pipeline is groundwork, not an analyser by itself.
 
 Recommended next stages:

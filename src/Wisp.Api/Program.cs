@@ -126,6 +126,9 @@ public class Program
             });
             builder.Services.AddWispLibrary();
             builder.Services.AddSingleton<Wisp.Infrastructure.Audio.ILoudnessNormalizer, Wisp.Infrastructure.Audio.LoudnessNormalizer>();
+            builder.Services.AddSingleton<Wisp.Infrastructure.Audio.IMusicAnalyzer, Wisp.Infrastructure.Audio.MusicAnalyzer>();
+            builder.Services.AddSingleton<MusicAnalysisJobs>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<MusicAnalysisJobs>());
             // Sidecar that owns the bundled slskd.exe lifecycle. Defers cleanly to an
             // externally-running slskd if port 5030 is taken; respects the
             // ManageSlskd toggle in settings.
@@ -217,6 +220,7 @@ public class Program
             app.MapLibrary();
             app.MapTrackFiles();
             app.MapLoudness();
+            app.MapMusicAnalysis();
             app.MapRecordingInputs();
             app.MapRecordings();
             app.MapRecordingWorkspace();
