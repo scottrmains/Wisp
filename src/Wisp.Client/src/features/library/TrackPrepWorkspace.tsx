@@ -31,7 +31,7 @@ import { BandedWaveform } from '../player/BandedWaveform'
 import { ConvertToMp3Button } from '../transcoder/ConvertToMp3'
 import { RecommendationsList } from './RecommendationPanel'
 import { BpmPill, KeyPill } from './pills'
-import { formatCueTime, formatDuration } from './format'
+import { formatCueTime, formatDuration, trackDisplayTitle } from './format'
 import {
   detectDownbeatFromPeaks,
   detectFirstBeatFromPeaks,
@@ -87,6 +87,8 @@ export function TrackPrepWorkspace({
   const inspectorCollapsed = useUiPrefs((s) => s.inspectorCollapsed)
   const setInspectorCollapsed = useUiPrefs((s) => s.setInspectorCollapsed)
   const sidebarToggle = useRef<HTMLButtonElement>(null)
+  const showBeatgrid = useUiPrefs(s => s.waveformBeatgridVisible)
+  const toggleBeatgrid = useUiPrefs(s => s.toggleWaveformBeatgrid)
 
   // Retire the duplicate Overview tab; keep existing tab preferences compatible.
   const [tab, setTab] = useState<Tab>(lastTab === 'overview' ? 'cues' : lastTab)
@@ -348,12 +350,11 @@ export function TrackPrepWorkspace({
         )}
       </IconButton>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" title={track.title ?? ''}>
-          {track.title ?? track.fileName}
+        <p className="truncate text-sm font-medium" title={trackDisplayTitle(track)}>
+          {trackDisplayTitle(track)}
         </p>
         <p className="truncate text-xs text-[var(--color-muted)]">
           {track.artist ?? 'Unknown'}
-          {track.version ? ` · ${track.version}` : ''}
         </p>
       </div>
       <KeyPill musicalKey={track.musicalKey} />
@@ -411,6 +412,10 @@ export function TrackPrepWorkspace({
                 Add to mix
               </Button>
             )}
+            <Button small aria-pressed={showBeatgrid} disabled={!track.bpm || !Number.isFinite(track.bpm) || track.bpm <= 0}
+              onClick={toggleBeatgrid} tooltip="Show beat/bar lines. Without a FirstBeat marker the grid is estimated from 0:00; cue snapping still requires FirstBeat.">
+              Beatgrid {showBeatgrid ? 'on' : 'off'}
+            </Button>
             <label className="flex items-center gap-2 text-xs">
               Zoom
               <select
@@ -494,6 +499,7 @@ export function TrackPrepWorkspace({
                 hoverTimeRef.current = t
               }}
               bpm={track.bpm}
+              showBeatgrid={showBeatgrid}
               firstBeatSec={cuesHook.cues.find((c) => c.type === 'FirstBeat')?.timeSeconds ?? null}
               height={waveformHeight}
               windowSeconds={windowSeconds}
@@ -507,9 +513,11 @@ export function TrackPrepWorkspace({
           </div>
           <div className="preparation-caption">
             <span>
-              {track.bpm && cuesHook.cues.some((c) => c.type === 'FirstBeat')
-                ? 'Beatgrid anchored to FirstBeat marker'
-                : 'Set BPM and a FirstBeat marker to anchor the beatgrid'}
+              {!track.bpm ? 'Set BPM to show a beatgrid'
+                : !showBeatgrid ? 'Beatgrid hidden · cue snapping is unchanged'
+                : cuesHook.cues.some((c) => c.type === 'FirstBeat')
+                  ? 'Beatgrid anchored to FirstBeat · overview shows bars/phrases; zoom in for beats'
+                  : 'Estimated grid from 0:00 · set FirstBeat to align beats and enable cue snapping'}
             </span>
             <span>Hover + wheel: magnifier zoom · Q: marker · Shift+Q: unsnapped</span>
             <ConvertToMp3Button track={track} />
@@ -530,9 +538,9 @@ export function TrackPrepWorkspace({
                 </p>
                 <h2
                   className="truncate text-base font-medium"
-                  title={track.title ?? track.fileName}
+                  title={trackDisplayTitle(track)}
                 >
-                  {track.title ?? track.fileName}
+                  {trackDisplayTitle(track)}
                 </h2>
                 <p className="truncate text-xs text-[var(--color-muted)]">
                   {track.artist ?? 'Unknown artist'}

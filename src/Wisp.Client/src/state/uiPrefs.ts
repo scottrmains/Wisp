@@ -14,6 +14,8 @@ interface UiPrefsState {
   libraryPrepHeight: number
   setLibraryPrepHeight: (height: number) => void
   prepWaveformVisible: boolean
+  waveformBeatgridVisible: boolean
+  toggleWaveformBeatgrid: () => void
   togglePrepWaveform: () => void
   prepDetailsVisible: boolean
   togglePrepDetails: () => void
@@ -86,6 +88,8 @@ export const useUiPrefs = create<UiPrefsState>()(
       libraryPrepHeight: 340,
       setLibraryPrepHeight: (height) => set({ libraryPrepHeight: Number.isFinite(height) ? Math.max(100, Math.min(1200, Math.round(height))) : 340 }),
       prepWaveformVisible: true,
+      waveformBeatgridVisible: true,
+      toggleWaveformBeatgrid: () => set(s => ({ waveformBeatgridVisible: !s.waveformBeatgridVisible })),
       togglePrepWaveform: () => set((s) => ({ prepWaveformVisible: !s.prepWaveformVisible })),
       prepDetailsVisible: true,
       togglePrepDetails: () => set((s) => ({ prepDetailsVisible: !s.prepDetailsVisible })),
@@ -140,6 +144,7 @@ export const useUiPrefs = create<UiPrefsState>()(
         return { ...current, ...saved,
           workspaceNavigation: normalizeNavigation(saved.workspaceNavigation),
           libraryColumns: normalizeLibraryColumns(saved.libraryColumns),
+          waveformBeatgridVisible: typeof saved.waveformBeatgridVisible === 'boolean' ? saved.waveformBeatgridVisible : true,
           sidebarCollapsed: typeof saved.sidebarCollapsed === 'boolean' ? saved.sidebarCollapsed : current.sidebarCollapsed,
           sidebarCompactExpanded: typeof saved.sidebarCompactExpanded === 'boolean' ? saved.sidebarCompactExpanded : false,
         }

@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight, Pause, Play, Plus } from 'lucide-react'
 import { useActivePlan } from '../../state/activePlan'
 import { usePlayer } from '../../state/player'
 import { useMixPlan } from '../mixchain/useMixPlans'
-import { formatBpm } from './format'
+import { formatBpm, trackDisplayTitle } from './format'
 
 const MODES: { value: RecommendationMode; label: string }[] = [
   { value: 'Safe', label: 'Safe' },
@@ -22,6 +22,8 @@ const MODES: { value: RecommendationMode; label: string }[] = [
 interface RecommendationsListProps {
   seed: Track
   onAddToChain?: (trackId: string) => void
+  existingTrackIds?: ReadonlySet<string>
+  adding?: boolean
 }
 
 /// Mode pills + recommendation rows, no surrounding panel chrome. Used inside the
@@ -31,7 +33,12 @@ interface RecommendationsListProps {
 /// that plan has a `recommendationScopePlaylistId` set, the candidate pool is
 /// transparently restricted to playlist members. We surface a chip so the user
 /// can see why they're getting fewer results than expected.
-export function RecommendationsList({ seed, onAddToChain }: RecommendationsListProps) {
+export function RecommendationsList({
+  seed,
+  onAddToChain,
+  existingTrackIds,
+  adding,
+}: RecommendationsListProps) {
   const [mode, setMode] = useState<RecommendationMode>('Safe')
   const { activePlanId } = useActivePlan()
   const { plan: activePlan } = useMixPlan(activePlanId)
@@ -47,10 +54,11 @@ export function RecommendationsList({ seed, onAddToChain }: RecommendationsListP
 
   const recsQuery = useQuery({
     queryKey: ['recommendations', seed.id, mode, scopePlaylistId],
-    queryFn: () => tracks.recommendations(seed.id, {
-      mode,
-      scopePlaylistId: scopePlaylistId ?? undefined,
-    }),
+    queryFn: () =>
+      tracks.recommendations(seed.id, {
+        mode,
+        scopePlaylistId: scopePlaylistId ?? undefined,
+      }),
   })
 
   return (
@@ -62,7 +70,10 @@ export function RecommendationsList({ seed, onAddToChain }: RecommendationsListP
           <span className="text-[var(--color-muted)] tabular-nums">
             ({scopePlaylist.trackCount} {scopePlaylist.trackCount === 1 ? 'track' : 'tracks'})
           </span>
-          <span className="ml-auto text-[var(--color-muted)]" title="Set by the active mix plan; clear it from the plan header.">
+          <span
+            className="ml-auto text-[var(--color-muted)]"
+            title="Set by the active mix plan; clear it from the plan header."
+          >
             via active plan
           </span>
         </div>
@@ -89,7 +100,10 @@ export function RecommendationsList({ seed, onAddToChain }: RecommendationsListP
           <p className="px-5 py-6 text-sm text-[var(--color-muted)]">Scoring candidates…</p>
         )}
         {recsQuery.error && (
-          <p className="px-5 py-6 text-sm text-red-400">{(recsQuery.error as Error).message}</p>
+          <div className="px-5 py-6 text-sm text-red-400" role="alert">
+            Could not load recommendations: {(recsQuery.error as Error).message}.{' '}
+            <button onClick={() => void recsQuery.refetch()}>Retry recommendations</button>
+          </div>
         )}
         {recsQuery.data && recsQuery.data.length === 0 && (
           <p className="px-5 py-6 text-sm text-[var(--color-muted)]">
@@ -97,7 +111,14 @@ export function RecommendationsList({ seed, onAddToChain }: RecommendationsListP
           </p>
         )}
         {recsQuery.data?.map((r) => (
-          <RecommendationRow key={r.track.id} seed={seed} rec={r} onAddToChain={onAddToChain} />
+          <RecommendationRow
+            key={r.track.id}
+            seed={seed}
+            rec={r}
+            onAddToChain={onAddToChain}
+            alreadyAdded={existingTrackIds?.has(r.track.id)}
+            adding={adding}
+          />
         ))}
       </div>
     </div>
@@ -125,7 +146,10 @@ export function RecommendationPanel({ seed, onClose, onAddToChain }: PanelProps)
             {seed.energy !== null && ` · E${seed.energy}`}
           </p>
         </div>
-        <button onClick={onClose} className="text-xl leading-none text-[var(--color-muted)] hover:text-white">
+        <button
+          onClick={onClose}
+          className="text-xl leading-none text-[var(--color-muted)] hover:text-white"
+        >
           ×
         </button>
       </header>
@@ -138,10 +162,14 @@ function RecommendationRow({
   seed,
   rec,
   onAddToChain,
+  alreadyAdded,
+  adding,
 }: {
   seed: Track
   rec: Recommendation
   onAddToChain?: (trackId: string) => void
+  alreadyAdded?: boolean
+  adding?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const t = rec.track
@@ -200,19 +228,22 @@ function RecommendationRow({
             // No visual styling beyond a hover lift on the title — the row
             // itself already has hover bg.
           ].join(' ')}
-          title={isLoaded
-            ? (isPlaying ? 'Pause' : 'Resume')
-            : 'Play this recommendation'}
+          title={isLoaded ? (isPlaying ? 'Pause' : 'Resume') : 'Play this recommendation'}
         >
-          <p className="flex items-center gap-1 truncate text-sm font-medium" title={t.title ?? ''}>
+          <p
+            className="flex items-center gap-1 truncate text-sm font-medium"
+            title={trackDisplayTitle(t)}
+          >
             {isLoaded && (
               <span className="text-[var(--color-accent)]" aria-hidden>
-                {isPlaying
-                  ? <Pause size={11} fill="currentColor" />
-                  : <Play size={11} fill="currentColor" />}
+                {isPlaying ? (
+                  <Pause size={11} fill="currentColor" />
+                ) : (
+                  <Play size={11} fill="currentColor" />
+                )}
               </span>
             )}
-            <span className="truncate">{t.title ?? t.fileName}</span>
+            <span className="truncate">{trackDisplayTitle(t)}</span>
           </p>
           <p className="truncate text-xs text-[var(--color-muted)]" title={t.artist ?? ''}>
             {t.artist ?? 'Unknown'}
@@ -222,11 +253,17 @@ function RecommendationRow({
             <Pill>{t.musicalKey ?? '—'}</Pill>
             <Pill>E{t.energy ?? '—'}</Pill>
           </div>
-          <p className="mt-1.5 truncate text-[11px] italic text-[var(--color-muted)]" title={headlineReason}>
+          <p
+            className="mt-1.5 truncate text-[11px] italic text-[var(--color-muted)]"
+            title={headlineReason}
+          >
             {headlineReason}
           </p>
           {rec.previousRating && (
-            <p className="mt-0.5 text-[10px] text-amber-300" title="You previously rated this transition">
+            <p
+              className="mt-0.5 text-[10px] text-amber-300"
+              title="You previously rated this transition"
+            >
               previously rated 😐 {rec.previousRating}
             </p>
           )}
@@ -241,15 +278,23 @@ function RecommendationRow({
                 ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white'
                 : 'border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white/5 hover:text-white',
             ].join(' ')}
-            title={isLoaded
-              ? (isPlaying ? 'Pause' : 'Resume')
-              : 'Load + play in mini-player'}
+            title={isLoaded ? (isPlaying ? 'Pause' : 'Resume') : 'Load + play in mini-player'}
           >
-            {isLoaded
-              ? (isPlaying
-                  ? <><Pause size={11} fill="currentColor" /> Pause</>
-                  : <><Play size={11} fill="currentColor" /> Resume</>)
-              : <><Play size={11} fill="currentColor" /> Play</>}
+            {isLoaded ? (
+              isPlaying ? (
+                <>
+                  <Pause size={11} fill="currentColor" /> Pause
+                </>
+              ) : (
+                <>
+                  <Play size={11} fill="currentColor" /> Resume
+                </>
+              )
+            ) : (
+              <>
+                <Play size={11} fill="currentColor" /> Play
+              </>
+            )}
           </button>
           {onAddToChain && (
             <button
@@ -257,10 +302,17 @@ function RecommendationRow({
               // (some browsers begin drag from mousedown on draggable parents).
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => onAddToChain(t.id)}
-              className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent)]/80"
+              disabled={alreadyAdded || adding}
+              aria-label={
+                alreadyAdded
+                  ? `${trackDisplayTitle(t)} already in plan`
+                  : `Add ${trackDisplayTitle(t)} to plan`
+              }
+              className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent)]/80 disabled:opacity-50 disabled:cursor-default"
               title="Add to mix chain"
             >
-              <Plus size={12} strokeWidth={2.25} /> Add
+              <Plus size={12} strokeWidth={2.25} />{' '}
+              {alreadyAdded ? 'In plan' : adding ? 'Adding…' : 'Add'}
             </button>
           )}
           <button
@@ -274,7 +326,11 @@ function RecommendationRow({
             ].join(' ')}
             aria-expanded={open}
           >
-            {open ? <ChevronDown size={11} strokeWidth={1.75} /> : <ChevronRight size={11} strokeWidth={1.75} />}
+            {open ? (
+              <ChevronDown size={11} strokeWidth={1.75} />
+            ) : (
+              <ChevronRight size={11} strokeWidth={1.75} />
+            )}
             Why{open ? '' : '?'}
           </button>
         </div>
@@ -306,7 +362,9 @@ function BreakdownPanel({ seed, rec }: { seed: Track; rec: Recommendation }) {
         label="Key"
         score={rec.keyScore}
         detail={
-          !seed.musicalKey || !t.musicalKey ? 'unknown' : keyRelationLabel(seed.musicalKey, t.musicalKey)
+          !seed.musicalKey || !t.musicalKey
+            ? 'unknown'
+            : keyRelationLabel(seed.musicalKey, t.musicalKey)
         }
       />
       <Axis
@@ -323,7 +381,9 @@ function BreakdownPanel({ seed, rec }: { seed: Track; rec: Recommendation }) {
       <Axis
         label="Genre"
         score={rec.genreScore}
-        detail={!seed.genre || !t.genre ? 'unknown' : seed.genre === t.genre ? 'match' : `${t.genre}`}
+        detail={
+          !seed.genre || !t.genre ? 'unknown' : seed.genre === t.genre ? 'match' : `${t.genre}`
+        }
       />
       {rec.penalties > 0 && (
         <div className="flex items-center justify-between border-t border-[var(--color-border)] pt-1.5 text-[11px]">
@@ -333,10 +393,15 @@ function BreakdownPanel({ seed, rec }: { seed: Track; rec: Recommendation }) {
       )}
       {rec.reasons.length > 1 && (
         <div className="border-t border-[var(--color-border)] pt-1.5">
-          <p className="mb-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">Reasons</p>
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+            Reasons
+          </p>
           <div className="flex flex-wrap gap-1">
             {rec.reasons.map((r) => (
-              <span key={r} className="rounded bg-[var(--color-surface)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]">
+              <span
+                key={r}
+                className="rounded bg-[var(--color-surface)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
+              >
                 {r}
               </span>
             ))}
@@ -354,12 +419,11 @@ function Axis({ label, score, detail }: { label: string; score: number; detail: 
     <div className="grid grid-cols-[3.5rem_1fr_4rem_2.5rem] items-center gap-2 text-[11px]">
       <span className="text-[var(--color-muted)]">{label}</span>
       <div className="h-1.5 overflow-hidden rounded bg-[var(--color-surface)]">
-        <div
-          className="h-full bg-[var(--color-accent)]"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="h-full bg-[var(--color-accent)]" style={{ width: `${pct}%` }} />
       </div>
-      <span className="truncate text-[var(--color-muted)]" title={detail}>{detail}</span>
+      <span className="truncate text-[var(--color-muted)]" title={detail}>
+        {detail}
+      </span>
       <span className="text-right tabular-nums">{score.toFixed(0)}</span>
     </div>
   )
@@ -381,7 +445,9 @@ function ScoreBadge({ value }: { value: number }) {
         ? 'bg-amber-500/20 text-amber-300'
         : 'bg-white/10 text-[var(--color-muted)]'
   return (
-    <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${tone}`}>
+    <span
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${tone}`}
+    >
       {value}
     </span>
   )

@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { AlertTriangle, Play, Plus } from 'lucide-react'
 import type { Track } from '../../api/types'
 import { usePlayer } from '../../state/player'
-import { formatDuration, formatTrackDate } from './format'
+import { formatDuration, formatTrackDate, trackDisplayTitle } from './format'
 import { BpmPill, EnergyPill, KeyPill } from './pills'
 import { trackRowId } from './librarySelection'
 import { useUiPrefs } from '../../state/uiPrefs'
@@ -80,7 +80,7 @@ export function LibraryTable({
       prefs.widths[c.key as LibraryColumnKey] ?? libraryColumns.find((x) => x.key === c.key)!.width,
   )
   const gridTemplate = visibleColumns
-    .map((c, i) => (c.key === 'title' ? `minmax(${widths[i]}px, 1fr)` : `${widths[i]}px`))
+    .map((c, i) => (c.key === 'title' && prefs.widths.title === undefined ? `minmax(${widths[i]}px, 1fr)` : `${widths[i]}px`))
     .join(' ')
   const gridWidth = widths.reduce((sum, width) => sum + width, 0)
   const updateWidth = (key: LibraryColumnKey, width: number) =>
@@ -193,7 +193,7 @@ export function LibraryTable({
                     e.preventDefault()
                     resize.current = {
                       x: e.clientX,
-                      width: widths[i],
+                      width: e.currentTarget.parentElement!.getBoundingClientRect().width,
                       key: c.key as LibraryColumnKey,
                     }
                     e.currentTarget.setPointerCapture(e.pointerId)
@@ -228,7 +228,7 @@ export function LibraryTable({
                       e.preventDefault()
                       updateWidth(
                         c.key as LibraryColumnKey,
-                        widths[i] + (e.key === 'ArrowLeft' ? -16 : 16),
+                        e.currentTarget.parentElement!.getBoundingClientRect().width + (e.key === 'ArrowLeft' ? -16 : 16),
                       )
                     }
                   }}
@@ -397,7 +397,7 @@ export function LibraryTable({
                 <Cell value={t.artist} muted={!t.artist} />
                 <div className="flex min-w-0 items-center">
                   <div className="min-w-0 flex-1">
-                    <Cell value={t.title} muted={!t.title} />
+                    <Cell value={trackDisplayTitle(t)} muted={!t.title} />
                   </div>
                   {t.hasNormalizedVersion && !prefs.visible.includes('fileName') && (
                     <span className="mr-2 shrink-0 rounded border border-[var(--color-accent)]/40 px-1 text-[10px] text-[var(--color-accent)]">

@@ -116,7 +116,8 @@
 .preparation-details > div > ul { flex: none; overflow: visible; }
 .cue-editor-row input { min-width: 120px; }
 .chain-dock { flex-shrink: 0; }
-.chain-dock--expanded { position: fixed; z-index: 40; right: 12px; top: 72px; bottom: 100px; width: min(680px, calc(100vw - 100px)); border: 1px solid var(--ui-control-border); box-shadow: -8px 8px 0 #0f0d1380; }
+.chain-dock--expanded { position: relative; height: clamp(220px, 36vh, 360px); max-height: 45%; min-height: 0; }
+.plan-recommendations { display: flex; flex-direction: column; width: 360px; max-width: 48%; min-width: 0; min-height: 0; border-left: 1px solid var(--color-border); background: var(--color-surface); }
 @media (max-width: 1100px) {
   .library-body--inspector-open { grid-template-columns: minmax(0,1fr) 280px; }
   .library-heading { gap: 8px; }

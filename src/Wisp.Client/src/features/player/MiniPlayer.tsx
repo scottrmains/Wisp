@@ -8,7 +8,7 @@ import { useUiPrefs } from '../../state/uiPrefs'
 import { tracks as tracksApi } from '../../api/library'
 import { useAudioDeck } from '../../audio/useAudioDeck'
 import { usePlayer } from '../../state/player'
-import { formatBpm, formatDuration } from '../library/format'
+import { formatBpm, formatDuration, trackDisplayTitle } from '../library/format'
 import { BandedWaveform } from './BandedWaveform'
 
 /// Persistent bottom-bar player. Owns the single shared HTMLAudioElement /
@@ -60,7 +60,7 @@ export function MiniPlayer() {
 
   if (!trackId) return null
 
-  const title = track?.title ?? track?.fileName ?? '…'
+  const title = track ? trackDisplayTitle(track) : '…'
   const artist = track?.artist ?? 'Unknown'
 
   return (
