@@ -2,6 +2,33 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: marketing presentation refinement (PR #50 follow-up)
+
+- **Clearer product presentation:** Library, Crate Digger, Mix Plans and Review
+  demonstrations now sit beneath their copy in wide product stages. Rounded
+  framing and restrained depth replace hard-edged thumbnails. The plan capture
+  focuses on the BPM/key/energy journey and transition notes rather than unrelated
+  headers; the Wanted crop focuses on titles and waiting/found states.
+- **Sharper assets:** recaptured the same actual client and approved Tonka audio
+  at 2x pixel density as lossless WebP. Audio/library data stays read-only and
+  private. Static image dimensions and capture provenance are updated together.
+- **Visible, restrained motion:** content enters with a one-time 650 ms fade and
+  16 px rise when it reaches the viewport. Hero copy is included. Reduced motion
+  immediately reveals pending content and disables these animations; the no-JS
+  baseline remains visible. Completed demos restore their crisp static poster.
+- **Preview clarification:** opening index.html as a file can block module scripts;
+  use the served HTTP preview for animations and demo controls. This is not a
+  reason to bypass browser security, and does not affect the served production site.
+- **CI limitation observed on the preceding revision:** marketing validation
+  passed, but the unchanged backend TrackFileDateBackfillTests case timed out.
+  Its isolated regression passes locally. No backend/library recovery code is
+  changed by this presentation refinement.
+- **Refinement verification:** marketing build, all 26 Node cases and all 30
+  Chromium cases pass, including new entrance timing, live reduced-motion,
+  high-density/wide framing and finished-demo poster checks. Desktop/mobile
+  screenshots and all four decoded demo frames were inspected. Actual posters
+  are 2x lossless; clips remain native CSS-pixel video (not falsely upscaled).
+
 ## 2026-10-01: marketing workflow, focused media and purposeful motion
 
 - **Implemented on the marketing feature branch:** retained the approved paper,

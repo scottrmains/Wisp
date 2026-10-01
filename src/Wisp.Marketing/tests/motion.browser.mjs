@@ -14,6 +14,75 @@ async function setup(page) {
 }
 const demo = (page, name = "library") => page.locator(`[data-demo=${name}]`);
 
+test("content fades on arrival, not before it reaches the viewport, and never replays", async ({
+  page,
+}) => {
+  await setup(page);
+  const copy = page.locator("#plan .feature-copy");
+  await expect(copy).toHaveClass(/reveal-pending/);
+  expect(await copy.evaluate((el) => getComputedStyle(el).opacity)).toBe("0");
+  await copy.scrollIntoViewIfNeeded();
+  await expect(copy).toHaveClass(/reveal-arrived/);
+  await expect(copy).not.toHaveClass(/reveal-pending/);
+  const timing = await copy.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return {
+      name: style.animationName,
+      duration: style.animationDuration,
+      easing: style.animationTimingFunction,
+    };
+  });
+  expect(timing.name).toBe("arrive");
+  expect(timing.duration).toBe("0.65s");
+  expect(timing.easing).toBe("cubic-bezier(0.16, 1, 0.3, 1)");
+  await expect
+    .poll(() => copy.evaluate((el) => getComputedStyle(el).opacity))
+    .toBe("1");
+  await page.locator(".site-header").scrollIntoViewIfNeeded();
+  await copy.scrollIntoViewIfNeeded();
+  expect(await copy.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+});
+
+test("changing to reduced motion reveals every pending region immediately", async ({
+  page,
+}) => {
+  await setup(page);
+  await expect(page.locator(".reveal-pending").first()).toBeAttached();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.locator(".reveal-pending")).toHaveCount(0);
+  for (const el of await page.locator("[data-reveal]").all()) {
+    expect(await el.evaluate((node) => getComputedStyle(node).opacity)).toBe(
+      "1",
+    );
+    expect(await el.evaluate((node) => getComputedStyle(node).transform)).toBe(
+      "none",
+    );
+  }
+});
+
+test("wide product stages have rounded framing and dense, readable posters", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await setup(page);
+  for (const name of ["library", "dig", "plan", "mix"]) {
+    const figure = demo(page, name);
+    await figure.scrollIntoViewIfNeeded();
+    const screen = figure.locator(".demo-screen");
+    expect((await screen.boundingBox()).width).toBeGreaterThan(1100);
+    expect(
+      await screen.evaluate((el) => getComputedStyle(el).borderRadius),
+    ).toBe("14px");
+    const img = screen.locator("img");
+    await expect.poll(() => img.evaluate((el) => el.complete)).toBe(true);
+    expect(
+      await img.evaluate(
+        (el) => el.naturalWidth / el.getBoundingClientRect().width,
+      ),
+    ).toBeGreaterThan(1.6);
+  }
+});
+
 test("demos fetch only on arrival, play once, pause offscreen and have keyboard pause/resume/replay", async ({
   page,
 }) => {
@@ -44,6 +113,8 @@ test("demos fetch only on arrival, play once, pause offscreen and have keyboard 
     el.currentTime = el.duration - 0.1;
   });
   await expect(button).toHaveAccessibleName("Replay Library demonstration");
+  await expect(video).not.toHaveAttribute("data-ready", "");
+  await expect(figure.locator("img")).toBeVisible();
   await button.click();
   await expect
     .poll(() => video.evaluate((el) => el.currentTime))

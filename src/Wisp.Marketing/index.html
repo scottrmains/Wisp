@@ -47,7 +47,7 @@
     <main id="main">
       <section class="hero wrap" id="top" aria-labelledby="hero-title">
         <p class="eyebrow">A home for your next set.</p>
-        <div class="hero-copy">
+        <div class="hero-copy" data-reveal>
           <h1 id="hero-title">LESS ADMIN.<br /><span>MORE MIXING.</span></h1>
           <div class="hero-aside">
             <p>
@@ -70,12 +70,12 @@
             ><source
               media="(max-width: 679px)"
               srcset="./assets/screenshots/hero-mobile.webp"
-              width="320"
-              height="550" />
+              width="640"
+              height="1100" />
             <img
               src="./assets/screenshots/hero-focus.webp"
-              width="1196"
-              height="620"
+              width="2392"
+              height="1240"
               fetchpriority="high"
               alt="The redesigned WISP library: organised tracks beside a focused preparation panel for Show Me Love (Tonka’s 2002 Club Mix) by Robin S."
           /></picture>
@@ -100,7 +100,11 @@
             running order, prepare your cues and take it to the decks.
           </p>
         </div>
-        <nav class="workflow-route" aria-label="Explore the workflow">
+        <nav
+          class="workflow-route"
+          aria-label="Explore the workflow"
+          data-reveal
+        >
           <a href="#library"><span>01</span> Organise</a
           ><span aria-hidden="true">↗</span>
           <a href="#dig"><span>02</span> Discover</a
@@ -132,8 +136,8 @@
             <div class="demo-screen">
               <img
                 src="./assets/screenshots/library-focus.webp"
-                width="876"
-                height="706"
+                width="2392"
+                height="880"
                 loading="lazy"
                 alt="Focused WISP library rows showing real track titles, BPM, key and the search field."
               /><video
@@ -146,7 +150,7 @@
               ></video>
             </div>
             <figcaption id="library-caption">
-              <span>Find a track. Keep your place.</span
+              <span>Search your collection without losing your place.</span
               ><button
                 type="button"
                 class="demo-toggle"
@@ -180,8 +184,8 @@
             <div class="demo-screen">
               <img
                 src="./assets/screenshots/dig-focus.webp"
-                width="1196"
-                height="698"
+                width="2392"
+                height="1396"
                 loading="lazy"
                 alt="Crate Digger showing a YouTube source, newest discoveries and Show Me Love (Tonka’s 2002 Club Mix) selected with its Wanted action."
               /><video
@@ -218,8 +222,8 @@
             </div>
             <img
               src="./assets/screenshots/wanted-focus.webp"
-              width="1196"
-              height="340"
+              width="1700"
+              height="680"
               loading="lazy"
               alt="Wanted list showing Show Me Love (Tonka’s 2002 Club Mix) still to find and Street Player already matched to the local library."
             />
@@ -247,8 +251,8 @@
             <div class="demo-screen">
               <img
                 src="./assets/screenshots/plan-focus.webp"
-                width="956"
-                height="624"
+                width="1912"
+                height="880"
                 loading="lazy"
                 alt="WISP Chain view showing track cards, BPM and key progression and transition notes."
               /><video
@@ -261,7 +265,9 @@
               ></video>
             </div>
             <figcaption id="plan-caption">
-              <span>The right next track makes all the difference.</span
+              <span
+                >Compare the journey. Inspect the handover. Reorder the
+                set.</span
               ><button
                 type="button"
                 class="demo-toggle"
@@ -286,8 +292,8 @@
           <figure class="usb-shot" data-reveal>
             <img
               src="./assets/screenshots/usb-focus.webp"
-              width="576"
-              height="570"
+              width="1152"
+              height="1140"
               loading="lazy"
               alt="WISP's USB selector showing a fictional connected USB, available space and checked drive layout."
             />
@@ -337,8 +343,8 @@
             <div class="demo-screen">
               <img
                 src="./assets/screenshots/mix-focus.webp"
-                width="1140"
-                height="712"
+                width="2280"
+                height="1424"
                 loading="lazy"
                 alt="Mix review with its waveform, four-star rating and feedback attached to a specific timestamp."
               /><video

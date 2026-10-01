@@ -343,11 +343,18 @@ async function box(locator) {
     height: Math.floor(Math.min(b.height, viewport.height - b.y - 8) / 2) * 2,
   };
 }
-async function still(name, locator, maxHeight) {
+async function still(name, locator, maxHeight, startAt, maxWidth) {
   await page.mouse.move(0, 0);
   await page.waitForTimeout(250);
   const clip = await box(locator);
+  if (startAt) {
+    const anchor = await startAt.boundingBox();
+    const offset = Math.ceil((anchor.y - clip.y) / 2) * 2;
+    clip.y += offset;
+    clip.height -= offset;
+  }
   if (maxHeight) clip.height = Math.min(clip.height, maxHeight);
+  if (maxWidth) clip.width = Math.min(clip.width, maxWidth);
   const png = join(intermediate, `${name}.png`);
   await page.screenshot({ path: png, clip });
   const file = join(output, `${name}.webp`);
@@ -360,20 +367,30 @@ async function still(name, locator, maxHeight) {
       "-y",
       "-i",
       png,
-      "-quality",
-      "88",
+      "-lossless",
+      "1",
+      "-compression_level",
+      "6",
       file,
     ],
     { windowsHide: true },
   );
   media.push({
     file: `screenshots/${name}.webp`,
-    width: clip.width,
-    height: clip.height,
+    width: clip.width * 2,
+    height: clip.height * 2,
+    captureScale: 2,
   });
 }
-async function demo(name, locator, action) {
+async function demo(name, locator, action, { maxHeight, startAt } = {}) {
   const clip = await box(locator);
+  if (startAt) {
+    const anchor = await startAt.boundingBox();
+    const offset = Math.ceil((anchor.y - clip.y) / 2) * 2;
+    clip.y += offset;
+    clip.height -= offset;
+  }
+  if (maxHeight) clip.height = Math.min(clip.height, maxHeight);
   const start = (Date.now() - videoStart) / 1000;
   await page.waitForTimeout(900);
   await action();
@@ -437,7 +454,9 @@ try {
   await mkdir(intermediate, { recursive: true });
   page = await browser.newPage({
     viewport: { width: 1420, height: 840 },
-    deviceScaleFactor: 1,
+    deviceScaleFactor: 2,
+    // Playwright records CSS-pixel video; a larger canvas pads rather than
+    // captures HiDPI pixels. Keep native resolution, with lossless 2x posters.
     recordVideo: { dir: intermediate, size: { width: 1420, height: 840 } },
   });
   videoStart = Date.now();
@@ -723,15 +742,21 @@ try {
   await page.waitForTimeout(500);
   await still("hero-focus", page.locator(".library-workspace"), 620);
   await still("hero-mobile", page.locator(".library-inspector-host"), 550);
-  await still("library-focus", page.locator(".library-main"));
-  await demo("library", page.locator(".library-main"), async () => {
-    await page
-      .getByRole("textbox", { name: "Search tracks" })
-      .fill("Show Me Love");
-    await page.waitForTimeout(1500);
-    await page.getByRole("textbox", { name: "Search tracks" }).fill("");
-    await page.waitForTimeout(1000);
-  });
+  await page.getByRole("button", { name: "Focus list", exact: true }).click();
+  await still("library-focus", page.locator(".library-main"), 440);
+  await demo(
+    "library",
+    page.locator(".library-main"),
+    async () => {
+      await page
+        .getByRole("textbox", { name: "Search tracks" })
+        .fill("Show Me Love");
+      await page.waitForTimeout(1500);
+      await page.getByRole("textbox", { name: "Search tracks" }).fill("");
+      await page.waitForTimeout(1000);
+    },
+    { maxHeight: 440 },
+  );
   const navigate = async (name) => {
     await page
       .locator(".app-sidebar")
@@ -759,7 +784,13 @@ try {
   });
   await still("dig-focus", page.locator(".crate-workspace"));
   await navigate("Wanted");
-  await still("wanted-focus", page.locator(".wanted-workspace"), 340);
+  await still(
+    "wanted-focus",
+    page.locator(".wanted-workspace"),
+    340,
+    null,
+    850,
+  );
   await navigate("Mix Plans");
   await page
     .getByRole("button", { name: /Garage session/ })
@@ -788,8 +819,14 @@ try {
         .getByRole("button", { name: "Chain view", exact: true })
         .click();
     },
+    { startAt: page.locator(".plan-overview"), maxHeight: 440 },
   );
-  await still("plan-focus", page.getByLabel("Plan workspace", { exact: true }));
+  await still(
+    "plan-focus",
+    page.getByLabel("Plan workspace", { exact: true }),
+    440,
+    page.locator(".plan-overview"),
+  );
   await page
     .getByRole("button", { name: "Export to CDJ USB", exact: true })
     .click();
@@ -847,14 +884,14 @@ try {
         "-t",
         String(duration),
         "-vf",
-        `crop=${clip.width}:${clip.height}:${clip.x}:${clip.y},scale='min(1100,iw)':-2,fps=24`,
+        `crop=${clip.width}:${clip.height}:${clip.x}:${clip.y},fps=24`,
         "-an",
         "-c:v",
         "libx264",
         "-preset",
         "medium",
         "-crf",
-        "23",
+        "17",
         "-pix_fmt",
         "yuv420p",
         "-movflags",
@@ -890,6 +927,8 @@ try {
         capturedAt: new Date().toISOString(),
         source:
           "Actual WISP client, owner-approved tracks from Garage / Old Skool House. Real song waveform generated by WISP; illustrative notes/sources/results/USB. No private paths, credentials, database or audio published.",
+        presentation:
+          "Lossless WebP captured at 2x pixel density; focused landscape library and plan regions. Silent native-resolution H.264 demonstrations.",
         waveform: {
           track: tracks[0].artist + " — " + tracks[0].title,
           duration: reviewPeaks.duration,

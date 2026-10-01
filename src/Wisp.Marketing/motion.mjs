@@ -3,6 +3,7 @@
 export function enhanceMotion() {
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const connection = navigator.connection;
+  const revealElements = [...document.querySelectorAll("[data-reveal]")];
   const economical = () =>
     connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType ?? "");
   const demos = [...document.querySelectorAll("[data-demo]")].map((figure) => ({
@@ -76,7 +77,11 @@ export function enhanceMotion() {
       update(demo);
     });
     for (const event of ["pause", "ended"])
-      demo.video.addEventListener(event, () => update(demo));
+      demo.video.addEventListener(event, () => {
+        // At rest return to the lossless 2x poster, not a compressed last frame.
+        if (demo.video.ended) demo.video.removeAttribute("data-ready");
+        update(demo);
+      });
     demo.video.addEventListener("error", () => {
       demo.failed = true;
       demo.video.removeAttribute("data-ready");
@@ -108,14 +113,21 @@ export function enhanceMotion() {
       (entries) => {
         for (const entry of entries)
           if (entry.isIntersecting) {
+            entry.target.classList.remove("reveal-pending");
             if (!reduced.matches) entry.target.classList.add("reveal-arrived");
             reveals.unobserve(entry.target);
           }
       },
-      { threshold: 0.12 },
+      { threshold: 0, rootMargin: "0px 0px -8% 0px" },
     );
-    for (const element of document.querySelectorAll("[data-reveal]"))
+    for (const element of revealElements) {
+      if (
+        !reduced.matches &&
+        element.getBoundingClientRect().top >= innerHeight
+      )
+        element.classList.add("reveal-pending");
       reveals.observe(element);
+    }
   }
   const stop = () => {
     for (const demo of demos) pause(demo);
@@ -127,6 +139,8 @@ export function enhanceMotion() {
     if (reduced.matches) {
       stop();
       for (const demo of demos) demo.video.removeAttribute("data-ready");
+      for (const element of revealElements)
+        element.classList.remove("reveal-pending", "reveal-arrived");
     }
   });
   document.addEventListener("visibilitychange", () => {

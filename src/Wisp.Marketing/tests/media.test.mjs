@@ -18,6 +18,20 @@ test("every focused capture/demo has provenance, matching bytes and a small deli
     /No private paths, credentials, database or audio published/,
   );
   assert.equal(manifest.waveform.audioPublished, false);
+  assert.match(manifest.presentation, /Lossless WebP captured at 2x/);
+  for (const item of manifest.media.filter((item) =>
+    item.file.endsWith(".webp"),
+  ))
+    assert.equal(item.captureScale, 2);
+  for (const name of ["library", "plan"]) {
+    const item = manifest.media.find(
+      (item) => item.file === `screenshots/${name}-focus.webp`,
+    );
+    assert.ok(
+      item.width / item.height > 2,
+      `${name} should be a focused landscape capture`,
+    );
+  }
   assert.match(
     manifest.waveform.track,
     /Show Me Love \(Tonka's 2002 Club Mix\)/,

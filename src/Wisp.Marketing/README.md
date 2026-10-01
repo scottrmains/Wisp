@@ -37,6 +37,11 @@ not test reports. They capture the actual redesigned client—not reconstructed
 interface artwork. The workflow is Library → Crate Digger/Wanted → Mix Plans →
 USB → Mix Review. Soulseek is optional background functionality, not a main pitch.
 
+Posters are captured at 2x pixel density with lossless WebP compression. Wide,
+rounded product stages show legible function-focused regions rather than tall
+thumbnail-sized windows. Library and plan posters are landscape crops; the Wanted
+crop retains track titles and waiting/found states without unrelated actions.
+
 The owner approved public artist/title labels from their Garage / Old Skool House
 playlist and the actual waveform of Robin S — Show Me Love (Tonka's 2002 Club Mix).
 The capture uses a read-only SQLite connection for these selected tracks and reads
@@ -73,6 +78,16 @@ titles. The capture explicitly combines title/version so the Tonka mix is correc
 identified; **this marketing PR does not fix that separate app defect**.
 
 ### Motion behaviour
+
+Use the HTTP preview (`npm run build`, then `npm run dev`) rather than opening
+index.html directly: browsers can block JavaScript module imports from file URLs,
+leaving a valid static page but no fades or demo controls. Do not disable browser
+security to work around this. The hosted site serves modules with the correct MIME.
+
+- Hero and feature content have a one-time 650 ms opacity/16 px entrance, triggered
+  inside the viewport rather than before the viewer reaches it. Reduced motion
+  reveals pending content immediately and suppresses all entrance motion.
+- A finished demonstration restores its lossless poster, keeping idle text sharp.
 
 - Each demo loads near the viewport, plays once, never loops, and has accessible
   keyboard Play/Pause/Resume/Replay controls. Only one demo plays at a time.
