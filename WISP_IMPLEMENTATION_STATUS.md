@@ -44,6 +44,11 @@ Last reviewed: 2026-10-01
   accepts remaining manual checks/limitations and authorises develop→main.
   Main push builds the installer, verifies install/start/upgrade/uninstall and
   publishes download/checksum plus website. No new installer exists yet.
+- **Owner release decision:** subsequently explicitly authorised merging this
+  verification PR and develop→main once checks pass, accepting the documented
+  remaining manual-check limits. This is release acceptance of limitations,
+  not evidence that deferred hardware/OLE/scaling checks passed. Production
+  pipeline completion and the new installer URL must be reported separately.
 
 ## 2026-10-01: UI 4 remaining workspaces and final consistency implemented
 

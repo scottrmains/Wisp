@@ -11,7 +11,9 @@ appearance. All four implementation phases and owner visual reviews are complete
 Final release verification found and fixed a compact-sidebar tooltip obstruction
 on `codex/ui-release-verification`; that fix still requires merging into develop.
 Automated and partial native evidence is recorded below and in the status log;
-remaining native acceptance and production promotion are separate gates.
+remaining native acceptance and production promotion are separate gates. The owner
+has explicitly accepted the documented manual-check limits for this release and
+authorised verification-fix and develop-to-main merges after all checks pass.
 
 ## Product outcome
 
@@ -392,8 +394,9 @@ download recovery (8 cases), marketing unit tests (23), marketing browser tests
 | Installer / production download | Production pipeline remains main-push-only. Install/start/upgrade/uninstall and public download verification run on the production runner after owner-authorised promotion; not yet run for this revision. |
 
 This closes the implementation/visual-review scope, not all native acceptance.
-Remaining manual checks may be consciously accepted by the owner for a release;
-do not silently mark them passed. No new CDJ hardware or live provider claim.
+The owner explicitly accepted these remaining manual-check limits and authorised
+release after checks pass on 2026-10-01. Deferred checks remain unverified, not
+silently marked passed. No new CDJ hardware or live provider claim.
 
 Use isolated browser fixtures and WISP_DATA_DIR profiles. Never exercise delete,
 rename, scan, download, normalise, record or USB-write tests against the owner's
@@ -431,8 +434,8 @@ working library. Keep screenshots, music, credentials and databases out of Git.
 - [x] Implement UI 3 and obtain owner visual approval (PR #44).
 - [x] Implement UI 4 and obtain owner visual approval (PR #45).
 - [ ] Merge final verification fix after its PR checks pass.
-- [ ] Complete remaining native checks above, or record explicit owner release acceptance of their limits.
-- [ ] Owner approves develop to main promotion after final regression review.
+- [x] Record explicit owner release acceptance of remaining native-check limits above (checks themselves remain unverified).
+- [x] Owner approves develop to main promotion after final regression review, conditional on all PR checks passing.
 
 Each phase PR should summarise its completed checkboxes, before/after evidence,
 test results, native checks still outstanding and any safe rollback concerns.
