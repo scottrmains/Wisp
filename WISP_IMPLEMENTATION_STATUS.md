@@ -2,6 +2,49 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: UI redesign final release verification
+
+- **Scope:** all UI phases #42–#45 are merged into develop and owner visually
+  approved. Verification uses merged `d02c8e7` in a separate checkout on
+  `codex/ui-release-verification`, with a fresh isolated profile and generated
+  audio. Owner library/cues/music/USBs and unrelated Discovery source edit are
+  untouched. No production merge, packaging, install or deployment performed.
+- **Release blocker corrected:** full browser verification caught sidebar
+  tooltips intercepting adjacent navigation clicks at scaled-equivalent widths.
+  The harden skill guided placement outside the sidebar hit area; hints remain
+  hoverable, keyboard-described and Escape-dismissible. Added an explicit
+  adjacent-navigation regression; no drag/audio/API/export behaviour changed.
+- **Backend:** all 488 tests pass (115 Core, 185 Infrastructure, 188 API), using
+  existing FFmpeg for isolated audio tests. Three additional full Infrastructure
+  runs pass. Previous PR #45 date-backfill timeout did not reproduce; its root
+  cause is not established. Merged develop validation run 36860987829 is green.
+- **Client:** after tooltip fix, 61 unit and 137 browser tests pass; client build
+  and browser-test TypeScript check pass. Lint has no errors/12 existing warnings;
+  existing roughly 511KB initial bundle warning remains. No root build/publish.
+- **Release support:** 8 dependency-download recovery tests, 23 marketing unit
+  tests, 17 marketing browser tests and marketing build pass locally. Main-only
+  production packaging/publishing/deployment gates and smoke scripts reviewed,
+  not executed locally or bypassed.
+- **Native:** actual Photino/WebView2 launches and loads production client/assets
+  from an isolated profile; generated track playback advances across Library,
+  Mix Plans and sidebar collapse. Xone:24C Input 1 captures stereo float 44.1kHz
+  for 67.76 seconds across navigation and Settings; capture start pauses library
+  audio, explicit stop reaches Ready without issue and complete WAV decodes with
+  FFmpeg. This near-silent test verifies lifecycle, not both musical deck routes
+  or listening quality. Native Settings exposes modal-only accessibility content
+  and dismisses with Escape without stopping capture.
+- **Still unverified:** successful sustained OLE drops to WISP playlists/plans,
+  Explorer and rekordbox. One automated multi-track drag releases before handoff,
+  reports it safely and leaves playlist empty; no success claimed. Native complete
+  keyboard focus loop/return is inconclusive in accessibility focus reporting;
+  full browser focus coverage passes. Actual Windows 125/150% display scaling
+  not changed/tested; browser equivalents remain separate. No live-provider,
+  physical USB or new CDJ hardware acceptance.
+- **Release gate:** merge verification fix into develop after CI, then owner
+  accepts remaining manual checks/limitations and authorises develop→main.
+  Main push builds the installer, verifies install/start/upgrade/uninstall and
+  publishes download/checksum plus website. No new installer exists yet.
+
 ## 2026-10-01: UI 4 remaining workspaces and final consistency implemented
 
 - **Delivery:** `codex/ui-phase-four-workspaces` from current origin/develop,

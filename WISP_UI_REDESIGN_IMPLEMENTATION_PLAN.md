@@ -6,9 +6,12 @@ Status: UI 1 shared foundations/navigation (PR #42) are merged into develop.
 UI 2 Library/playlists/preparation, including the approved full-height right
 inspector, is merged into develop (PR #43) and the owner approved its appearance.
 UI 3 Mix Plans/discovery is merged into develop (PR #44); the owner approved its
-appearance. UI 4 is implemented on `codex/ui-phase-four-workspaces`, pending
-owner review. Automated evidence is recorded below and in the status log;
-native acceptance remains a separate gate for every phase.
+appearance. UI 4 is merged into develop (PR #45) and the owner approved its
+appearance. All four implementation phases and owner visual reviews are complete.
+Final release verification found and fixed a compact-sidebar tooltip obstruction
+on `codex/ui-release-verification`; that fix still requires merging into develop.
+Automated and partial native evidence is recorded below and in the status log;
+remaining native acceptance and production promotion are separate gates.
 
 ## Product outcome
 
@@ -359,6 +362,39 @@ regression checklist below has evidence or an explicitly documented limitation.
 
 ## Verification checklist for each phase
 
+### Final release verification: 2026-10-01
+
+Verified from merged develop `d02c8e7` in a separate checkout and fresh
+`WISP_DATA_DIR`; the owner's library, music, USBs and local source edit were not
+changed. The prior PR date-backfill timeout did not reproduce in a full local
+backend run or three additional Infrastructure suite runs. The merged develop
+GitHub run [36860987829](https://github.com/scottrmains/Wisp/actions/runs/36860987829)
+passed. Its passing result does not establish the cause of the earlier timeout.
+
+The full browser run exposed a tooltip covering the next compact navigation row.
+Sidebar hints now open beside their triggers, retaining hover and Escape support.
+An explicit regression covers adjacent-button clicks with a visible tooltip.
+After the fix, 137 browser tests and 61 unit tests pass; client build and browser
+TypeScript checks pass. Lint has no errors and 12 existing warnings; the existing
+approximately 511KB initial-chunk warning remains. All 488 backend tests pass
+(115 Core, 185 Infrastructure, 188 API), with FFmpeg-enabled audio tests. Dependency
+download recovery (8 cases), marketing unit tests (23), marketing browser tests
+(17) and marketing build also pass. No installer was generated locally.
+
+| Acceptance area | Evidence / remaining limit |
+| --- | --- |
+| Responsive pages, selection, virtualisation, menus, cue/preparation controls, USB messaging | Full real-client browser suite with fictional fixtures; 1024/1366/1920 and scaled-equivalent layouts. No fresh paired before capture for every state. |
+| Native playback/navigation | Production-built client in Photino/WebView2 with two generated MP3s; playback time advances across Library to Mix Plans and sidebar collapse. |
+| Native capture/navigation | Xone:24C Input 1, stereo 44.1kHz float master, 67.76 seconds; capture continues through Mix Plans, Wanted and Settings. Library playback pauses on capture start; explicit stop reaches Ready with no issue. The complete WAV decodes with FFmpeg. Near-silent input does not prove musical routing, both decks or subjective quality. |
+| Native Settings | Modal shows only dialog content in accessibility tree; Escape dismisses while capture continues. Full focus-cycle/return is browser-verified only; native focused-element reporting remains inconclusive. |
+| Native OLE internal/external drops | Browser dual-format/duplicate/selection regressions pass. One native multi-track attempt reports early mouse release and adds nothing. Automation's short gesture does not verify a successful sustained drop. Owner must check playlists/plans, Explorer and rekordbox manually. No change to drag implementation. |
+| Actual Windows 125/150% display scaling | Not changed or verified; browser-equivalent viewport checks are not OS scaling evidence. |
+| Installer / production download | Production pipeline remains main-push-only. Install/start/upgrade/uninstall and public download verification run on the production runner after owner-authorised promotion; not yet run for this revision. |
+
+This closes the implementation/visual-review scope, not all native acceptance.
+Remaining manual checks may be consciously accepted by the owner for a release;
+do not silently mark them passed. No new CDJ hardware or live provider claim.
+
 Use isolated browser fixtures and WISP_DATA_DIR profiles. Never exercise delete,
 rename, scan, download, normalise, record or USB-write tests against the owner's
 working library. Keep screenshots, music, credentials and databases out of Git.
@@ -390,10 +426,12 @@ working library. Keep screenshots, music, credentials and databases out of Git.
 - [x] Review current pages and navigation using isolated fictional fixtures.
 - [x] Record the proposed phased delivery and acceptance checklists.
 - [x] Approve the shell and Library visual example.
-- [ ] Complete and accept UI 1.
-- [ ] Complete and accept UI 2.
-- [ ] Complete and accept UI 3.
-- [ ] Complete and accept UI 4.
+- [x] Implement UI 1 and obtain owner visual approval (PR #42).
+- [x] Implement UI 2 and obtain owner visual approval (PR #43).
+- [x] Implement UI 3 and obtain owner visual approval (PR #44).
+- [x] Implement UI 4 and obtain owner visual approval (PR #45).
+- [ ] Merge final verification fix after its PR checks pass.
+- [ ] Complete remaining native checks above, or record explicit owner release acceptance of their limits.
 - [ ] Owner approves develop to main promotion after final regression review.
 
 Each phase PR should summarise its completed checkboxes, before/after evidence,
