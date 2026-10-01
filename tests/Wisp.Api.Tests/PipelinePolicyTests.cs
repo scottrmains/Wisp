@@ -27,6 +27,7 @@ public class PipelinePolicyTests
         var steps = Steps(installer);
         Assert.Contains(steps, s => Scalar(s, "run").Contains("./tools/build-installer.ps1"));
         Assert.Contains(steps, s => Scalar(s, "run").Contains("./tools/test-installer.ps1"));
+        Assert.Contains(steps, s => Scalar(s, "run").Contains("playwright install chromium"));
         Assert.Contains(steps, s => Scalar(s, "uses").StartsWith("actions/upload-artifact@"));
     }
 
@@ -44,6 +45,7 @@ public class PipelinePolicyTests
         Assert.Contains("npm --prefix src/Wisp.Client test", commands);
         Assert.Contains("npm --prefix src/Wisp.Client run lint", commands);
         Assert.Contains("npm --prefix src/Wisp.Client run build", commands);
+        Assert.Contains("node tools/test-ui-upgrade-cache.mjs --app src/Wisp.Api/bin/Release/net10.0/Wisp.dll", commands);
         Assert.DoesNotContain("publish", commands, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("installer.ps1", commands, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(steps, s => Scalar(s, "uses").StartsWith("actions/upload-artifact@"));

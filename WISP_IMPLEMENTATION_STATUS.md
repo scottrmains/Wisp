@@ -2,6 +2,50 @@
 
 Last reviewed: 2026-10-01
 
+## 2026-10-01: desktop upgrade serves the current UI
+
+- **Confirmed cause:** owner installed 0.1.111 / production commit `d891e09`.
+  Both shortcuts targeted that installation and its current HTML/JS matched the
+  redesign build. Launch logs instead requested September's old hashed assets
+  without requesting the entry HTML. The persistent WebView reused cached HTML;
+  previous installer assets still present on disk allowed the old UI to load.
+  This was not a failed merge or a lost library.
+- **Implemented:** Photino launches with `?wisp-ui=<assembly release identity>`
+  (including the release/commit), bypassing cached entry URLs on upgrade. HTML
+  responses, including default-file, HEAD and conditional 304 responses, now
+  carry `Cache-Control: no-store, max-age=0`. The loopback origin/port stays the
+  same; no WebView profile, preferences, drafts, database, cues or music is reset.
+  Asset/API caching and existing installed files are not destructively changed.
+- **Regression coverage:** 12 backend cases cover release-key changes, existing
+  queries/fragments, real static/default files, conditional requests and unchanged
+  asset/API semantics. A real persistent Chromium disk-cache test reproduces old
+  HTML at the unversioned URL after the new app starts, then proves the actual
+  release-key launch loads current on-disk HTML and the redesigned sidebar, keeps
+  localStorage and remains current on another browser launch.
+- **Release gate strengthened:** that cache test runs on PR validation against
+  the tested application DLL and built client, and against the actual installed
+  executable on the main-only Windows installer runner. Installer HTTP checks
+  also compare served HTML with the installed entry file and verify cache headers
+  and the same-origin launch URL. The previous fresh-profile/reinstall-only smoke
+  did not exercise a warmed browser cache and missed this defect.
+- **Verification scope:** local tests use generated, isolated browser/library
+  profiles, not the owner's installation/data. Persistent Chromium exercises the
+  failure and fix but is not a native WebView2 upgrade acceptance test; the owner
+  must relaunch the new installed release to confirm that final environment.
+  The first full backend run hit one unrelated USB-test temporary-directory
+  access error; the complete Infrastructure rerun passed all 185 tests.
+- **Local verification complete:** the subsequent full backend run passed all
+  500 tests (115 Core, 185 Infrastructure, 200 API). Client 61 unit/137 browser
+  tests and production client build pass; lint has no errors and 12 pre-existing
+  warnings. Two persistent-cache probes passed against the real built app; Node
+  and installer PowerShell syntax checks pass. Existing bundle-size warning
+  remains. The unrelated dirty Discovery source in the original checkout is
+  untouched; generated profiles/cache/artifacts are ignored by Git.
+- **Delivery:** feature branch `codex/desktop-upgrade-cache` targets develop.
+  Owner approved implementing/releasing this patch. Merge/release follows green
+  checks only; production publication and final installer URL are reported after
+  the main pipeline succeeds. No installer is built/installed locally.
+
 ## 2026-10-01: UI redesign final release verification
 
 - **Scope:** all UI phases #42–#45 are merged into develop and owner visually

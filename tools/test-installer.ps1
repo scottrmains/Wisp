@@ -39,7 +39,19 @@ try {
                 if ($health) { break }
             }
             if ($health.status -ne 'ok') { throw 'Installed Wisp did not become healthy.' }
-            $page = (Invoke-WebRequest $url).Content
+            $entry = Invoke-WebRequest $url
+            if ($entry.Headers['Cache-Control'] -notmatch 'no-store') { throw 'Installed entry HTML can be cached.' }
+            $page = $entry.Content
+            $installedHtml = [System.IO.File]::ReadAllText((Join-Path $installDir 'wwwroot/index.html'))
+            if ($page -cne $installedHtml) { throw 'Installed app served a different client entry point.' }
+            $launchUri = [uri]$health.uiLaunchUrl
+            if ($launchUri.GetLeftPart([System.UriPartial]::Authority) -ne $url -or $launchUri.Query -notmatch 'wisp-ui=') {
+                throw 'Installed desktop launch URL lacks the same-origin release cache key.'
+            }
+            $launchPage = Invoke-WebRequest $launchUri
+            if ($launchPage.Content -cne $installedHtml -or $launchPage.Headers['Cache-Control'] -notmatch 'no-store') {
+                throw 'Versioned launch did not serve the uncached installed UI.'
+            }
             if ($page -notmatch 'src="([^"]+\.js)"') { throw 'Installed client entry point is missing.' }
             $asset = Invoke-WebRequest "$url$($Matches[1])"
             if ($asset.Headers['Content-Type'] -notmatch 'javascript') { throw 'Installed JavaScript asset was not served.' }
@@ -50,10 +62,16 @@ try {
             if (!$appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force }
         }
     }
+    # A fresh profile and reinstalling the same build cannot catch the user's
+    # stale WebView HTML failure. Reproduce an older entry in a persistent
+    # Chromium disk cache, then start the actual installed app at that origin.
+    & node (Join-Path $PSScriptRoot 'test-ui-upgrade-cache.mjs') `
+        --app (Join-Path $installDir 'Wisp.exe') --data-root (Join-Path $testRoot 'cache-upgrade')
+    if ($LASTEXITCODE -ne 0) { throw 'Installed application failed the warmed-cache upgrade regression.' }
     Invoke-Setup (Join-Path $installDir 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
     if (Test-Path (Join-Path $installDir 'Wisp.exe')) { throw 'Uninstall left Wisp.exe behind.' }
     if (!(Test-Path $marker) -or !(Test-Path (Join-Path $profileDir 'wisp.db'))) { throw 'Uninstall removed user data.' }
-    Write-Host 'Installer passed: fresh install, application/SPA startup, upgrade and data-preserving uninstall.'
+    Write-Host 'Installer passed: fresh install, current SPA startup, upgrade, persistent old-UI cache recovery and data-preserving uninstall.'
 }
 catch {
     Get-ChildItem $testRoot -Filter '*.log' -Recurse | ForEach-Object {
