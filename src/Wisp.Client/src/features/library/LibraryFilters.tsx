@@ -52,16 +52,10 @@ export function LibraryFilters({ query, onChange, total }: Props) {
           Include missing files
         </label>
         <input
-          value={query.search ?? ''}
-          onChange={(e) => set('search', e.target.value || undefined)}
-          placeholder="Search artist / title / album"
-          className="min-w-[16rem] flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
-        />
-
-        <input
           value={query.key ?? ''}
           onChange={(e) => set('key', e.target.value || undefined)}
           placeholder="Key (e.g. 8A)"
+          aria-label="Filter by musical key"
           className="w-28 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
         />
 
@@ -74,6 +68,7 @@ export function LibraryFilters({ query, onChange, total }: Props) {
             value={query.bpmMin ?? ''}
             onChange={(e) => set('bpmMin', e.target.value ? Number(e.target.value) : undefined)}
             placeholder="min"
+            aria-label="Minimum BPM"
             className="w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
           />
           <span className="text-[var(--color-muted)]">–</span>
@@ -84,6 +79,7 @@ export function LibraryFilters({ query, onChange, total }: Props) {
             value={query.bpmMax ?? ''}
             onChange={(e) => set('bpmMax', e.target.value ? Number(e.target.value) : undefined)}
             placeholder="max"
+            aria-label="Maximum BPM"
             className="w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1.5 placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
           />
         </div>

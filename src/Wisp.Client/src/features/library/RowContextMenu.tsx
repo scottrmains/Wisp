@@ -23,7 +23,6 @@ interface Props {
 }
 
 const MENU_W = 220
-const ESTIMATED_ITEM_H = 28
 
 /// Lightweight right-click menu. Renders at (x, y) with edge-aware repositioning so
 /// it never falls off-screen. Click-outside or Esc dismisses. Click on a disabled
@@ -31,7 +30,15 @@ const ESTIMATED_ITEM_H = 28
 /// fires `onSelect` then auto-closes.
 export function RowContextMenu({ items, x, y, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null)
   const [adjusted, setAdjusted] = useState({ x, y })
+  useEffect(() => {
+    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+  }, [])
+  const close = () => {
+    returnFocus.current?.focus({ preventScroll: true })
+    onClose()
+  }
 
   // Edge-detect after first paint so the menu height is measurable.
   useLayoutEffect(() => {
@@ -53,7 +60,11 @@ export function RowContextMenu({ items, x, y, onClose }: Props) {
       if (!ref.current.contains(e.target as Node)) onClose()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        returnFocus.current?.focus({ preventScroll: true })
+        onClose()
+      }
     }
     // Listen on capture so we beat the row's own click handler if the user clicks outside.
     window.addEventListener('mousedown', onPointer, true)
@@ -73,10 +84,21 @@ export function RowContextMenu({ items, x, y, onClose }: Props) {
         left: adjusted.x,
         top: adjusted.y,
         width: MENU_W,
-        minHeight: items.length * ESTIMATED_ITEM_H,
+        maxHeight: 'calc(100vh - 8px)',
       }}
-      className="z-[60] overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 text-sm shadow-2xl"
+      className="z-[60] overflow-y-auto rounded border border-[var(--ui-control-border)] bg-[var(--color-surface)] py-1 text-sm shadow-2xl"
       onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return }
+        if (e.key === 'Tab') { close(); return }
+        const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+        if (!buttons.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+        e.preventDefault()
+        e.stopPropagation()
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : (index + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
+        buttons[next].focus()
+      }}
     >
       {items.map((item) => (
         <div key={item.id}>
@@ -86,8 +108,8 @@ export function RowContextMenu({ items, x, y, onClose }: Props) {
             disabled={item.disabled}
             onClick={() => {
               if (item.disabled) return
+              close()
               item.onSelect()
-              onClose()
             }}
             title={item.disabled ? item.disabledReason : undefined}
             className={[

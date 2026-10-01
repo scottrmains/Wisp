@@ -1,10 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { defaultLibraryColumns, normalizeLibraryColumns, type LibraryColumnPrefs } from '../features/library/libraryColumns'
 import type { DiscoverySort } from '../api/types'
 
 export type InspectorTab = 'overview' | 'recommendations' | 'cues' | 'metadata' | 'notes' | 'tags'
 
 interface UiPrefsState {
+  libraryColumns: LibraryColumnPrefs
+  setLibraryColumns: (columns: LibraryColumnPrefs) => void
   libraryPrepHeight: number
   setLibraryPrepHeight: (height: number) => void
   prepWaveformVisible: boolean
@@ -68,13 +71,15 @@ const DEFAULT_WIDTH = 448
 export const useUiPrefs = create<UiPrefsState>()(
   persist(
     (set) => ({
+      libraryColumns: defaultLibraryColumns,
+      setLibraryColumns: (columns) => set({ libraryColumns: normalizeLibraryColumns(columns) }),
       libraryPrepHeight: 340,
       setLibraryPrepHeight: (height) => set({ libraryPrepHeight: Number.isFinite(height) ? Math.max(100, Math.min(1200, Math.round(height))) : 340 }),
       prepWaveformVisible: true,
       togglePrepWaveform: () => set((s) => ({ prepWaveformVisible: !s.prepWaveformVisible })),
       prepDetailsVisible: true,
       togglePrepDetails: () => set((s) => ({ prepDetailsVisible: !s.prepDetailsVisible })),
-      libraryFiltersVisible: true,
+      libraryFiltersVisible: false,
       toggleLibraryFilters: () => set((s) => ({ libraryFiltersVisible: !s.libraryFiltersVisible })),
       discoverySort: '-published',
       setDiscoverySort: (discoverySort) => set({ discoverySort }),
@@ -123,12 +128,12 @@ export const useUiPrefs = create<UiPrefsState>()(
       merge: (persisted, current) => {
         const saved = persisted && typeof persisted === 'object' ? persisted as Partial<UiPrefsState> : {}
         return { ...current, ...saved,
+          libraryColumns: normalizeLibraryColumns(saved.libraryColumns),
           sidebarCollapsed: typeof saved.sidebarCollapsed === 'boolean' ? saved.sidebarCollapsed : current.sidebarCollapsed,
           sidebarCompactExpanded: typeof saved.sidebarCompactExpanded === 'boolean' ? saved.sidebarCompactExpanded : false,
         }
       },
-      // Only the persistent width + collapsed toggle should hit localStorage —
-      // the last-used tab is intentionally session-y, but persisting it is harmless and small.
+      // Presentation preferences only: no music, cue data or credentials.
     },
   ),
 )

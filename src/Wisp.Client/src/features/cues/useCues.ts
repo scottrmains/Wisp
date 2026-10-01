@@ -45,6 +45,8 @@ export function useCues(trackId: string | null) {
   return {
     cues: (list.data ?? []) as CuePoint[],
     loading: list.isLoading,
+    error: list.error,
+    refetch: list.refetch,
     create,
     update,
     remove,

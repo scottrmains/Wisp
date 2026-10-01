@@ -26,9 +26,9 @@ export function ExternalFileDrag({ ids, controller }: { ids: string[]; controlle
       }}
       onPointerUp={() => { start.current = null }} onPointerCancel={() => { start.current = null }} onLostPointerCapture={() => { start.current = null }}
       onClick={() => { if (!busy) explain('Hold this handle and drag into a rekordbox playlist or a folder. Files only—not WISP cues or playlist metadata.') }}>
-      <Grip size={13} /> {busy ? 'Dragging files…' : `Drag ${ids.length} files to rekordbox`}
+      <Grip size={13} /> {busy ? 'Dragging files…' : `Drag ${ids.length} files`}
     </button>
-    <span className="text-[11px] text-[var(--color-muted)]">Audio files only · no WISP cues</span>
+    <span className="file-drag-disclosure text-[11px] text-[var(--color-muted)]">Files only · no cues</span>
     {capabilityError && <span role="alert" className="text-xs text-red-300">Desktop drag unavailable: {capabilityError}. Restart WISP after updating.</span>}
     {feedback && <><span role={feedback.failed ? 'alert' : 'status'} className={`max-w-xl break-words text-xs ${feedback.failed ? 'text-red-300' : 'text-[var(--color-muted)]'}`}>{feedback.message}</span>
       <button onClick={dismiss} aria-label="Dismiss file drag message" className="px-1 text-xs text-[var(--color-muted)]">×</button></>}

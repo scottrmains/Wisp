@@ -231,7 +231,7 @@ async function unifiedDrop(page: Page, withFiles = true) {
 test('Modern Windows rows start one dual-format drag; the same payload is accepted inside WISP across all pages', async ({ page }) => {
   const { additions, downloads } = await setup(page, true, undefined, true)
   await selectAll(page)
-  await expect(page.getByText('Drag rows to WISP playlists, rekordbox or folders', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Drag 1205 audio files to rekordbox' })).toBeEnabled()
   await page.evaluate(() => { window.dragTest.delay = 1000 })
   await rowDrag(page)
   await expect.poll(() => page.evaluate(() => window.dragTest.calls.length)).toBe(1)
