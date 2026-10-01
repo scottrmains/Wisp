@@ -86,6 +86,8 @@ jobs:
         run: npx playwright install chromium
       - name: Test desktop drag UI (isolated mock bridge)
         run: npm --prefix src/Wisp.Client run test:browser
+      - name: Test warmed-cache application upgrade
+        run: node tools/test-ui-upgrade-cache.mjs --app src/Wisp.Api/bin/Release/net10.0/Wisp.dll --web-root src/Wisp.Api/wwwroot --data-root artifacts/ui-upgrade-cache
 
   installer:
     name: Production installer
@@ -115,6 +117,9 @@ jobs:
           key: ffmpeg-win-x64-v1-${{ hashFiles('tools/ffmpeg-dependency.json') }}
       - name: Build installer
         run: ./tools/build-installer.ps1 -Version "0.1.$env:GITHUB_RUN_NUMBER"
+      - name: Install browser for installed upgrade-cache test
+        working-directory: src/Wisp.Client
+        run: npx playwright install chromium
       - name: Verify install, launch, upgrade and uninstall
         run: ./tools/test-installer.ps1 -Installer "artifacts/installers/Wisp-Setup-0.1.$env:GITHUB_RUN_NUMBER-win-x64.exe"
       - name: Upload installer and checksum

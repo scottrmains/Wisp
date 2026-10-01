@@ -192,13 +192,15 @@ public class Program
                 }
             });
 
+            app.UseDesktopUiCachePolicy();
             app.UseDefaultFiles();
             app.UseStaticFiles();
 
-            app.MapGet("/api/health", () => Results.Ok(new
+            app.MapGet("/api/health", (HttpContext context) => Results.Ok(new
             {
                 status = "ok",
                 version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+                uiLaunchUrl = DesktopUi.LaunchUrl($"{context.Request.Scheme}://{context.Request.Host}/"),
                 time = DateTimeOffset.UtcNow
             }));
 
@@ -451,7 +453,7 @@ public class Program
                              ?? "http://127.0.0.1:5125";
 
                 // WebView2 prefers loopback IP over the `localhost` hostname.
-                var url = rawUrl.Replace("://localhost", "://127.0.0.1");
+                var url = DesktopUi.LaunchUrl(rawUrl.Replace("://localhost", "://127.0.0.1"));
 
                 Log.Information("Launching Photino window at {Url}", url);
 
