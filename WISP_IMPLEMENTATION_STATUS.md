@@ -1,6 +1,19 @@
 # Wisp implementation status
 
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-02
+
+## 2026-10-02: Marketing site custom domain
+
+- The owner added the `wisp` CNAME under `physiqo.app` in Porkbun, pointing to
+  `zealous-smoke-0124a0503.4.azurestaticapps.net`. DNS resolution was verified.
+- Registered `wisp.physiqo.app` on the existing Free-tier `wisp-web-prod` Azure
+  Static Web App in `rg-wisp-prod`, using CNAME validation. HTTPS provisioning
+  is pending; the address must not be described as live until certificate
+  validation and an HTTPS response succeed.
+- The original Azure hostname remains available. No root-domain, email,
+  Physiqo application, hosting tier, release workflow or deployment identity
+  changes were made. The pipeline continues verifying the Azure origin URL.
+
 
 ## 2026-10-01: Optional local BPM/key analysis — experimental first phase
 

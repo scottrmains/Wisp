@@ -124,14 +124,16 @@ there is no claim of automatic rollback after an Azure upload succeeds.
 
 Versioning remains `0.1.<GitHub workflow run number>`. Installers are unsigned;
 the homepage/release notes disclose potential Windows SmartScreen warnings.
-Code-signing and custom-domain registration are not part of this release.
+Code-signing was not part of the initial release. Custom-domain setup is
+documented below.
 
 ### Hosting and identity bootstrap
 
 - Subscription: PulseLTV (`fa9dfca3-f9c4-4859-a0c8-665c59380a3d`).
 - Resource group: `rg-wisp-prod` (UK South).
 - Static Web App: `wisp-web-prod` (West Europe, **Free** tier).
-- URL: https://zealous-smoke-0124a0503.4.azurestaticapps.net
+- Custom URL: https://wisp.physiqo.app (registered 2026-10-02; HTTPS pending).
+- Azure origin URL: https://zealous-smoke-0124a0503.4.azurestaticapps.net
 - Managed identity: `id-wisp-github-production`, Contributor on this **single
   WISP site**, with no permissions on Pulse/Physiqo resources.
 - Federation: `repo:scottrmains/Wisp:environment:production`, Azure audience.
@@ -143,6 +145,13 @@ An authenticated owner can repeat the additive bootstrap with
 the subscription/tenant, creates only WISP resources, does not select a paid SKU,
 does not request a repository deployment token, and never changes DNS. Free
 hosting has service limits and is not an SLA-backed hosting commitment.
+
+The owner configured Porkbun DNS for `wisp.physiqo.app` as a CNAME pointing to
+the Azure origin hostname. Azure manages its HTTPS certificate. This additive
+binding does not change `physiqo.app` or its email records. Production deployment
+verification continues using the original Azure hostname; do not replace the
+`WISP_SITE_URL` environment variable with the custom URL without updating the
+Azure-hostname validation in the deployment-readiness checker.
 
 ### Retry and recovery
 
