@@ -20,6 +20,8 @@ public class Track
     public string? NormalizedFilePath { get; set; }
     public string? LoudnessAnalysisJson { get; set; }
     public string? NormalizationJson { get; set; }
+    /// Read-only audio suggestions and accepted-value provenance; never embedded in music files.
+    public string? MusicAnalysisJson { get; set; }
 
     public string? Artist { get; set; }
     public string? Title { get; set; }

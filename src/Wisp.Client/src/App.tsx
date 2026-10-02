@@ -13,6 +13,7 @@ import { DialogHost } from './components/DialogHost'
 import { TooltipHost } from './components/ui/TooltipHost'
 import { RecordingInputIndicator } from './features/recordings/RecordingInputPage'
 import { MixRecordingIndicator } from './features/recordings/MixRecorderPanel'
+import { MusicAnalysisWorkspace } from './features/library/MusicAnalysisWorkspace'
 
 // These feature areas are not needed for first paint of the library workspace.
 // Keep their dependencies out of the startup bundle and load only on navigation.
@@ -98,6 +99,7 @@ function App() {
 
         <RecordingInputIndicator />
         <MixRecordingIndicator />
+        <MusicAnalysisWorkspace />
         <main id="workspace-content" tabIndex={-1} className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<div className="p-6 text-sm text-[var(--color-muted)]">Loading workspaceâ€¦</div>}>
           {page === 'library' && <LibraryPage />}
