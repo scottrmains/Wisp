@@ -19,7 +19,10 @@ Last reviewed: 2026-10-02
 - Verification: the targeted test passed five consecutive Release runs. The
   first full-suite attempt encountered a separate transient temporary-directory
   access error in the waveform USB-export test, which passed when rerun alone.
-  Full-suite and GitHub verification results are recorded below when available.
+  The second full Release solution run passed all 530 backend cases (115 Core,
+  201 Infrastructure, 214 API), including the previously failing backfill test
+  and waveform-export test. `git diff --check` passed. Original develop
+  validation was rerun; the fix PR also runs normal GitHub validation.
 
 ## 2026-10-02: Marketing site custom domain
 
