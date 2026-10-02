@@ -132,7 +132,7 @@ documented below.
 - Subscription: PulseLTV (`fa9dfca3-f9c4-4859-a0c8-665c59380a3d`).
 - Resource group: `rg-wisp-prod` (UK South).
 - Static Web App: `wisp-web-prod` (West Europe, **Free** tier).
-- Custom URL: https://wisp.physiqo.app (registered 2026-10-02; HTTPS pending).
+- Custom URL: https://wisp.physiqo.app (HTTPS verified 2026-10-02).
 - Azure origin URL: https://zealous-smoke-0124a0503.4.azurestaticapps.net
 - Managed identity: `id-wisp-github-production`, Contributor on this **single
   WISP site**, with no permissions on Pulse/Physiqo resources.
