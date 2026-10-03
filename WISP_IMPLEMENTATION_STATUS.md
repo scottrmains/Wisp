@@ -2,6 +2,86 @@
 
 Last reviewed: 2026-10-03
 
+## 2026-10-03: Approved account development infrastructure
+
+- **Approval and cost:** the owner subsequently approved development provisioning
+  conditional on sponsorship coverage. Confirmed the selected sponsorship offer
+  and active credit; used only first-party Azure consumption and External ID's
+  base MAU tier, with no SMS/premium/Go-Local add-ons. Planning estimate GBP 40–60
+  monthly before tax, not guaranteed. A GBP 60 tag-filtered monthly alert budget
+  includes managed networking; alerts are not a spending cap. Private billing
+  balances/identifiers and contact emails are not committed.
+- **Provisioned development only:** dedicated UK South group, customer identity
+  tenant, separate API/native/website registrations and sign-up/sign-in flow;
+  private PostgreSQL 17 B1ms/32 GiB, private DNS/VNet, RBAC vault, Basic registry,
+  Container Apps environment and capped logs. Existing application resources and
+  the owner's music/library/USBs remain untouched. No production release or merge.
+- **Actual deployment evidence:** remote API and migration images built from a
+  cloud-only tracked Git archive, pinned by digest. Manual private-network job
+  migrated the database and verified the separate runtime role's INSERT/read
+  access while denying user UPDATE/DELETE and schema CREATE. API secret access
+  is separate from the operator's narrowly scoped migration secret access.
+  PostgreSQL error/statement logging is hardened before role/password setup.
+  Development API deployment succeeded; actual HTTPS live/ready return 200 and
+  anonymous account/me returns 401, with no-store and request IDs.
+- **Diagnostic only:** a maintained MSAL.NET system-browser/PKCE proof tool is
+  separate from desktop startup, keeps tokens in memory and targets only the
+  development API. Compiling/configuring it does not prove real sign-in.
+- **Real native sign-in verified:** the owner completed development customer
+  sign-up, MSAL's browser callback succeeded, the deployed API accepted the real
+  token, and account read plus repeated provisioning returned the same nonempty
+  WISP account UUID. The diagnostic exited successfully and cleared its in-memory
+  cache. Customer email/password/code/token are not committed. Website-client
+  identity and other provider scenarios remain separate checks.
+- **Verification:** the 28 cloud integration tests still pass; operator and
+  identity-proof builds have zero warnings/errors. MSAL dependency check reports
+  no known advisory vulnerabilities. No Windows installer was generated.
+- **Still open:** actual website identity proof, managed restore,
+  actual secret/revision rotation and signing-key refresh/rotation limitations.
+  Phase 2 is not fully accepted; desktop WISP remains Guest and Phase 3 is not
+  enabled. See [deployment evidence](docs/accounts-development-deployment.md).
+
+## 2026-10-03: Phase 2 cloud account code and templates
+
+Historical code-only slice below; the subsequent development approval and live
+provisioning above supersede its no-provisioning/cost-pending statements.
+
+- **Implemented for review:** independent `Wisp.Cloud.slnx`, ASP.NET Core cloud
+  API and PostgreSQL migrations for account UUIDs, private profiles, trusted
+  identities, lifecycle states and atomic audit records. Desktop SQLite,
+  startup, installer workflow and Guest capabilities are unchanged.
+- **Protected contracts:** delegated account/me and retry-safe provisioning use
+  exact issuer/audience, RSA signature, lifetime, tenant/object identity, allowed
+  native/web clients and API scope. Email and pairwise client subjects do not
+  become account keys. Sixteen simultaneous provisions create one account.
+  Disabled/deleting/deleted accounts cannot be resurrected by another callback.
+- **Operational code:** disabled-by-default host, health/readiness, bounded
+  requests/pools/timeouts, conservative per-replica rate limits, safe request IDs,
+  redacted logs and no startup migrations. Internal conditional state transitions
+  are audited, but full account erasure/admin authorization belongs to Phase 4.
+- **Templates only:** isolated dev/staging/prod Bicep, private-network PostgreSQL,
+  dedicated managed identity, scoped secret-read/registry-pull access, Key Vault,
+  registry, capped Container Apps/logging and budget alerts. Bootstrap defaults
+  to no app; image publication and app enablement are separate steps. No Azure
+  resources, real users, container images or installers were created. Subscription
+  access was checked read-only; credit coverage and costs are not established.
+- **Verified locally:** 28 cloud tests against fresh owned PostgreSQL 17 clusters;
+  real restricted-runtime permission checks, RSA rejection/ownership/state tests,
+  redacted logs, EF migration failure rollback and real dump/restore into a new
+  synthetic database. Existing 613 desktop backend tests pass with pinned FFmpeg.
+  Actual compiled cloud-host smoke returns live 200, disabled-ready 503 and
+  anonymous account 401 without PostgreSQL/provider configuration.
+  Bicep compiles without errors/warnings; cloud packages have no known advisory
+  vulnerabilities at review time. Owner library/cues/audio and the existing
+  PostgreSQL service were not used or altered; fixtures/backups stay ignored.
+- **Remaining gates:** Phase 2 is partially delivered, not fully accepted. The
+  owner chose code/templates before provisioning. Cost/credit approval, actual
+  Entra sign-up/token/native redirect proof, Azure what-if/network/RBAC validation,
+  managed restore and real secret/signing-key rotation remain pending. Desktop
+  sign-in is still unimplemented and disabled; do not start enabling Phase 3 yet.
+  See the [cloud runbook](docs/accounts-cloud-foundation.md) and updated
+  [Phase 2 checklist](WISP_ACCOUNTS_COMMUNITY_IMPLEMENTATION_PLAN.md).
+
 ## 2026-10-03: Phase 1 optional account groundwork
 
 - **Implemented for review:** provider-independent account/session, cloud-client,

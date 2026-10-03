@@ -1,0 +1,50 @@
+name: Validate cloud groundwork
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloud-validation-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate-cloud:
+    name: Cloud API and PostgreSQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: wisp_cloud_test
+          POSTGRES_USER: wisp_cloud_test
+          POSTGRES_PASSWORD: synthetic-ci-test-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U wisp_cloud_test -d wisp_cloud_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      WISP_CLOUD_TEST_CONNECTION: Host=127.0.0.1;Port=5432;Database=wisp_cloud_test;Username=wisp_cloud_test;Password=synthetic-ci-test-only;Maximum Pool Size=10;Timeout=5;Command Timeout=15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test separate cloud service against synthetic PostgreSQL
+        env:
+          WISP_CLOUD_TEST_PG_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: dotnet test Wisp.Cloud.slnx -c Release
+      - name: Build isolated development operator and identity-proof tools
+        run: |
+          dotnet build tools/Wisp.Cloud.Migrations/Wisp.Cloud.Migrations.csproj -c Release
+          dotnet build tools/Wisp.Cloud.IdentityProof/Wisp.Cloud.IdentityProof.csproj -c Release
+      - name: Validate draft Azure template without deployment
+        run: |
+          az bicep install --version v0.47.16
+          az bicep build --file infra/accounts/main.bicep --outfile /tmp/wisp-cloud-template.json
+          az bicep build --file infra/accounts/budget.bicep --outfile /tmp/wisp-cloud-budget.json
+          az bicep build --file infra/accounts/development-bootstrap.bicep --outfile /tmp/wisp-cloud-bootstrap.json
+      # No Azure login, federated write identity, image publication or deploy.

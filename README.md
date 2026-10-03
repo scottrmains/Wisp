@@ -102,8 +102,19 @@ compatibility. `WISP_DATA_DIR` selects a separate profile for isolated testing.
 
 ## Tests
 
+The optional account service is a separate solution, not a desktop dependency.
+Its PostgreSQL-backed checks require an owned synthetic test cluster:
+
 ```powershell
-dotnet test
+./tools/test-cloud-postgres.ps1 -PostgresBin 'C:/Program Files/PostgreSQL/17/bin'
+```
+
+See the [cloud account service runbook](docs/accounts-cloud-foundation.md) for
+contracts, isolated CI, draft Azure templates and remaining cost/provider approval
+gates. This groundwork does not enable desktop login or deploy paid resources.
+
+```powershell
+dotnet test Wisp.slnx
 ```
 
 117 backend tests across `Wisp.Core.Tests` (filename parser, Camelot wheel, BPM scoring, recommendation modes, fractional ordering, phrase markers, name normalizer, cleanup suggestions), `Wisp.Infrastructure.Tests` (file fingerprint, library scanner integration, cleanup applier round-trip and USB sync), and `Wisp.Api.Tests` (HTTP endpoint contracts). The React client also has Vitest coverage for shared UI logic.
