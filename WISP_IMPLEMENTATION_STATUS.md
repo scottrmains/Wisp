@@ -2,6 +2,122 @@
 
 Last reviewed: 2026-10-03
 
+## 2026-10-03: Multiband BPM, missing-BPM tracklist action and key diagnostics
+
+- **BPM implemented:** `wisp-multiband-tonal-v2` measures bass and full-spectrum
+  onset envelopes independently, combines normalised rhythmic evidence, selects
+  a weighted modal cluster across 30-second sections, then refines the candidate
+  against whole-song phase coherence. Loud higher-frequency subdivisions no
+  longer automatically dominate the kick. This remains a dance-oriented
+  90–180 BPM estimate, not downbeat detection, a variable-tempo beatgrid, or a
+  guarantee against every subdivision/octave error. Disagreement and octave
+  folding remain explicit reasons for manual review.
+- **Reported-track evidence:** reproduced Yann Polewka **Keep On** at **166.49**
+  with the previous analyser; the new analyser returns **125.00 BPM** from audio
+  alone. **Oblivion** remains **124.00**, **The Light** remains **123.00**. Pianoman
+  **Pasion (Alex Kassian's Mandarine Dance Mix)** now returns **128.00**, with its
+  recoverable-decoder warning still present. SHA-256 checks on Keep On, Take Me
+  Away and the reported Pianoman file are unchanged. No music/tag/DB repair was
+  performed. Cache versioning prevents reuse of the previous 166.49 suggestion;
+  previously accepted positive BPMs are deliberately not automatically replaced.
+- **Tracklist action implemented:** Library actions → **Analyse missing BPMs in
+  this list…** collects every page of the current playlist/library and filters,
+  without altering the user's selection. Null/nonpositive BPMs qualify; archived
+  or unavailable tracks do not. Repeated playlist entries deduplicate by track
+  ID. The review opens BPM-only with comparison/key disabled. Loading, cancel,
+  scope-change cancellation, retry and no-missing-tracks feedback are provided.
+  Jobs still enforce the existing 20,000-track limit and recheck file tags.
+- **Explicit batch acceptance:** **Select all missing BPM suggestions** covers
+  all result pages, including uncertain estimates only after the user requests
+  selection. Apply is a separate action; it fills missing WISP values only and
+  retains edited suggestions, existing positive BPMs, keys, audio, links and cues.
+  The new entry point uses the established action menu/review UI, with disabled
+  menu items skipped during keyboard navigation.
+- **Key robustness/diagnostics implemented, accuracy improvement NOT established:**
+  a bounded sub-semitone pitch representation estimates tuning and compares tonal
+  sections across the song, discounting broad-spectrum frames in that comparison.
+  Single-pitch/insufficient tonal input abstains. The measured baseline remains
+  primary when usable; the tuning-corrected view supplies alternatives,
+  section agreement and disagreement warnings, with a fallback for insufficient
+  baseline tonal content. ALL key suggestions remain experimental, off by default
+  and unchecked. Section agreement is not a probability of correctness. The
+  reported **Take Me Away (Pin-Up Girls remix)** still suggests **9B**, rather than
+  its **8A** tag/Mixed In Key reference, and now warns that the views disagree
+  (approximately 7% section agreement). Its existing 8A is preserved. This issue
+  is NOT claimed solved; a materially better validated key model remains future
+  work. No proprietary algorithm, external model or new DSP dependency is bundled.
+- **Measured comparison:** reproducibly shuffled tagged tracks (`--sample-seed
+  271828`), two disjoint groups of 24, using `--skip 24` for the second. One file
+  in the first group exceeded the decoder-error policy. References were embedded
+  tags or the owner's BPM filename convention, never analyser inputs. These are
+  small regression samples, not independently labelled ground truth; experimental
+  models were rejected using their results, so they are not untouched accuracy
+  holdouts. Final results versus the previous analyser:
+
+  | Sample | BPM within 1 BPM, old → new | BPM within 0.1, old → new | Exact key, old → new |
+  | --- | --- | --- | --- |
+  | First 24 | 14/16 → 14/16 | 9/16 → 9/16 | 11/23 → 11/23 |
+  | Next 24 | 17/18 → 17/18 | 14/18 → 15/18 | 11/24 → 11/24 |
+
+  Harmonic-template fitting, whitening and wholesale replacement of baseline key
+  decisions regressed comparison results and were not shipped. The added key
+  diagnostics are a reliability/review improvement, not evidence of Mixed In Key
+  parity. Other tempo/key failures remain; strengths are uncalibrated scores.
+- **Cache/provenance:** the new engine invalidates suggestions without erasing
+  accepted-value provenance for identical source bytes. Partial BPM-only reanalysis
+  retains saved key diagnostics. Old caches remain readable; numeric diagnostics
+  are validated. Decoder safeguards from the preceding fix are unchanged.
+- **Verification:** final full Release solution run passes **545 backend cases**
+  (115 Core / 212 Infrastructure / 218 API), **73 client unit cases**, **158
+  Chromium/Photino-UA browser cases**, client TypeScript/Vite build and lint
+  (zero errors, 12 pre-existing warnings). One intermediate full run hit transient
+  temporary-directory access errors in two existing Pioneer export tests; both
+  passed separately and on the subsequent full run without changing USB code.
+  New regressions cover louder rhythmic subdivisions, genuine 166.5 BPM, detuning,
+  modulation/section disagreement, single-pitch abstention, cancellation, cache
+  upgrades/partial fields, playlist-scoped missing-BPM pagination, invalid BPMs,
+  selection-free collection, preset reset, batch acceptance, retry and empty
+  feedback. Review screenshots were inspected. Tests use isolated databases and
+  generated audio; the owner's library is used for read-only comparisons only.
+  No installer or production deployment is generated by this feature PR.
+
+## 2026-10-03: BPM/key analysis recovers isolated decoder errors
+
+- Reproduced the reported Pianoman "Pasion (Alex Kassian's Mandarine Dance
+  Mix)" failure with the installed FFmpeg 8.0.1. `-xerror` aborted on an
+  invalid MP3 packet after decoding approximately 465 seconds; tag-reader
+  BOM/GEOB diagnostics were also present. This does not establish which
+  application introduced the invalid data, or mean the source file is pristine.
+- Removed fatal-on-first-error **only from music analysis**. Decoding remains
+  read-only and streaming; cancellation, timeouts, invalid samples, incomplete
+  PCM, nonzero exit codes and short/silent input still reject analysis.
+- Added a conservative maximum of eight reported packet/frame decoding
+  failures per track, with repeat-suppression disabled and bounded stderr
+  parsing. A generated 100-failed-packet sample demonstrated that bundled
+  FFmpeg returned success despite `-max_error_rate 0.01`; WISP therefore
+  enforces its own guard rather than relying solely on that option. This is
+  a safety policy for tested decoder diagnostics, not audio repair or a
+  guarantee that every damaged format can be detected.
+- Successful decoding with error-level diagnostics now carries a persistent
+  review warning, including when suggestions are loaded from the cache.
+  Requested BPM/key suggestions start unchecked and are marked uncertain.
+  File paths/raw decoder output are not exposed in the review screen. Existing
+  BPM/key values, source tags, music files, library links and cues are preserved.
+- Read-only verification on the reported track completed at **128.11 BPM**,
+  **4A**, with 465.032 seconds decoded and a review warning. The source's
+  SHA-256 remained identical. The neighbouring Trip remix also completed;
+  its estimated key disagreed with its existing tag, reinforcing that key
+  detection remains experimental and must not replace existing values.
+- Verification: 535 Release backend cases (115 Core, 205 Infrastructure,
+  215 API); 70 client unit tests; all eight audio-analysis browser cases;
+  client TypeScript/Vite build; lint with zero errors and 12 existing warnings.
+  Decoder regressions cover clean WAV/AIFF/FLAC/MP3, isolated bad trailing
+  data, eight/nine/100 failed-packet boundaries, unreadable input and unchanged
+  source hashes. API/browser regressions verify cached warnings and explicit
+  selection before applying a recovered suggestion. Existing build chunk-size
+  warnings remain. No installer, production deployment or user database repair
+  was performed; the installed release needs updating after owner promotion.
+
 ## 2026-10-03: Deferred private repository and Azure releases
 
 - Added `WISP_PRIVATE_RELEASE_HOSTING_PLAN.md` and a README backlog link for

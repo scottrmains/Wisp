@@ -51,7 +51,7 @@ import { RemoveFromPlaylistDialog, type PlaylistRemoval } from './RemoveFromPlay
 import { PlaylistDuplicatesDialog } from './PlaylistDuplicatesDialog'
 import { LoudnessDialog } from './LoudnessDialog'
 import { useMusicAnalysis } from '../../state/musicAnalysis'
-import { collectSelection, selectionScope, trackRowId, uniqueTrackIds } from './librarySelection'
+import { collectMissingBpmIds, collectSelection, selectionScope, trackRowId, uniqueTrackIds } from './librarySelection'
 
 const EMPTY_SELECTION = new Set<string>()
 
@@ -77,6 +77,8 @@ export function LibraryPage() {
   })
   const selectionTracks = useRef(new Map<string, Track>())
   const selectionRequest = useRef<AbortController | null>(null)
+  const missingBpmRequest = useRef<AbortController | null>(null)
+  const [missingBpmStatus, setMissingBpmStatus] = useState({ scope: '', pending: false, error: null as string | null })
   const [selectionStatus, setSelectionStatus] = useState({
     scope: '',
     pending: false,
@@ -155,8 +157,10 @@ export function LibraryPage() {
     setSelection({ scope: scopeKey, ids: new Set(), rows: new Map() })
     setSelected(null)
     setSelectionStatus({ scope: scopeKey, pending: false, error: null })
+    setMissingBpmStatus({ scope: scopeKey, pending: false, error: null })
   }
   const selectingAll = selectionStatus.scope === scopeKey && selectionStatus.pending
+  const findingBpms = missingBpmStatus.scope === scopeKey && missingBpmStatus.pending
   const selectionError = selectionStatus.scope === scopeKey ? selectionStatus.error : null
   const selectedIds = selection.scope === scopeKey ? selection.ids : EMPTY_SELECTION
   const selected = selection.scope === scopeKey ? storedSelected : null
@@ -177,13 +181,36 @@ export function LibraryPage() {
   useEffect(() => {
     // A filter/playlist change must cancel an in-flight all-pages selection.
     selectionRequest.current?.abort()
+    missingBpmRequest.current?.abort()
+    missingBpmRequest.current = null
     selectionRequest.current = null
     selectionTracks.current.clear()
     anchorIdRef.current = null
     return () => {
       selectionRequest.current?.abort()
+      missingBpmRequest.current?.abort()
     }
   }, [scopeKey])
+
+  const analyseMissingBpms = async () => {
+    if (missingBpmRequest.current) return
+    const controller = new AbortController()
+    missingBpmRequest.current = controller
+    setMissingBpmStatus({ scope: scopeKey, pending: true, error: null })
+    try {
+      const ids = await collectMissingBpmIds(effectiveQuery, tracks.list, controller.signal)
+      if (controller.signal.aborted) return
+      if (ids.length) useMusicAnalysis.getState().show(ids, 'missing-bpm')
+      else setPlaylistNotice({ scope: scopeKey, message: 'No playable tracks with missing BPMs in this list. Existing values are unchanged.' })
+    } catch (e) {
+      if (!controller.signal.aborted) setMissingBpmStatus({ scope: scopeKey, pending: false, error: (e as Error).message })
+    } finally {
+      if (missingBpmRequest.current === controller) {
+        missingBpmRequest.current = null
+        setMissingBpmStatus(s => ({ ...s, pending: false }))
+      }
+    }
+  }
 
   const selectAll = async () => {
     if (selectionRequest.current) return
@@ -734,6 +761,9 @@ export function LibraryPage() {
               label="Library actions"
               icon={<MoreHorizontal />}
               items={[
+                { label: findingBpms ? 'Finding missing BPMs…' : 'Analyse missing BPMs in this list…',
+                  disabled: findingBpms || total === 0 || tracksQuery.isError,
+                  onSelect: () => void analyseMissingBpms() },
                 ...(selectedIds.size === 1 && selected
                   ? [{ label: 'Prepare track', onSelect: () => loadTrack(selected.id) }]
                   : []),
@@ -775,6 +805,15 @@ export function LibraryPage() {
               <span role="alert" className="basis-full text-red-300">
                 {selectionError}
               </span>
+            )}
+            {findingBpms && (
+              <span role="status" className="basis-full text-[var(--color-muted)]">
+                Finding missing BPMs across all matching pages…{' '}
+                <button className="underline" onClick={() => missingBpmRequest.current?.abort()}>Cancel</button>
+              </span>
+            )}
+            {missingBpmStatus.scope === scopeKey && missingBpmStatus.error && (
+              <span role="alert" className="basis-full text-red-300">{missingBpmStatus.error} Try “Analyse missing BPMs” again.</span>
             )}
             {playlistNotice?.scope === scopeKey && (
               <span role="status" className="basis-full text-[var(--color-muted)]">

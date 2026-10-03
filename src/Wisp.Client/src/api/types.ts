@@ -107,6 +107,7 @@ export interface TrackQuery {
   energyMin?: number
   energyMax?: number
   missing?: boolean
+  missingBpm?: boolean
   sort?: string
   addedWithinDays?: number
   /// Pulls archived tracks back into the result set (default: archived hidden).

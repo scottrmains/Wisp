@@ -143,6 +143,38 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Recovered_decode_warning_survives_saved_suggestion_cache()
+    {
+        analyzer.DecodeWarning = "Recovered file warning — review by ear.";
+        var first = await Wait((await Start()).Id);
+        var second = await Wait((await Start()).Id);
+        Assert.Equal("review", first.Rows[0].Status);
+        Assert.Equal(analyzer.DecodeWarning, first.Rows[0].Message);
+        Assert.True(second.Rows[0].Cached);
+        Assert.Equal(analyzer.DecodeWarning, second.Rows[0].Result!.DecodeWarning);
+        Assert.Equal(analyzer.DecodeWarning, second.Rows[0].Message);
+        Assert.Single(analyzer.Calls);
+        Assert.Null((await Track()).Bpm); Assert.Null((await Track()).MusicalKey);
+    }
+
+    [Fact]
+    public async Task New_engine_invalidates_suggestions_but_keeps_accepted_value_provenance()
+    {
+        var first = await Wait((await Start()).Id);
+        (await Apply(first.Id)).EnsureSuccessStatusCode();
+        var stored = MusicAnalysisJobs.Read((await Track()).MusicAnalysisJson)!;
+        await Edit(t => t.MusicAnalysisJson = System.Text.Json.JsonSerializer.Serialize(stored with { Result = stored.Result with { Engine = "wisp-onset-chroma-v1" } }));
+        var next = await Wait((await Start(compare: true)).Id);
+        Assert.False(next.Rows[0].Cached); Assert.Equal(2, analyzer.Calls.Count);
+        var current = MusicAnalysisJobs.Read((await Track()).MusicAnalysisJson)!;
+        Assert.Equal(MusicFeatures.Engine, current.Result.Engine);
+        Assert.Equal(stored.AppliedBpm, current.AppliedBpm);
+        Assert.Equal(stored.AppliedKey, current.AppliedKey);
+        Assert.Equal(stored.AppliedAt, current.AppliedAt);
+        Assert.Equal(128.37m, (await Track()).Bpm);
+    }
+
+    [Fact]
     public async Task Cancel_stops_current_track_and_does_not_start_remaining_tracks_or_save_results()
     {
         analyzer.Hold = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -155,6 +187,21 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
         var finished = await Wait(job.Id); Assert.Equal("cancelled", finished.Status);
         Assert.All(finished.Rows, r => Assert.Equal("cancelled", r.Status)); Assert.Single(analyzer.Calls);
         Assert.Null((await Track()).MusicAnalysisJson);
+    }
+
+    [Fact]
+    public async Task Later_bpm_only_analysis_keeps_cached_key_diagnostics()
+    {
+        await Wait((await Start(bpm: false)).Id);
+        var second = await Wait((await Start(key: false)).Id);
+        Assert.Equal(2, analyzer.Calls.Count);
+        var saved = MusicAnalysisJobs.Read((await Track()).MusicAnalysisJson)!;
+        Assert.Equal("8A", saved.Result.Key);
+        Assert.Equal(0.42, saved.Result.KeyAgreement);
+        Assert.Equal(-12.5, saved.Result.TuningCents);
+        Assert.Equal("9B", saved.Result.AlternativeKey);
+        Assert.Equal("Tonal sections disagree.", saved.Result.KeyWarning);
+        Assert.False(second.Rows[0].KeyRequested);
     }
 
     [Fact]
@@ -204,12 +251,15 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
         public TaskCompletionSource? Hold;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Fail;
+        public string? DecodeWarning;
         public async Task<MusicAnalysis> AnalyzeAsync(string path, bool bpm, bool key, CancellationToken ct)
         {
             Calls.Add((bpm, key)); Started.TrySetResult();
             if (Hold is not null) await Hold.Task.WaitAsync(ct);
             if (Fail) throw new IOException("Test decoder failure");
-            return new(bpm ? 128.37m : null, key ? "8A" : null, .9, .8, false, false, 30, MusicFeatures.Engine);
+            return new(bpm ? 128.37m : null, key ? "8A" : null, .9, .8, false, false, 30, MusicFeatures.Engine, DecodeWarning,
+                KeyAgreement: key ? .42 : null, TuningCents: key ? -12.5 : null,
+                AlternativeKey: key ? "9B" : null, KeyWarning: key ? "Tonal sections disagree." : null);
         }
     }
     public async Task DisposeAsync()

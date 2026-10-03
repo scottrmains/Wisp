@@ -164,6 +164,30 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Missing_bpm_filter_retains_playlist_scope_and_page_counts_without_modifying_values()
+    {
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
+            (await db.Tracks.SingleAsync(t => t.Title == "Old")).Bpm = 125;
+            (await db.Tracks.SingleAsync(t => t.Title == "New")).Bpm = 0;
+            (await db.Tracks.SingleAsync(t => t.Title == "Unknown")).Bpm = -5;
+            db.Tracks.Add(MakeTrack("Null BPM", DateTime.UtcNow, null));
+            await db.SaveChangesAsync();
+        }
+        var client = _app.GetTestClient();
+        var playlist = await client.GetFromJsonAsync<TrackPageDto>($"/api/tracks?playlistId={_playlistId}&missingBpm=true&size=1");
+        Assert.Equal(1, playlist!.Total);
+        Assert.Equal("New", Assert.Single(playlist.Items).Title);
+        var all = await client.GetFromJsonAsync<TrackPageDto>("/api/tracks?missingBpm=true&size=1&page=2&sort=title");
+        Assert.Equal(3, all!.Total); Assert.Single(all.Items);
+        var filtered = await client.GetFromJsonAsync<TrackPageDto>("/api/tracks?missingBpm=true&search=Old");
+        Assert.Empty(filtered!.Items);
+        using var verify = _app.Services.CreateScope();
+        Assert.Equal(125, (await verify.ServiceProvider.GetRequiredService<WispDbContext>().Tracks.SingleAsync(t => t.Title == "Old")).Bpm);
+    }
+
+    [Fact]
     public async Task Invalid_or_external_destinations_are_rejected_and_default_can_be_restored()
     {
         var client = _app.GetTestClient();

@@ -9,6 +9,11 @@ export interface MusicAnalysis {
   keyUncertain: boolean
   seconds: number
   engine: string
+  decodeWarning?: string | null
+  keyAgreement?: number | null
+  tuningCents?: number | null
+  alternativeKey?: string | null
+  keyWarning?: string | null
 }
 export interface AnalysisRow {
   trackId: string
@@ -50,9 +55,14 @@ export function analysisDraft(row: AnalysisRow) {
     useBpm:
       row.bpmRequested &&
       !!row.result?.bpm &&
+      !row.result.decodeWarning &&
       !row.result.tempoUncertain &&
       !(row.existingBpm && row.existingBpm > 0),
     useKey:
-      row.keyRequested && !!row.result?.key && !row.result.keyUncertain && !row.existingKey?.trim(),
+      row.keyRequested &&
+      !!row.result?.key &&
+      !row.result.decodeWarning &&
+      !row.result.keyUncertain &&
+      !row.existingKey?.trim(),
   }
 }

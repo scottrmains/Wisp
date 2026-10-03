@@ -59,8 +59,82 @@ public sealed class MusicAnalyzerTests : IDisposable
     }
 
     [Theory]
+    [InlineData(125, 166.6666667)]
+    [InlineData(125, 187.5)]
+    [InlineData(166.5, 222)]
+    public void Bass_pulse_is_not_replaced_by_louder_rhythmic_subdivisions(double bpm, double hatsBpm)
+    {
+        var features = new MusicFeatures(true, false);
+        for (var i = 0; i < MusicFeatures.SampleRate * 65; i++)
+        {
+            var time = (double)i / MusicFeatures.SampleRate;
+            var phase = time % (60 / hatsBpm);
+            var hat = phase < 0.025 ? 0.9 * Math.Exp(-phase * 180) * Math.Sin(2 * Math.PI * 3100 * phase) : 0;
+            features.Add((float)(Signal(time, bpm, 60, false) + hat));
+        }
+        var result = features.Finish();
+        Assert.InRange((double)result.Bpm!.Value, bpm - 0.2, bpm + 0.2);
+    }
+
+    [Theory]
+    [InlineData(-35)] [InlineData(35)]
+    public void Detuned_minor_triad_has_tuning_correction_and_explicit_review(double cents)
+    {
+        var features = new MusicFeatures(false, true);
+        for (var i = 0; i < MusicFeatures.SampleRate * 15; i++)
+            features.Add(Signal((double)i / MusicFeatures.SampleRate * Math.Pow(2, cents / 1200), 128, 69, true, false));
+        var result = features.Finish();
+        Assert.Equal("8A", result.Key);
+        Assert.InRange(result.TuningCents!.Value, cents - 5, cents + 5);
+        Assert.True(result.KeyUncertain);
+        Assert.InRange(result.KeyAgreement!.Value, 0, 1);
+    }
+
+    [Fact]
+    public void Changing_tonal_sections_are_flagged_instead_of_treated_as_one_certain_key()
+    {
+        var features = new MusicFeatures(false, true);
+        for (var i = 0; i < MusicFeatures.SampleRate * 65; i++)
+        {
+            var time = (double)i / MusicFeatures.SampleRate;
+            features.Add(Signal(time, 125, time < 30 ? 69 : 66, time < 30, false));
+        }
+        var result = features.Finish();
+        Assert.NotNull(result.KeyWarning);
+        Assert.InRange(result.KeyAgreement!.Value, 0, 0.65);
+        Assert.True(result.KeyUncertain);
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        Assert.Throws<OperationCanceledException>(() => features.Finish(cancelled.Token));
+    }
+
+    [Fact]
+    public void Single_pitch_does_not_invent_a_key()
+    {
+        var features = new MusicFeatures(false, true);
+        for (var i = 0; i < MusicFeatures.SampleRate * 15; i++)
+            features.Add((float)(0.2 * Math.Sin(2 * Math.PI * 440 * i / MusicFeatures.SampleRate)));
+        Assert.Null(features.Finish().Key);
+    }
+
+    [Theory]
     [InlineData(".wav")] [InlineData(".aiff")] [InlineData(".flac")] [InlineData(".mp3")]
     public async Task Real_FFmpeg_streams_formats_read_only(string extension)
+    {
+        var source = await CreateSignalFile(extension);
+        var hash = SHA256.HashData(await File.ReadAllBytesAsync(source));
+        var analyzer = CreateAnalyzer();
+        var result = await analyzer.AnalyzeAsync(source, true, true, default);
+        Assert.InRange(result.Bpm!.Value, 127, 129); Assert.Equal("8A", result.Key);
+        Assert.Null(result.DecodeWarning);
+        Assert.Equal(hash, SHA256.HashData(await File.ReadAllBytesAsync(source)));
+        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => analyzer.AnalyzeAsync(source, true, true, cancellation.Token));
+    }
+
+    private static MusicAnalyzer CreateAnalyzer() => new(new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance,
+        () => Environment.GetEnvironmentVariable("WISP_TEST_FFMPEG")));
+
+    private async Task<string> CreateSignalFile(string extension)
     {
         Directory.CreateDirectory(root);
         var wave = Path.Combine(root, "signal.wav");
@@ -78,13 +152,49 @@ public sealed class MusicAnalyzerTests : IDisposable
             process.Start(); var errors = process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync();
             Assert.True(process.ExitCode == 0, await errors);
         }
+        return source;
+    }
+
+    [Fact]
+    public async Task Isolated_bad_MP3_packet_recovers_with_explicit_review_and_without_rewriting_source()
+    {
+        var source = await CreateSignalFile(".mp3");
+        // Simulate an invalid trailing packet, not a pristine MP3 or user-owned music.
+        await using (var append = new FileStream(source, FileMode.Append))
+            await append.WriteAsync(new byte[1024]);
         var hash = SHA256.HashData(await File.ReadAllBytesAsync(source));
-        var analyzer = new MusicAnalyzer(new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance, () => executable));
+        var analyzer = CreateAnalyzer();
         var result = await analyzer.AnalyzeAsync(source, true, true, default);
-        Assert.InRange(result.Bpm!.Value, 127, 129); Assert.Equal("8A", result.Key);
+        Assert.InRange(result.Bpm!.Value, 127, 129);
+        Assert.InRange(result.Seconds, 19, 21);
+        Assert.NotNull(result.DecodeWarning);
+        Assert.True(result.TempoUncertain); Assert.True(result.KeyUncertain);
         Assert.Equal(hash, SHA256.HashData(await File.ReadAllBytesAsync(source)));
-        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => analyzer.AnalyzeAsync(source, true, true, cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData(8, false)] [InlineData(9, true)] [InlineData(100, true)]
+    public async Task Failed_MP3_packet_budget_is_enforced(int failures, bool rejected)
+    {
+        var source = await CreateSignalFile(".mp3");
+        // Valid MPEG-1 layer III frame headers, deliberately invalid all-ones side information.
+        var frame = Enumerable.Repeat((byte)255, 417).ToArray();
+        frame[0] = 0xff; frame[1] = 0xfb; frame[2] = 0x90; frame[3] = 0x64;
+        await using (var append = new FileStream(source, FileMode.Append))
+            for (var i = 0; i < failures; i++) await append.WriteAsync(frame);
+        var hash = SHA256.HashData(await File.ReadAllBytesAsync(source));
+        var analyzer = CreateAnalyzer();
+        if (rejected)
+        {
+            var error = await Assert.ThrowsAsync<IOException>(() => analyzer.AnalyzeAsync(source, true, true, default));
+            Assert.Contains("too many decoding errors", error.Message);
+        }
+        else
+        {
+            var result = await analyzer.AnalyzeAsync(source, true, true, default);
+            Assert.NotNull(result.DecodeWarning); Assert.True(result.TempoUncertain);
+        }
+        Assert.Equal(hash, SHA256.HashData(await File.ReadAllBytesAsync(source)));
     }
 
     [Fact]
