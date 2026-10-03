@@ -73,6 +73,11 @@ jobs:
         run: |
           $env:WISP_TEST_FFMPEG = (Resolve-Path tools/ffmpeg/ffmpeg.exe).Path
           dotnet test Wisp.slnx -c Release
+      - name: Validate read-only key benchmark and scoring
+        run: |
+          dotnet build tools/Wisp.MusicAnalysisBenchmark -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tools/key-analysis -p "test_*.py"
       - name: Install client dependencies
         run: npm ci --prefix src/Wisp.Client --no-audit --no-fund
       - name: Test client

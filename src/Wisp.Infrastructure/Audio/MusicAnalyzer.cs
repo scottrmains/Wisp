@@ -4,7 +4,8 @@ using NAudio.Dsp;
 namespace Wisp.Infrastructure.Audio;
 
 public sealed record MusicAnalysis(decimal? Bpm, string? Key, double TempoStrength, double KeyStrength,
-    bool TempoUncertain, bool KeyUncertain, double Seconds, string Engine);
+    bool TempoUncertain, bool KeyUncertain, double Seconds, string Engine, string? DecodeWarning = null,
+    double? KeyAgreement = null, double? TuningCents = null, string? AlternativeKey = null, string? KeyWarning = null);
 
 public interface IMusicAnalyzer
 {
@@ -13,7 +14,7 @@ public interface IMusicAnalyzer
 }
 
 /// Read-only, streaming PCM analysis. No tags, files, beat markers or cues are written.
-/// Experimental onset-autocorrelation / chroma-profile baseline, NOT a calibrated
+/// Multiband rhythm / published spectral-kernel tonal analysis, NOT a calibrated
 /// probability model or a claim of parity with commercial DJ analysers.
 public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
 {
@@ -27,7 +28,10 @@ public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
         using var process = new Process { StartInfo = new(executable) {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
         } };
-        foreach (var arg in new[] { "-nostdin", "-v", "error", "-xerror", "-threads", "1", "-i", path,
+        // Recover isolated bad packets. Also apply our own bounded packet-error guard below:
+        // the bundled FFmpeg does not consistently enforce max_error_rate for audio packets.
+        // -xerror aborts even on one recoverable packet at the end of an otherwise usable track.
+        foreach (var arg in new[] { "-nostdin", "-v", "repeat+error", "-max_error_rate", "0.01", "-threads", "1", "-i", path,
             "-map", "0:a:0", "-vn", "-ac", "1", "-ar", MusicFeatures.SampleRate.ToString(), "-f", "f32le", "pipe:1" })
             process.StartInfo.ArgumentList.Add(arg);
         process.Start();
@@ -57,8 +61,15 @@ public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
             await process.WaitForExitAsync(timeout.Token);
             if (process.ExitCode != 0 || pending != 0)
                 throw new IOException("The audio could not be decoded. Check that it plays and is not corrupted.");
-            await errors;
-            return features.Finish(timeout.Token);
+            var diagnostics = await errors;
+            if (diagnostics.PacketErrors > MaxRecoverablePacketErrors)
+                throw new IOException("The audio has too many decoding errors to analyse reliably. Try another copy of the track.");
+            var result = features.Finish(timeout.Token);
+            return diagnostics.HasWarnings ? result with {
+                TempoUncertain = bpm || result.TempoUncertain,
+                KeyUncertain = key || result.KeyUncertain,
+                DecodeWarning = "Decoded with recoverable file warnings. Listen to the track and check these suggestions before applying them. The original file has not been changed.",
+            } : result;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new IOException("Audio analysis timed out. Try a shorter track."); }
@@ -70,50 +81,78 @@ public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
             await errors;
         }
     }
-    private static async Task DrainErrors(StreamReader reader)
+    private const int MaxRecoverablePacketErrors = 8;
+    private sealed record DecodeDiagnostics(bool HasWarnings, int PacketErrors);
+    private static async Task<DecodeDiagnostics> DrainErrors(StreamReader reader)
     {
         var buffer = new char[2048];
-        while (await reader.ReadAsync(buffer) != 0) { } // constant memory, no raw file paths/tags in UI diagnostics
+        var line = new System.Text.StringBuilder(1024);
+        var hasWarnings = false;
+        var packetErrors = 0;
+        void CountLine()
+        {
+            var text = line.ToString();
+            // Count packet-level diagnostics once; codec details often accompany the same failure.
+            if (text.Contains("Error submitting packet to decoder", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Error decoding a frame", StringComparison.OrdinalIgnoreCase))
+                packetErrors = Math.Min(packetErrors + 1, MaxRecoverablePacketErrors + 1);
+            line.Clear();
+        }
+        int read;
+        while ((read = await reader.ReadAsync(buffer)) != 0)
+        {
+            hasWarnings = true;
+            for (var i = 0; i < read; i++)
+                if (buffer[i] is '\r' or '\n') CountLine();
+                else if (line.Length < 1024) line.Append(buffer[i]);
+        }
+        CountLine();
+        return new(hasWarnings, packetErrors); // bounded memory, no raw file paths/tags in UI diagnostics
     }
 }
 
-/// Bounded memory: one circular PCM window, onset envelope (maximum 2 hours)
+/// Bounded memory: circular PCM windows, onset envelope (maximum 2 hours)
 /// and aggregate pitch classes. FFT primitives come from the existing NAudio dependency.
 public sealed class MusicFeatures(bool findBpm, bool findKey)
 {
     public const int SampleRate = 11025;
-    public const string Engine = "wisp-onset-chroma-v1";
+    public const string Engine = "wisp-multiband-dsk-v3";
     private const int Hop = 256, TempoFrame = 2048, KeyFrame = 8192;
     private readonly float[] ring = new float[KeyFrame];
     private readonly Complex[] tempoFft = new Complex[TempoFrame], keyFft = new Complex[KeyFrame];
-    private readonly double[] previous = new double[TempoFrame / 2], chroma = new double[12];
-    private readonly List<double> onsets = [];
+    private readonly double[] previous = new double[TempoFrame / 2];
+    private readonly List<double> onsets = [], bassOnsets = [];
+    private readonly KeyEstimator? keyEstimator = findKey ? new() : null;
+    private readonly SpectralKeyEstimator? spectralKey = findKey ? new() : null;
     private long samples;
     private double energy;
-    private int tonalFrames;
-    private static readonly double[] Major = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
-    private static readonly double[] Minor = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
-    private static readonly string[] MajorCamelot = ["8B", "3B", "10B", "5B", "12B", "7B", "2B", "9B", "4B", "11B", "6B", "1B"];
-    private static readonly string[] MinorCamelot = ["5A", "12A", "7A", "2A", "9A", "4A", "11A", "6A", "1A", "8A", "3A", "10A"];
 
     public void Add(float sample)
     {
         if (++samples > SampleRate * 7200L) throw new IOException("Analysis supports individual tracks up to two hours long.");
         ring[(samples - 1) % KeyFrame] = sample;
         energy += sample * sample;
+        spectralKey?.Add(sample);
         if (findBpm && samples >= TempoFrame && samples % Hop == 0)
         {
             Transform(tempoFft, 11);
-            double flux = 0;
+            double flux = 0, bassFlux = 0;
             for (var k = 2; k < previous.Length; k++)
             {
                 var magnitude = Math.Log(1 + 1000 * Magnitude(tempoFft[k]));
-                flux += Math.Max(0, magnitude - previous[k]);
+                var change = Math.Max(0, magnitude - previous[k]);
+                flux += change;
+                if (k * (double)SampleRate / TempoFrame is >= 35 and <= 180) bassFlux += change;
                 previous[k] = magnitude;
             }
             onsets.Add(flux);
+            bassOnsets.Add(bassFlux);
         }
-        if (findKey && samples >= KeyFrame && samples % KeyFrame == 0) AddChroma();
+        if (findKey && samples >= KeyFrame && samples % KeyFrame == 0)
+        {
+            Transform(keyFft, 13);
+            keyEstimator!.AddSpectrum(keyFft, samples);
+        }
     }
 
     private void Transform(Complex[] fft, int power)
@@ -128,32 +167,6 @@ public sealed class MusicFeatures(bool findBpm, bool findKey)
     }
     private static double Magnitude(Complex c) => Math.Sqrt(c.X * c.X + c.Y * c.Y);
 
-    private void AddChroma()
-    {
-        Transform(keyFft, 13);
-        var magnitudes = keyFft.Select(Magnitude).ToArray();
-        var frame = new double[12];
-        for (var k = 60; k < 2600; k++) // ~81 Hz–3.5 kHz; baseline avoids sub-bass/noise floor.
-        {
-            var value = magnitudes[k];
-            if (value < 0.00001 || value <= magnitudes[k - 1] || value <= magnitudes[k + 1]) continue;
-            // Sub-bin peak interpolation avoids quantising low notes to the wrong semitone.
-            var left = Math.Log(magnitudes[k - 1] + 1e-12);
-            var center = Math.Log(value + 1e-12);
-            var right = Math.Log(magnitudes[k + 1] + 1e-12);
-            var offset = Math.Clamp(0.5 * (left - right) / (left - 2 * center + right), -0.5, 0.5);
-            var midi = 69 + 12 * Math.Log2((k + offset) * SampleRate / KeyFrame / 440);
-            var note = (int)Math.Round(midi);
-            var tuning = Math.Abs(midi - note);
-            if (tuning > 0.35) continue;
-            frame[(note % 12 + 12) % 12] += value * (1 - tuning / 0.5);
-        }
-        var sum = frame.Sum();
-        if (sum < 0.0001) return;
-        // Equal frame contribution keeps a loud passage from dominating the whole track.
-        for (var i = 0; i < 12; i++) chroma[i] += frame[i] / sum;
-        tonalFrames++;
-    }
 
     public MusicAnalysis Finish(CancellationToken ct = default)
     {
@@ -161,111 +174,15 @@ public sealed class MusicFeatures(bool findBpm, bool findKey)
         var seconds = (double)samples / SampleRate;
         if (seconds < 8 || energy / Math.Max(samples, 1) < 1e-9)
             throw new IOException("Not enough audible music to analyse. Use a track with at least eight seconds of audio.");
-        var tempo = findBpm ? Tempo(ct) : (null, 0d, true);
-        var key = findKey ? Key() : (null, 0d, true);
-        return new(tempo.Item1, key.Item1, tempo.Item2, key.Item2, tempo.Item3, key.Item3, seconds, Engine);
-    }
-
-    private (decimal?, double, bool) Tempo(CancellationToken ct)
-    {
-        var rate = (double)SampleRate / Hop;
-        var window = (int)(rate * 30);
-        var votes = new List<(double Bpm, double Strength)>();
-        for (var start = 0; start < onsets.Count; start += window)
-        {
-            ct.ThrowIfCancellationRequested();
-            var length = Math.Min(window, onsets.Count - start);
-            if (length < rate * 8) continue;
-            var data = onsets.Skip(start).Take(length).ToArray();
-            // Remove local baseline rather than letting a noisy constant spectrum vote for a tempo.
-            var mean = data.Average();
-            for (var i = 0; i < length; i++) data[i] = Math.Max(0, data[i] - mean);
-            var scores = new double[(int)(rate * 60 / 55) + 2];
-            for (var lag = (int)(rate * 60 / 210); lag < scores.Length; lag++)
-            {
-                double product = 0, a = 0, b = 0;
-                for (var i = lag; i < length; i++)
-                { product += data[i] * data[i - lag]; a += data[i] * data[i]; b += data[i - lag] * data[i - lag]; }
-                scores[lag] = product / (Math.Sqrt(a * b) + 1e-12);
-            }
-            var candidates = Enumerable.Range((int)(rate * 60 / 210) + 1, scores.Length - (int)(rate * 60 / 210) - 2)
-                .Where(l => scores[l] >= scores[l - 1] && scores[l] > scores[l + 1]).ToArray();
-            if (candidates.Length == 0) continue;
-            // A deliberately disclosed dance-music prior resolves octave ambiguity.
-            // Review offers half/double tempo; this is NOT downbeat/beatgrid detection.
-            var best = candidates.MaxBy(l => scores[l] * (60 * rate / l is >= 90 and <= 160 ? 1.15 : 1));
-            var delta = Math.Clamp(0.5 * (scores[best - 1] - scores[best + 1]) /
-                (scores[best - 1] - 2 * scores[best] + scores[best + 1] - 1e-12), -0.5, 0.5);
-            votes.Add((60 * rate / (best + delta), scores[best]));
-        }
-        var good = votes.Where(v => v.Strength > 0.1).OrderBy(v => v.Bpm).ToArray();
-        if (good.Length == 0) return (null, 0, true);
-        // Express octave-equivalent section estimates in a consistent dance range.
-        // Explicitly flag the adjustment; slower/faster genres need manual review.
-        var median = good[good.Length / 2].Bpm;
-        var consistent = good.Where(v => Math.Abs(v.Bpm - median) < 2).ToArray();
-        var rawBpm = consistent.Average(v => v.Bpm);
-        var bpm = rawBpm < 90 ? rawBpm * 2 : rawBpm > 180 ? rawBpm / 2 : rawBpm;
-        var strength = consistent.Average(v => v.Strength);
-        var refined = RefineTempo(bpm, rate, ct);
-        if (refined.Coherence > 0.08) bpm = refined.Bpm;
-        return (Math.Round((decimal)bpm, 2), strength, refined.Coherence <= 0.08 || strength < 0.45 ||
-            consistent.Length < good.Length * 0.8 || good.Any(v => v.Bpm < 90 || v.Bpm > 180));
-    }
-
-    private (double Bpm, double Coherence) RefineTempo(double estimate, double rate, CancellationToken ct)
-    {
-        // Autocorrelation's short lag is quantised to ~23 ms. Refine near that
-        // candidate using whole-track phase coherence, rather than pretending
-        // interpolated lag alone gives hundredth-BPM precision. No grid is saved.
-        var mean = onsets.Average();
-        var weights = onsets.Select(v => Math.Max(0, v - mean)).ToArray();
-        var sum = weights.Sum();
-        var best = estimate; double bestPower = 0;
-        for (var step = -100; step <= 100; step++)
-        {
-            ct.ThrowIfCancellationRequested();
-            var trial = estimate + step * 0.01;
-            var angle = 2 * Math.PI * trial / 60 / rate;
-            var cosineStep = Math.Cos(angle); var sineStep = Math.Sin(angle);
-            double cosine = 1, sine = 0, real = 0, imaginary = 0;
-            foreach (var weight in weights)
-            {
-                real += weight * cosine; imaginary += weight * sine;
-                var next = cosine * cosineStep - sine * sineStep;
-                sine = sine * cosineStep + cosine * sineStep; cosine = next;
-            }
-            var power = real * real + imaginary * imaginary;
-            if (power > bestPower) { bestPower = power; best = trial; }
-        }
-        return (best, Math.Sqrt(bestPower) / (sum + 1e-12));
-    }
-
-    private (string?, double, bool) Key()
-    {
-        if (tonalFrames < 4) return (null, 0, true);
-        var candidates = new List<(string Key, double Score)>();
-        for (var root = 0; root < 12; root++)
-        {
-            candidates.Add((MajorCamelot[root], Correlation(chroma, Major, root)));
-            candidates.Add((MinorCamelot[root], Correlation(chroma, Minor, root)));
-        }
-        var sorted = candidates.OrderByDescending(c => c.Score).ToArray();
-        var best = sorted[0];
-        if (best.Score < 0.3) return (null, best.Score, true);
-        // Current real-music comparisons do not justify automatic key acceptance,
-        // even when profile correlation is strong. ALL keys require explicit review.
-        return (best.Key, best.Score, true);
-    }
-    private static double Correlation(double[] values, double[] profile, int root)
-    {
-        var aMean = values.Average(); var bMean = profile.Average();
-        double product = 0, aPower = 0, bPower = 0;
-        for (var i = 0; i < 12; i++)
-        {
-            var a = values[(i + root) % 12] - aMean; var b = profile[i] - bMean;
-            product += a * b; aPower += a * a; bPower += b * b;
-        }
-        return product / (Math.Sqrt(aPower * bPower) + 1e-12);
+        var tempo = findBpm ? TempoEstimator.Analyze(onsets, bassOnsets, ct) : (null, 0d, true);
+        var diagnostic = keyEstimator?.Finish(ct);
+        var key = spectralKey?.Finish(ct);
+        // The old peak/tuning view is an independent diagnostic, never silently
+        // allowed to overrule the measured spectral detector's primary suggestion.
+        var warning = key?.Warning;
+        if (key?.Key is { } primary && diagnostic?.Key is { } check && primary != check)
+            warning ??= "Spectral and peak-based estimates disagree. Audition the alternatives before applying.";
+        return new(tempo.Item1, key?.Key, tempo.Item2, key?.Strength ?? 0, tempo.Item3, true, seconds, Engine,
+            KeyAgreement: key?.Agreement, TuningCents: diagnostic?.TuningCents, AlternativeKey: key?.Alternative, KeyWarning: warning);
     }
 }

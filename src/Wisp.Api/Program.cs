@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Wisp.Api.ArtistRefresh;
+using Wisp.Api.Accounts;
 using Wisp.Api.Cleanup;
 using Wisp.Api.Cues;
 using Wisp.Api.Discover;
@@ -76,6 +77,9 @@ public class Program
                 ContentRootPath = AppContext.BaseDirectory,
             });
 
+            var desktopSecurity = DesktopRequestSecurity.ConfigureLoopbackHost(builder);
+            builder.Services.AddWispAccountGroundwork(builder.Configuration);
+
             builder.Host.UseSerilog((ctx, services, cfg) => cfg
                 .ReadFrom.Configuration(ctx.Configuration)
                 .Enrich.FromLogContext()
@@ -147,6 +151,7 @@ public class Program
             }
 
             var app = builder.Build();
+            app.UseDesktopRequestProtection(desktopSecurity);
 
             // Migrations: synchronous because Main is synchronous (so STA stays on the main thread for Photino).
             using (var scope = app.Services.CreateScope())
@@ -218,6 +223,7 @@ public class Program
             }));
 
             app.MapLibrary();
+            app.MapWispAccountGroundwork();
             app.MapTrackFiles();
             app.MapLoudness();
             app.MapMusicAnalysis();

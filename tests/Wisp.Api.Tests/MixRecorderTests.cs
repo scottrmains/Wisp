@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NAudio.Wave;
 using Wisp.Api.Recordings;
+using Wisp.Api.Accounts;
 using Wisp.Api.Settings;
 using Wisp.Core.Recordings;
 using Wisp.Infrastructure.Audio;
@@ -26,12 +27,13 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
     private ExportEncoder exportEncoder = null!;
     private WebApplication app = null!;
     private MixRecorder recorder = null!;
-    private HttpClient Client => app.GetTestClient();
+    private HttpClient Client => app.GetLocalTestClient();
 
     public async Task InitializeAsync()
     {
         Directory.CreateDirectory(root);
         var builder = WebApplication.CreateBuilder(); builder.WebHost.UseTestServer();
+        builder.Services.AddWispAccountGroundwork(builder.Configuration, root);
         builder.Services.AddDbContext<WispDbContext>(o => o.UseSqlite($"Data Source={Path.Combine(root, "isolated.db")};Pooling=False").AddInterceptors(saveFault));
         builder.Services.AddSingleton<IRecordingInputDevices>(devices); builder.Services.AddSingleton<RecordingDiskStore>(disk);
         builder.Services.AddSingleton(lease); builder.Services.AddSingleton<MixRecorder>();
@@ -40,7 +42,7 @@ public sealed partial class MixRecorderTests : IAsyncLifetime
         builder.Services.AddSingleton(sp => new RecordingWorkspace(sp.GetRequiredService<IServiceScopeFactory>(), lease, disk,
             sp.GetRequiredService<Mp3Transcoder>(), Path.Combine(root, "peaks-cache"), NullLogger<RecordingWorkspace>.Instance));
         builder.Services.AddSingleton<MixExportEncoder>(sp => exportEncoder = new ExportEncoder(sp.GetRequiredService<Mp3Transcoder>())); builder.Services.AddSingleton<RecordingExports>();
-        app = builder.Build(); app.MapRecordings(); app.MapRecordingWorkspace(); app.MapRecordingTracklists(); app.MapRecordingFeedback(); app.MapRecordingExports();
+        app = builder.Build(); app.UseLocalGuestGroundwork(); app.MapRecordings(); app.MapRecordingWorkspace(); app.MapRecordingTracklists(); app.MapRecordingFeedback(); app.MapRecordingExports();
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();

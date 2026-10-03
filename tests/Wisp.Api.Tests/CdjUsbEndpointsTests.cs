@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Wisp.Api.Usb;
+using Wisp.Api.Accounts;
 using Wisp.Infrastructure.Usb;
 
 namespace Wisp.Api.Tests;
@@ -17,10 +18,12 @@ public sealed class CdjUsbEndpointsTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        builder.Services.AddWispAccountGroundwork(builder.Configuration);
         builder.Services.AddSingleton<IUsbExportDevices>(new Devices(fails));
         builder.Services.AddSingleton<PioneerDeviceLibraryWriter>();
         builder.Services.AddSingleton<PioneerUsbExportService>();
         await using var app = builder.Build();
+        app.UseLocalGuestGroundwork();
         app.MapCdjUsbDevices();
         await app.StartAsync();
         var response = await app.GetTestClient().GetAsync("/api/cdj-export/devices");

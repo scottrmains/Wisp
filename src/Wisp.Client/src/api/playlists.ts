@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from './client'
+import { apiDelete, apiGet, apiPost, localCommandHeaders } from './client'
 import type { Playlist, PlaylistSummary } from './types'
 
 export type DuplicateHandling = 'ask' | 'skip' | 'add'
@@ -13,7 +13,7 @@ export interface PlaylistDuplicateScan {
 async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'PATCH',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: body === undefined ? localCommandHeaders : { ...localCommandHeaders, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!res.ok) {

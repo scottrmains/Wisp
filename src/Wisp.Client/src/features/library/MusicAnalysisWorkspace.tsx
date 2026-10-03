@@ -49,6 +49,15 @@ export function MusicAnalysisWorkspace() {
     Record<string, { message: string; bpm: boolean; key: boolean }>
   >({})
   const [page, setPage] = useState(0)
+  const [requestVersion, setRequestVersion] = useState(state.requestVersion)
+  if (requestVersion !== state.requestVersion) {
+    setRequestVersion(state.requestVersion)
+    if (state.preset === 'missing-bpm') {
+      setBpm(true)
+      setKey(false)
+      setCompare(false)
+    }
+  }
   useEffect(() => {
     if (!state.open) return
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -219,10 +228,16 @@ export function MusicAnalysisWorkspace() {
             </label>
           </fieldset>
           <p className="music-analysis-help">
-            Key finding is an early prototype and currently has low agreement with existing tags.
-            Keep using your trusted key analyser; enable this to compare and audition suggestions,
-            not replace it.
+            Key finding is experimental. Pitch analysis and tuning correction compare tonal sections
+            across the song; ambiguous keys still need your ears. Existing keys are preserved, and
+            all key suggestions start unchecked.
           </p>
+          {state.preset === 'missing-bpm' && (
+            <p className="music-analysis-help">
+              Missing BPMs in your filtered tracklist, across all pages. Review the results before
+              applying; existing BPMs and keys are preserved.
+            </p>
+          )}
           <div className="music-analysis-actions">
             <Button
               variant="primary"
@@ -307,6 +322,40 @@ export function MusicAnalysisWorkspace() {
                 Strength is an algorithm score, not a percentage accuracy. No beatgrid or cue
                 positions are changed.
               </p>
+              {job.rows.some(
+                (r) =>
+                  r.status === 'review' &&
+                  r.bpmRequested &&
+                  r.result?.bpm &&
+                  !(r.existingBpm && r.existingBpm > 0) &&
+                  !applied[r.trackId]?.bpm,
+              ) && (
+                <Button
+                  small
+                  disabled={busy || running}
+                  tooltip="Includes uncertain estimates. Check the values before applying them."
+                  onClick={() => {
+                    setDrafts((old) => {
+                      const next = { ...old }
+                      for (const row of job.rows)
+                        if (
+                          row.status === 'review' &&
+                          row.bpmRequested &&
+                          row.result?.bpm &&
+                          !(row.existingBpm && row.existingBpm > 0) &&
+                          !applied[row.trackId]?.bpm
+                        )
+                          next[row.trackId] = {
+                            ...(old[row.trackId] ?? analysisDraft(row)),
+                            useBpm: true,
+                          }
+                      return next
+                    })
+                  }}
+                >
+                  Select all missing BPM suggestions
+                </Button>
+              )}
               <ul className="music-analysis-results" aria-label="Audio analysis results">
                 {job.rows.slice(page * 50, (page + 1) * 50).map((row) => {
                   const d = draft(row),
@@ -326,6 +375,9 @@ export function MusicAnalysisWorkspace() {
                                 : 'Ready for review'
                               : (row.message ?? row.status))}
                         </span>
+                        {result?.decodeWarning && (
+                          <p className="music-analysis-help">{result.decodeWarning}</p>
+                        )}
                       </div>
                       {result && (
                         <div className="music-analysis-fields">
@@ -378,7 +430,7 @@ export function MusicAnalysisWorkspace() {
                                 </button>
                               </div>
                               <small>
-                                {row.existingBpm
+                                {row.existingBpm && row.existingBpm > 0
                                   ? `Existing: ${row.existingBpm} · preserved`
                                   : result.bpm === null
                                     ? 'No reliable tempo found'
@@ -403,6 +455,7 @@ export function MusicAnalysisWorkspace() {
                                 Key
                               </label>
                               <strong className="music-analysis-key">{result.key ?? '—'}</strong>
+                              {result.keyWarning && <small>{result.keyWarning}</small>}
                               <small>
                                 {row.existingKey
                                   ? `Existing: ${row.existingKey} · preserved`
@@ -418,11 +471,23 @@ export function MusicAnalysisWorkspace() {
                             <summary>Analysis details</summary>
                             <p>
                               Tempo strength {result.tempoStrength.toFixed(2)} · key strength{' '}
-                              {result.keyStrength.toFixed(2)}. {result.engine}. Fixed A=440 Hz;
-                              90–180 BPM dance-music range. Octave-adjusted tempos and all key
-                              suggestions require explicit review. Drifting tempo and ambiguous
-                              harmony may not have a single answer.
+                              {result.keyStrength.toFixed(2)}. {result.engine}. 90–180 BPM
+                              dance-music range. Octave-adjusted tempos and all key suggestions
+                              require explicit review. Drifting tempo and ambiguous harmony may not
+                              have a single answer.
                             </p>
+                            {row.keyRequested && result.keyAgreement != null && (
+                              <p>
+                                Tonal section agreement: {Math.round(result.keyAgreement * 100)}%
+                                (not probability of correctness).
+                                {result.alternativeKey
+                                  ? ` Alternative interpretation: ${result.alternativeKey}.`
+                                  : ''}
+                                {result.tuningCents != null
+                                  ? ` Tuning offset: ${result.tuningCents.toFixed(1)} cents from A=440 Hz.`
+                                  : ''}
+                              </p>
+                            )}
                           </details>
                         </div>
                       )}

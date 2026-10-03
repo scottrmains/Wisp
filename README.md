@@ -125,6 +125,11 @@ The built-in **Settings** dialog (gear icon top-right) shows these paths and let
 
 ## Implementation plan & backlog
 
+- [Accounts, community and premium plan](WISP_ACCOUNTS_COMMUNITY_IMPLEMENTATION_PLAN.md)
+  — optional accounts, mix sharing, discussion, cloud backup and future billing
+  in ten gated phases; Phase 1 Guest groundwork implemented, real sign-in still deferred
+- [Private repository and Azure release hosting plan](WISP_PRIVATE_RELEASE_HOSTING_PLAN.md)
+  — deferred migration of public downloads and versioned release notes
 - [Application UI redesign plan](WISP_UI_REDESIGN_IMPLEMENTATION_PLAN.md) — phased
   navigation and workspace redesign, visual approval and regression checklists
 - `WISP_IMPLEMENTATION_PLAN.md` — phase-by-phase build plan (Phases 0–6 shipped; 7 packaging, 8 Artist Refresh, 9 Crate Digger, 10 Master Tempo are scoped)

@@ -5,7 +5,13 @@ interface Props {
   label: string
   icon: ReactNode
   triggerRef?: RefObject<HTMLButtonElement | null>
-  items: { label: string; icon?: ReactNode; danger?: boolean; onSelect: () => void }[]
+  items: {
+    label: string
+    icon?: ReactNode
+    danger?: boolean
+    disabled?: boolean
+    onSelect: () => void
+  }[]
 }
 
 /** Native light-dismiss popover with menu keyboard behaviour and viewport bounds. */
@@ -25,7 +31,7 @@ export function ActionMenu({ label, icon, items, triggerRef }: Props) {
     const bounds = element.getBoundingClientRect()
     element.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - bounds.width - 8))}px`
     element.style.top = `${anchor.bottom + bounds.height + 8 > innerHeight ? Math.max(8, anchor.top - bounds.height - 4) : anchor.bottom + 4}px`
-    element.querySelector<HTMLButtonElement>('button')?.focus()
+    element.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
   }
   return (
     <>
@@ -54,17 +60,21 @@ export function ActionMenu({ label, icon, items, triggerRef }: Props) {
           )
         }}
         onKeyDown={(event) => {
-          const buttons = [...menu.current!.querySelectorAll<HTMLButtonElement>('button')]
+          const buttons = [
+            ...menu.current!.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+          ]
           const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
           if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
             event.preventDefault()
-            buttons[
-              event.key === 'Home'
-                ? 0
-                : event.key === 'End'
-                  ? buttons.length - 1
-                  : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
-            ]?.focus()
+            if (buttons.length)
+              buttons[
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? buttons.length - 1
+                    : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) %
+                      buttons.length
+              ]?.focus()
           } else if (event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
@@ -78,6 +88,7 @@ export function ActionMenu({ label, icon, items, triggerRef }: Props) {
             role="menuitem"
             tabIndex={-1}
             type="button"
+            disabled={item.disabled}
             className={item.danger ? 'text-[var(--ui-danger)]' : ''}
             onClick={() => {
               close()
