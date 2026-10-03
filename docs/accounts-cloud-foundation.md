@@ -181,7 +181,8 @@ accounts or authorize a production release.
 
 Azure what-if, provider registration, Key Vault reference/RBAC propagation,
 private-network migration and runtime-role checks succeeded for development.
-Real sign-in, cross-client identity and managed recovery/rotation still need proof;
+Real native sign-in now has provider proof; website identity and managed
+recovery/rotation still need proof;
 actual billing consumption must be monitored. Secrets use secure parameters or
 managed references, never
 saved into Git, shown on a command line or emitted as template outputs. Review
@@ -234,7 +235,8 @@ before approving actual deployment.
 
 The code, migrations, synthetic proofs and template can merge independently.
 Development cost/credit review and infrastructure bootstrap are recorded in the
-linked evidence log. Phase 2 remains open for actual provider/native redirect and
-cross-client proof plus Azure operating exercises. Phase 3 must not
+linked evidence log. Actual native sign-up, redirect/token validation and account
+read/retry-safe provisioning succeeded. Phase 2 remains open for website-client
+identity proof plus Azure operating exercises. Phase 3 must not
 enable desktop login until those prerequisites are accepted. There is no cost
 estimate or credit-coverage claim based solely on the available credit balance.

@@ -27,10 +27,16 @@ Last reviewed: 2026-10-03
 - **Diagnostic only:** a maintained MSAL.NET system-browser/PKCE proof tool is
   separate from desktop startup, keeps tokens in memory and targets only the
   development API. Compiling/configuring it does not prove real sign-in.
+- **Real native sign-in verified:** the owner completed development customer
+  sign-up, MSAL's browser callback succeeded, the deployed API accepted the real
+  token, and account read plus repeated provisioning returned the same nonempty
+  WISP account UUID. The diagnostic exited successfully and cleared its in-memory
+  cache. Customer email/password/code/token are not committed. Website-client
+  identity and other provider scenarios remain separate checks.
 - **Verification:** the 28 cloud integration tests still pass; operator and
   identity-proof builds have zero warnings/errors. MSAL dependency check reports
   no known advisory vulnerabilities. No Windows installer was generated.
-- **Still open:** real customer/native and website identity proof, managed restore,
+- **Still open:** actual website identity proof, managed restore,
   actual secret/revision rotation and signing-key refresh/rotation limitations.
   Phase 2 is not fully accepted; desktop WISP remains Guest and Phase 3 is not
   enabled. See [deployment evidence](docs/accounts-development-deployment.md).

@@ -7,7 +7,8 @@ isolated tests and draft infrastructure templates are implemented for review on
 2026-10-03. After the initial code-only choice, the owner approved sponsorship-
 eligible development provisioning. Cost review, infrastructure and private-network
 migration/runtime-role proof are now recorded in the development evidence log.
-Real provider, cross-client and managed recovery proofs remain pending. Phase 2 is not fully
+Real native provider proof has passed; cross-client and managed recovery proofs
+remain pending. Phase 2 is not fully
 accepted, and Phases 3–10 remain unchecked. This is the authoritative roadmap,
 not a claim that real sign-in, cloud storage, payments or community already exist.
 
@@ -368,8 +369,12 @@ Implementation checklist:
   identity/secret references and runtime-role bootstrap before deploying the draft.
   Actual approved private-network operator execution succeeded; template compiler
   verification alone was not treated as proof of runtime/RBAC correctness.
-- [ ] Prove Entra External ID customer sign-up/sign-in, verified identity claims,
+- [x] Prove Entra External ID customer sign-up/sign-in, verified identity claims,
   API access-token audience/scopes and native redirect compatibility on a dev tenant.
+  Actual MSAL system-browser sign-up/callback, deployed API token validation,
+  account/me and repeated provisioning succeeded on 2026-10-03. Both provisioning
+  responses and the current-account read returned the same WISP account UUID.
+  No private customer identifiers or tokens are committed as evidence.
 - [x] Add a separate cloud API and PostgreSQL migrations for users, auth identities,
   private profiles, account state and audited creation/state transitions. This is
   an internal lifecycle primitive, not completed account/provider erasure.
@@ -397,6 +402,9 @@ Acceptance checklist:
   account state, delete users or create schema tables.
 - [ ] Confirm these contracts with actual Entra development users, both approved
   clients, native redirects and the deployed private-network runtime role.
+  Native sign-in/read/provisioning passed; actual website-client mapping remains
+  unverified. Synthetic email-change/parallel/state tests are not live proof of
+  those provider scenarios.
 - [ ] Owner reviews resource scope/costs and identity-provider limitations before
   approving production provisioning.
 
@@ -789,6 +797,6 @@ mark this plan incomplete because it intentionally excludes unrelated products.
 
 No phase has a guaranteed date or blanket accuracy/security/compliance promise.
 Phase 1 is merged. Phase 2 development infrastructure is approved and provisioned;
-real provider and recovery proof remain pending. Actual desktop sign-in
+actual website-client identity and recovery proof remain pending. Desktop sign-in
 remains Phase 3. Stop at each paid/public release gate for the owner's decision,
 while continuing safe approved work within the active phase.

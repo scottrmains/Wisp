@@ -84,6 +84,13 @@ when re-estimating actual deployment usage.
   connection secret. Actual HTTPS checks returned live 200, ready 200 and
   anonymous account/me 401; all three responses used no-store and request IDs.
   The enabled development backend does not enable the desktop Account feature.
+- Real native provider proof succeeded on 2026-10-03 after the owner completed
+  customer sign-up in Microsoft's development flow. The maintained MSAL system-
+  browser callback completed, the deployed API accepted the real delegated access
+  token, and two provisioning calls plus account/me returned the same nonempty
+  WISP account UUID and version-1 contract. The diagnostic exited successfully
+  and cleared its in-memory MSAL cache. No email, password, code or token is recorded
+  in this evidence log. This proves native sign-in, not website-client identity.
 
 ## Deployment safeguards
 
@@ -107,15 +114,16 @@ separate from the production Windows installer workflow.
 - [x] Remote operator migration and reduced-role proof under actual Azure roles.
 - [x] Deployed liveness/readiness and anonymous rejection with safe response headers.
 - [ ] Review actual safe request logs after real provider tests.
-- [ ] Real customer sign-up/sign-in and native browser redirect/token validation.
+- [x] Real customer sign-up/sign-in and native browser redirect/token validation.
 - [ ] Same customer identity/account from the native and actual website client.
 - [ ] Real runtime-secret rotation, revision refresh and managed PostgreSQL restore.
 - [ ] Signing-key refresh/rotation evidence and provider limitations review.
 - [ ] Owner acceptance of Phase 2 before enabling desktop sign-in in Phase 3.
 
-Current tenant creation, app registration and synthetic tests do not satisfy the
-real sign-in, token, rotation or managed restore checks. Do not mark Phase 2 complete
-or enable accounts in the desktop app based on provisioning progress alone.
+Tenant creation, app registration and synthetic tests alone do not satisfy live
+acceptance. Native sign-in now has actual provider evidence, but website identity,
+rotation and managed restore are still unchecked. Do not mark Phase 2 complete or
+enable desktop accounts before the remaining gates are accepted.
 
 ## Native provider proof tool
 
