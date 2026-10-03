@@ -50,9 +50,16 @@ export function beatTicksInRange(
   endSec: number,
   bpm: number | null | undefined,
   firstBeatSec: number | null | undefined,
+  beatStep = 1,
 ): BeatTick[] {
   if (!bpm || bpm <= 0 || firstBeatSec === null || firstBeatSec === undefined) return []
-  if (endSec <= startSec) return []
+  if (
+    ![startSec, endSec, bpm, firstBeatSec, beatStep].every(Number.isFinite) ||
+    endSec <= startSec ||
+    beatStep < 1
+  )
+    return []
+  beatStep = Math.ceil(beatStep)
 
   const secondsPerBeat = 60 / bpm
   // Cap at a reasonable count — pathological inputs (huge window, low BPM)
@@ -61,13 +68,13 @@ export function beatTicksInRange(
   const maxTicks = 512
 
   // Beat index range covering [startSec, endSec].
-  const firstIdx = Math.ceil((startSec - firstBeatSec) / secondsPerBeat)
+  const firstIdx = Math.ceil((startSec - firstBeatSec) / secondsPerBeat / beatStep) * beatStep
   const lastIdx = Math.floor((endSec - firstBeatSec) / secondsPerBeat)
   if (lastIdx < firstIdx) return []
-  if (lastIdx - firstIdx > maxTicks) return []
+  if ((lastIdx - firstIdx) / beatStep >= maxTicks) return []
 
   const ticks: BeatTick[] = []
-  for (let n = firstIdx; n <= lastIdx; n++) {
+  for (let n = firstIdx; n <= lastIdx; n += beatStep) {
     const t = firstBeatSec + n * secondsPerBeat
     let weight: number
     if (n === 0) weight = 1
@@ -77,4 +84,30 @@ export function beatTicksInRange(
     ticks.push({ timeSeconds: t, beatIndex: n, weight })
   }
   return ticks
+}
+
+/// Thin the overview to bars/phrases rather than drawing an unreadable wall of beats.
+/// The grid stays aligned to the same anchor when zooming or resizing.
+export function visibleBeatTicks(
+  start: number,
+  end: number,
+  bpm: number | null | undefined,
+  anchor: number | null | undefined,
+  width: number,
+): BeatTick[] {
+  if (
+    !bpm ||
+    !Number.isFinite(bpm) ||
+    bpm <= 0 ||
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    !Number.isFinite(end - start) ||
+    end <= start
+  )
+    return []
+  const beats = ((end - start) * bpm) / 60
+  const neededStep = beats / Math.max(1, Math.min(511, width / 10))
+  let step = 1
+  while (step < neededStep) step *= 4
+  return beatTicksInRange(start, end, bpm, anchor, step)
 }

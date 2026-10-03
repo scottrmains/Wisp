@@ -1,6 +1,201 @@
 # Wisp implementation status
 
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-02
+
+## 2026-10-02: File-date backfill CI test reliability
+
+- Develop run `36956377808` failed in the existing file-date backfill integration
+  test at its ten-second completion guard, before data assertions. The other
+  529 backend cases and marketing validation passed. This was not an Azure
+  deployment failure; no production release ran.
+- Isolated that test in an xUnit nonparallel collection so it does not compete
+  with parallel audio-analysis/FFmpeg tests. The rest of the suite remains
+  parallel. The guard is now a bounded 60 seconds rather than a performance
+  assertion; actual file-date, notes and import-date assertions are unchanged.
+- Added bounded worker stop/join in `finally` before the test disposes the
+  isolated provider/database. No production service, library data, workflow,
+  installer or website behaviour changed; no automatic test retries or skipped
+  assertions were added.
+- Verification: the targeted test passed five consecutive Release runs. The
+  first full-suite attempt encountered a separate transient temporary-directory
+  access error in the waveform USB-export test, which passed when rerun alone.
+  The second full Release solution run passed all 530 backend cases (115 Core,
+  201 Infrastructure, 214 API), including the previously failing backfill test
+  and waveform-export test. `git diff --check` passed. Original develop
+  validation was rerun; the fix PR also runs normal GitHub validation.
+
+## 2026-10-02: Marketing site custom domain
+
+- The owner added the `wisp` CNAME under `physiqo.app` in Porkbun, pointing to
+  `zealous-smoke-0124a0503.4.azurestaticapps.net`. DNS resolution was verified.
+- Registered `wisp.physiqo.app` on the existing Free-tier `wisp-web-prod` Azure
+  Static Web App in `rg-wisp-prod`, using CNAME validation. Azure reports
+  **Ready**. Verified normal certificate-validated HTTPS 200 responses for
+  `https://wisp.physiqo.app/` and `/release.json`; homepage content matches the
+  original Azure origin. The release manifest currently identifies `0.1.121`.
+- Initial certificate-name mismatches cleared after provisioning propagated.
+  Other DNS caches/edge locations can still take time to pick up the new binding.
+- The original Azure hostname remains available. No root-domain, email,
+  Physiqo application, hosting tier, release workflow or deployment identity
+  changes were made. The pipeline continues verifying the Azure origin URL.
+
+
+## 2026-10-01: Optional local BPM/key analysis — experimental first phase
+
+- **Entry points:** select Library/playlist tracks, right-click → **Analyse audio
+  (BPM / key)…**, or use Library actions. Selected playlist occurrences are
+  deduplicated by track ID. BPM is enabled initially; key is an explicitly
+  experimental, initially disabled option. Nothing runs automatically on import.
+- **Missing fields only:** existing positive BPM and any nonblank key are skipped
+  independently, including non-Camelot keys. Fresh embedded tags are inspected
+  when a DB field is missing, so recent Mixed In Key edits are not overwritten.
+  Tag-only values explain that a rescan imports them; analysis does not rewrite
+  or silently import them. Optional **Compare existing values too** computes
+  suggestions alongside existing values, but still cannot replace them.
+- **Local background batch:** one bounded batch (up to 20,000 distinct tracks) at
+  a time, progress across navigation, cancellation of the current decoder and
+  remaining tracks, individual failures, and a global progress/review strip.
+  Decoder PCM is streamed; input is limited to two hours, with a ten-minute
+  processing timeout and bounded diagnostic memory. Library file operations are
+  serialised per track; browsing/playback remain available. No upload, rename,
+  audio conversion output, tag write, cue edit or USB operation occurs.
+- **Review and apply:** BPM can be edited or halved/doubled; key is shown as
+  Camelot. Uncertain suggestions are unchecked. BPM and key can be applied
+  independently, including a later second field. Apply fills missing WISP DB
+  fields only, rechecks current tags, linked path and SHA-256, and uses conditional
+  DB updates to protect concurrent edits. All track IDs, memberships, notes,
+  versions and existing FirstBeat/memory/hot cues remain intact. Accepted values
+  use the existing Library, recommendation, Mix Plan and USB metadata paths;
+  this adds **no new hardware-compatibility claim** or beatgrid alignment.
+- **Cache/provenance:** nullable `MusicAnalysisJson` migration stores suggestions,
+  source-byte hash, analyser version, timestamps and accepted values separately
+  from track metadata. Unchanged successfully detected fields are reused; changed
+  tags/audio invalidate cache conservatively. Suggestions survive WISP restart,
+  but in-flight jobs do not resume automatically. Re-analyse to recover saved
+  suggestions. Eight recent jobs are retained in memory; Clear results recovers
+  from expired/restarted job IDs without deleting stored suggestions or metadata.
+- **Engine choice:** `wisp-onset-chroma-v1` is WISP's experimental onset spectral
+  flux/autocorrelation baseline, whole-track phase refinement, and pitch-class
+  correlation against Krumhansl major/minor profiles, using existing FFmpeg/NAudio
+  primitives. Tempo octave preference is explicitly 90–180 BPM. Fixed A=440 Hz,
+  global major/minor key only; no tuning correction, variable-tempo grid or
+  calibrated confidence percentages. Essentia/libkeyfinder are **not bundled**;
+  their distribution/licensing decisions remain unresolved. Synthetic-test success
+  is not evidence of commercial analyser parity.
+- **Read-only real-music comparison:** 20 alphabetically selected tagged files
+  under the owner's music folder were examined (not a random/held-out benchmark;
+  includes two containers of the same audio). One decoder failure was reported,
+  not imported or changed. Of 12 BPM-comparable files, **10 agreed within 1 BPM**
+  and **7 within 0.1 BPM** with integer file tags. Of 18 Camelot-comparable files,
+  **5 had an exact key match**. Tags are comparison references, not verified
+  ground truth. These results do **not** establish rekordbox/Mixed In Key parity.
+  Key is not ready to replace a trusted analyser: off by default, warning shown,
+  and **all key suggestions require explicit selection**, irrespective of strength.
+  Broadening/whitening the baseline pitch extraction did not improve this sample
+  consistently; those experiments were not shipped. No owner's file/tag/DB was
+  changed during this comparison.
+- **Benchmark helper:** `tools/Wisp.MusicAnalysisBenchmark` reads music and emits
+  JSON-line tag comparisons to stdout; no DB/profile/tag writes or downloads.
+  Example (use your actual paths):
+
+  ```powershell
+  dotnet run --project tools/Wisp.MusicAnalysisBenchmark -- --ffmpeg tools/ffmpeg/ffmpeg.exe --folder "D:/Music" --limit 20
+  ```
+
+- **Verified:** 530 backend cases (115 Core / 201 Infrastructure / 214 API),
+  including 30 new analyser/safety cases; 69 client unit cases. Client build,
+  browser-test TypeScript and all 152 Chromium/Photino-UA browser cases pass,
+  including independent-field apply, navigation, cancellation, retries and paged
+  selections. Lint has zero errors (12 pre-existing warnings); the existing
+  large-bundle advisory remains. The review screen was visually inspected.
+  Tests use isolated DBs and generated media; real-file hash preservation is
+  asserted for WAV/AIFF/FLAC/MP3 decoder fixtures. The historical pre-audio schema
+  playlist-upgrade fixture explicitly excludes the new column before migration.
+  No installer/publish, owner DB migration or unrelated discovery-worker edit.
+
+### Remaining accuracy/engine phases
+
+- [x] Optional selected-track workflow, safe suggestions/apply, batch progress,
+  cancellation, cache/provenance and initial read-only comparison.
+- [ ] Resolve distribution-compatible established engine options, especially for
+  key; compare against a larger independently checked, held-out house/garage/
+  vinyl set (not just agreement with tags or synthetic examples).
+- [ ] Improve/benchmark drifting and ambiguous tempo, detuned vinyl and key
+  extraction; calibrate uncertainty before enabling any stronger acceptance default.
+- [ ] Manual desktop test: audition missing-field suggestions and comparison mode;
+  verify post-rescan/export metadata on the user's normal workflow. Accurate
+  downbeat/variable-tempo beatgrids and optional tag writing remain separate work.
+
+## 2026-10-01: Library and Mix Plan usability fixes
+
+- **Bottom chain restored:** expanding the active plan now reserves a bounded,
+  full-width area below the Library/playlists rather than covering them with a
+  floating right-hand drawer. Collapsing/Escape, ordered multi-track drops,
+  keyboard reordering, notes, rename and transition audition are preserved.
+  Its heading is not duplicated; card content scrolls on shorter windows.
+- **Recommendations made actionable:** “Find next tracks” beside “Recommend
+  from” opens an audition/add panel. Match the last track or choose another plan
+  entry, choose a recommendation mode and candidate playlist, then explicitly
+  append a suggestion. Existing plan tracks are marked “In plan”; additions are
+  single-flight, failures remain visible, and failed reads have a Retry action.
+  An empty plan explains that it needs a first track. The existing backend
+  scoring/scope implementation is reused, not replaced with invented matches.
+- **Title column fix:** title fills spare space only until a custom width is
+  set. Pointer/keyboard resizing starts from its rendered width, then applies
+  an exact saved width to headers and rows. The previous unconditional `1fr`
+  was swallowing reductions. Double-click reset and existing presets remain.
+- **Version-aware titles:** Library/playlists, preparation, compact playback,
+  chain cards and recommendation rows include the version/mix in the title.
+  Already-embedded versions are not duplicated (including curly/straight
+  apostrophes). This is display formatting; it does not rewrite tags or files.
+- **Toggleable main beatgrid:** a persisted Beatgrid on/off control covers the
+  whole-track waveform, preparation zoom and magnifier. Spacing adapts to width
+  and zoom: overview bars/phrases rather than thousands of dense lines, individual
+  beats when zoomed. FirstBeat anchors the grid; with BPM alone the display is
+  explicitly **estimated from 0:00**. Hiding lines does not disable cue snapping.
+  Estimated lines do not invent a FirstBeat marker or enable snapping. This is
+  a fixed-tempo, 4/4 display, not variable-tempo audio analysis.
+- **Data/verification boundaries:** client tests use fabricated audio, tracks,
+  playlists and mocked APIs/bridge. Backend tests use isolated profiles and
+  temporary media with the existing FFmpeg dependency. No owner's music, DB,
+  USB data or discovery-worker edit is changed; no installer is generated.
+- **Verified:** 65 client unit cases, 145 Chromium/Photino-UA browser cases and
+  all 500 backend cases pass. Client and browser-test TypeScript builds pass;
+  lint has zero errors (12 pre-existing warnings). Browser coverage includes
+  pointer/keyboard title resizing and persisted widths, versions, scoped/mode/
+  seed recommendations and save/read failures, empty plans, grid persistence,
+  internal/native drag regression, and chain + preparation at 1024/1366/1920
+  widths. Screenshots were inspected. The existing large-bundle advisory remains.
+
+### Built-in BPM/key analysis assessment — not implemented in this fix
+
+At the time of this Library fix, WISP imported TBPM/INITIALKEY tags through MetadataReader. Its local
+waveform/downbeat/structural-marker processing can use a supplied BPM, but does
+not yet detect tempo or key independently. The experimental phase above now supersedes this assessment. Local/offline analysis is feasible;
+the existing audio decode pipeline is groundwork, not an analyser by itself.
+
+Recommended next stages:
+
+1. Evaluate an audio-analysis engine and its Windows packaging/licensing against
+   a representative labelled set (house/garage, old vinyl rips, intros/breakdowns).
+   Established algorithms already expose BPM/beat positions and key/scale;
+   Essentia is a candidate to evaluate, **not an approved dependency**. Its
+   licensing/distribution terms need review before selection:
+   https://essentia.upf.edu/reference/std_RhythmExtractor2013.html,
+   https://essentia.upf.edu/reference/std_KeyExtractor.html,
+   https://essentia.upf.edu/licensing_information.html.
+2. Add a cancellable background batch queue with progress, bounded decoding,
+   per-track failures, content-identity caching and analyser-version provenance.
+   Store suggested tempo/key, beat anchor and confidence separately from accepted
+   values. Existing user/Mixed In Key tags must not be silently overwritten.
+3. Provide review/apply controls, half/double-tempo correction, first-beat/grid
+   adjustment and Camelot display. Treat ambiguous keys and drifting vinyl tempo
+   as uncertain; validate supported formats and later USB propagation separately.
+
+This is a medium-to-large feature, not another small UI patch. A first useful
+offline analyser is achievable, but matching commercial analysis reliability
+requires measured validation; no accuracy or delivery-time promise is made.
+
 
 ## 2026-10-01: marketing presentation refinement (PR #50 follow-up)
 
@@ -28,6 +223,30 @@ Last reviewed: 2026-10-01
   high-density/wide framing and finished-demo poster checks. Desktop/mobile
   screenshots and all four decoded demo frames were inspected. Actual posters
   are 2x lossless; clips remain native CSS-pixel video (not falsely upscaled).
+
+## 2026-10-01: production homepage readiness verification
+
+- **Cause:** main run 36892858038 built/tested/published installer 0.1.121 and
+  deployed Azure successfully, but final verification failed because the expected
+  version marker was not in the homepage HTML. The matching release manifest was
+  already visible. Subsequent read-only checks found the correct HTML, installer
+  link and assets; this is consistent with independent Azure edge propagation.
+- **Implemented:** the verifier now rechecks the manifest and ordinary homepage
+  together on every attempt. The existing 60-check budget and 5-second intervals
+  remain, with useful retry diagnostics and the last mismatch in the final error.
+  A previously matching manifest is not assumed to stay current at every edge.
+- **Fail-closed safeguards preserved:** exact expected manifest/commit/digest,
+  matching HTML version and installer URL, no-store manifest, nosniff/CSP headers,
+  configured HTTPS Azure hostname and subsequent asset checks. Installer integrity,
+  main-only publishing, obsolete-main guard, Azure credentials and permissions
+  are unchanged. There is no fallback that accepts an old release as success.
+- **Verified:** 34 marketing Node cases and 30 browser cases pass; static site
+  builds. Eight new injected-request/clock cases cover the observed race, stale
+  manifest regression, wrong download link, endpoint failures, exhausted retries,
+  security/identity checks and invalid destinations. The exact patched CLI also
+  passed a read-only verification against the live 0.1.121 site and its assets.
+  No installer was built and no release/deployment was triggered. The historical
+  run remains failed; the fix takes effect after owner merge/promotion to main.
 
 ## 2026-10-01: marketing workflow, focused media and purposeful motion
 

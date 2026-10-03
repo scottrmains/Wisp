@@ -19,16 +19,13 @@ import { CSS } from '@dnd-kit/utilities'
 import { ChevronDown, ChevronUp, Play } from 'lucide-react'
 import type { MixPlanTrack, Track } from '../../api/types'
 import { usePlayer } from '../../state/player'
-import { formatBpm } from '../library/format'
+import { formatBpm, trackDisplayTitle } from '../library/format'
 import { PreviewDialog } from '../preview/PreviewDialog'
 import { useMixPlan, useMixPlans } from './useMixPlans'
 import { ChainStats } from './ChainStats'
 import { PlanHeader } from './PlanHeader'
 import { TransitionGap } from './TransitionGap'
-import {
-  computePlanSummary,
-  indexWarningsByTransition,
-} from './summary'
+import { computePlanSummary, indexWarningsByTransition } from './summary'
 
 interface Props {
   planId: string
@@ -49,7 +46,12 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
   useEffect(() => {
     if (collapsed) return
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('dialog:modal')) return
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        document.querySelector('dialog:modal')
+      )
+        return
       event.preventDefault()
       onToggle()
     }
@@ -80,7 +82,8 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
     setDropError(null)
     try {
       const ids: unknown = JSON.parse(e.dataTransfer.getData('application/x-wisp-track-ids'))
-      if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string')) throw new Error('Invalid selection. Select the tracks again.')
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string'))
+        throw new Error('Invalid selection. Select the tracks again.')
       // Sequential addTrack chain: each call's result feeds the next as `after` so order is preserved.
       let after: string | null = null
       for (const trackId of ids) {
@@ -88,7 +91,9 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
         after = created.id
       }
     } catch (err) {
-      setDropError(`Could not finish adding tracks: ${(err as Error).message}. Review the plan before retrying; earlier tracks may have been added.`)
+      setDropError(
+        `Could not finish adding tracks: ${(err as Error).message}. Review the plan before retrying; earlier tracks may have been added.`,
+      )
     } finally {
       dropBusy.current = false
     }
@@ -134,27 +139,41 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
           : 'border-[var(--color-border)]',
       ].join(' ')}
     >
-      <header className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onToggle}
-            className="text-[var(--color-muted)] hover:text-white"
-            aria-label={collapsed ? 'Expand chain' : 'Collapse chain'}
-            aria-expanded={!collapsed}
-            data-ui-tooltip={collapsed ? 'Open active plan drawer. Drop WISP tracks here to add them.' : 'Close plan drawer without changing the plan'}
-          >
-            {collapsed
-              ? <ChevronUp size={14} strokeWidth={1.75} />
-              : <ChevronDown size={14} strokeWidth={1.75} />}
-          </button>
-          <h2 className="max-w-64 truncate text-sm font-semibold" data-ui-tooltip={plan?.name}>{plan?.name ?? 'Mix plan'}</h2>
-          <span className="text-xs text-[var(--color-muted)]">
-            {plan ? `${plan.tracks.length} tracks` : ''}
-          </span>
-        </div>
-      </header>
+      {(collapsed || !plan) && (
+        <header className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onToggle}
+              className="text-[var(--color-muted)] hover:text-white"
+              aria-label={collapsed ? 'Expand chain' : 'Collapse chain'}
+              aria-expanded={!collapsed}
+              data-ui-tooltip={
+                collapsed
+                  ? 'Expand the bottom chain. Drop WISP tracks here to add them.'
+                  : 'Collapse the bottom chain without changing the plan'
+              }
+            >
+              {collapsed ? (
+                <ChevronUp size={14} strokeWidth={1.75} />
+              ) : (
+                <ChevronDown size={14} strokeWidth={1.75} />
+              )}
+            </button>
+            <h2 className="max-w-64 truncate text-sm font-semibold" data-ui-tooltip={plan?.name}>
+              {plan?.name ?? 'Mix plan'}
+            </h2>
+            <span className="text-xs text-[var(--color-muted)]">
+              {plan ? `${plan.tracks.length} tracks` : ''}
+            </span>
+          </div>
+        </header>
+      )}
       {dropError && <StatusMessage tone="error">{dropError}</StatusMessage>}
-      {(moveTrack.error || updateNotes.error || removeTrack.error) && <StatusMessage tone="error">{(moveTrack.error || updateNotes.error || removeTrack.error)?.message}</StatusMessage>}
+      {(moveTrack.error || updateNotes.error || removeTrack.error) && (
+        <StatusMessage tone="error">
+          {(moveTrack.error || updateNotes.error || removeTrack.error)?.message}
+        </StatusMessage>
+      )}
 
       {!collapsed && (
         <>
@@ -163,20 +182,43 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
               plan={plan}
               compact
               onRename={(name) => rename.mutate({ id: plan.id, name })}
+              leadingControl={
+                <button
+                  onClick={onToggle}
+                  aria-label="Collapse chain"
+                  aria-expanded={true}
+                  data-ui-tooltip="Collapse the bottom chain without changing the plan"
+                  className="text-[var(--color-muted)] hover:text-white"
+                >
+                  <ChevronDown size={14} strokeWidth={1.75} />
+                </button>
+              }
             />
           )}
           {plan && plan.tracks.length > 0 && <ChainStats tracks={plan.tracks} />}
 
-          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4">
+          <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
             {loading && <p className="py-6 text-sm text-[var(--color-muted)]">Loading…</p>}
             {plan && plan.tracks.length === 0 && (
               <p className="py-6 text-sm text-[var(--color-muted)]">
-                Click the <span className="rounded bg-[var(--color-accent)]/20 px-1.5 py-0.5 font-mono text-[var(--color-accent)]">+</span> next to any library row or recommendation to add it here. Drag cards to reorder once you've added a few.
+                Click the{' '}
+                <span className="rounded bg-[var(--color-accent)]/20 px-1.5 py-0.5 font-mono text-[var(--color-accent)]">
+                  +
+                </span>{' '}
+                next to any library row or recommendation to add it here. Drag cards to reorder once
+                you've added a few.
               </p>
             )}
             {plan && plan.tracks.length > 0 && (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={plan.tracks.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={plan.tracks.map((t) => t.id)}
+                  strategy={horizontalListSortingStrategy}
+                >
                   <ol className="flex items-stretch gap-2 pt-2">
                     {plan.tracks.map((mpt, i) => (
                       <Fragment key={mpt.id}>
@@ -208,11 +250,7 @@ export function ChainDock({ planId, collapsed, onToggle }: Props) {
       )}
 
       {preview && (
-        <PreviewDialog
-          trackA={preview.a}
-          trackB={preview.b}
-          onClose={() => setPreview(null)}
-        />
+        <PreviewDialog trackA={preview.a} trackB={preview.b} onClose={() => setPreview(null)} />
       )}
     </section>
   )
@@ -231,7 +269,15 @@ function SortableCard({
   onNotesChange: (notes: string) => void
   onPlay: () => void
 }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: mpt.id })
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: mpt.id })
   const [notes, setNotes] = useState(mpt.transitionNotes ?? '')
 
   const style = {
@@ -270,10 +316,13 @@ function SortableCard({
           </button>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium" title={mpt.track.title ?? ''}>
-            {mpt.track.title ?? mpt.track.fileName}
+          <p className="truncate text-xs font-medium" title={trackDisplayTitle(mpt.track)}>
+            {trackDisplayTitle(mpt.track)}
           </p>
-          <p className="truncate text-[11px] text-[var(--color-muted)]" title={mpt.track.artist ?? ''}>
+          <p
+            className="truncate text-[11px] text-[var(--color-muted)]"
+            title={mpt.track.artist ?? ''}
+          >
             {mpt.track.artist ?? 'Unknown'}
           </p>
         </div>

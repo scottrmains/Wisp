@@ -50,6 +50,7 @@ import { useExternalFileDrag } from './useExternalFileDrag'
 import { RemoveFromPlaylistDialog, type PlaylistRemoval } from './RemoveFromPlaylistDialog'
 import { PlaylistDuplicatesDialog } from './PlaylistDuplicatesDialog'
 import { LoudnessDialog } from './LoudnessDialog'
+import { useMusicAnalysis } from '../../state/musicAnalysis'
 import { collectSelection, selectionScope, trackRowId, uniqueTrackIds } from './librarySelection'
 
 const EMPTY_SELECTION = new Set<string>()
@@ -403,6 +404,12 @@ export function LibraryPage() {
         label: 'Loudness & audio versions…',
         onSelect: () => setLoudnessIds(opIds),
       },
+      {
+        id: 'audio-analysis',
+        icon: SlidersHorizontal,
+        label: 'Analyse audio (BPM / key)…',
+        onSelect: () => useMusicAnalysis.getState().show(opIds),
+      },
       ...(activePlaylistId
         ? [
             {
@@ -737,6 +744,7 @@ export function LibraryPage() {
                         onSelect: () => setLoudnessIds(selectedTrackIds),
                       },
                       { label: 'Tag selection…', onSelect: bulkTag },
+                      { label: 'Analyse audio (BPM / key)…', onSelect: () => useMusicAnalysis.getState().show(selectedTrackIds) },
                       { label: 'Archive selection…', onSelect: bulkArchive },
                     ]
                   : []),

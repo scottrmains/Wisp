@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAudioFiles } from '../../audio/audioFiles'
 import { Play, Search as SearchIcon } from 'lucide-react'
 import { getCachedBandedPeaks, loadBandedPeaks, type BandedPeaks } from '../../audio/peaks'
-import { beatTicksInRange, snapToBeat } from '../../audio/snap'
+import { visibleBeatTicks, snapToBeat } from '../../audio/snap'
 
 export interface CueMarker {
   id: string
@@ -32,14 +32,14 @@ interface Props {
   /// or null when the cursor leaves. Lets the parent (workspace) wire hotkeys
   /// like Q to "place a cue at the hovered position" instead of the playhead.
   onHoverChange?: (timeSeconds: number | null) => void
-  /// Track tempo. Optional — when provided, the magnifier overlays beat
-  /// ticks so the user can see the snap grid before placing a cue.
+  /// Track tempo. Main waveform and magnifier show density-aware beat ticks.
   bpm?: number | null
-  /// Time of beat 0 used to anchor the beat grid. Without this we don't know
-  /// where the kick lands so beat ticks would be cosmetic noise.
+  /// Actual beat-zero anchor. Without it, the display is an estimated grid
+  /// from 0:00, not an audio-derived/snap-enabled beatgrid.
   firstBeatSec?: number | null
   /// Deliberate preparation zoom; zero/omitted retains the whole-track overview.
   windowSeconds?: number
+  showBeatgrid?: boolean
 }
 
 /// Flat-cyan waveform render in the Mixed-in-Key style. Every bucket is drawn
@@ -51,7 +51,7 @@ interface Props {
 /// Click anywhere to seek; vertical playhead overlays the current position.
 ///
 /// While peaks are computing, falls back to a thin baseline so the click-to-seek still works.
-export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange, bpm, firstBeatSec, windowSeconds = 0 }: Props) {
+export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, onCueClick, height = 80, onHoverChange, bpm, firstBeatSec, windowSeconds = 0, showBeatgrid = true }: Props) {
   const span = windowSeconds > 0 ? Math.min(windowSeconds, duration || windowSeconds) : duration
   const start = windowSeconds > 0 ? Math.max(0, Math.min(duration - span, currentTime - span / 2)) : 0
   const percent = (time: number) => span > 0 ? (time - start) / span * 100 : 0
@@ -79,6 +79,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
   // 0px wide if peaks resolved while the parent was hidden — leaves a blank
   // strip when the user navigates back to a page where MiniPlayer shows.
   const [containerWidth, setContainerWidth] = useState(0)
+  const gridTicks = showBeatgrid ? visibleBeatTicks(start, start + span, bpm, firstBeatSec ?? 0, containerWidth) : []
 
   useEffect(() => {
     const el = containerRef.current
@@ -153,13 +154,13 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
 
     if (windowSeconds > 0) {
       drawZoomedWaveformBars(ctx, peaks.full, cssWidth, cssHeight, start, span, duration)
-      for (const tick of beatTicksInRange(start, start + span, bpm ?? null, firstBeatSec ?? null)) {
-        const x = (tick.timeSeconds - start) / span * cssWidth
-        ctx.fillStyle = `rgba(243,240,231,${0.15 + tick.weight * 0.5})`
-        ctx.fillRect(x, 0, 1, tick.weight >= 0.6 ? cssHeight : 8)
-      }
     } else drawWaveformBars(ctx, peaks.full, cssWidth, cssHeight)
-  }, [peaks, height, containerWidth, windowSeconds, start, span, duration, bpm, firstBeatSec])
+    if (showBeatgrid) for (const tick of visibleBeatTicks(start, start + span, bpm, firstBeatSec ?? 0, cssWidth)) {
+      const x = (tick.timeSeconds - start) / span * cssWidth
+      ctx.fillStyle = `rgba(243,240,231,${0.15 + tick.weight * 0.5})`
+      ctx.fillRect(x, 0, 1, tick.weight >= 0.6 ? cssHeight : 8)
+    }
+  }, [peaks, height, containerWidth, windowSeconds, start, span, duration, bpm, firstBeatSec, showBeatgrid])
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration) return
@@ -213,6 +214,8 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
   return (
     <div
       ref={containerRef}
+      data-beatgrid={gridTicks.length ? firstBeatSec == null ? 'estimated' : 'anchored' : 'hidden'}
+      data-beatgrid-ticks={gridTicks.length}
       onClick={handleClick}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -368,6 +371,7 @@ export function BandedWaveform({ trackId, duration, currentTime, onSeek, cues, o
           windowSec={magnifierWindowSec}
           bpm={bpm ?? null}
           firstBeatSec={firstBeatSec ?? null}
+          showBeatgrid={showBeatgrid}
         />
       )}
     </div>
@@ -388,6 +392,7 @@ interface MagnifierProps {
   /// they'll snap to. Otherwise the magnifier is purely visual.
   bpm: number | null
   firstBeatSec: number | null
+  showBeatgrid: boolean
 }
 
 const MAGNIFIER_WIDTH = 280
@@ -397,7 +402,7 @@ const MAGNIFIER_MIN_WINDOW = 0.5
 const MAGNIFIER_MAX_WINDOW = 30
 const MAGNIFIER_WHEEL_FACTOR = 1.2
 
-function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, bpm, firstBeatSec }: MagnifierProps) {
+function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, bpm, firstBeatSec, showBeatgrid }: MagnifierProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -427,12 +432,12 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, b
     )
 
     // Beat grid overlay — drawn UNDER the centre crosshair so the white
-    // crosshair stays visible. Only rendered when we have BPM + a first-beat
-    // anchor, otherwise we'd just be guessing about where beats land. The
+    // crosshair stays visible. Unanchored lines are an estimate from zero;
+    // snapping below deliberately still requires the actual FirstBeat. The
     // weight from beatTicksInRange controls opacity so phrase / bar / beat
     // boundaries are visually distinguishable.
     const endTime = cursorTime + windowSec / 2
-    const ticks = beatTicksInRange(startTime, endTime, bpm, firstBeatSec)
+    const ticks = showBeatgrid ? visibleBeatTicks(startTime, endTime, bpm, firstBeatSec ?? 0, MAGNIFIER_WIDTH) : []
     for (const tick of ticks) {
       const xRatio = (tick.timeSeconds - startTime) / windowSec
       if (xRatio < 0 || xRatio > 1) continue
@@ -482,7 +487,7 @@ function Magnifier({ peaks, duration, cursorTime, clientX, clientY, windowSec, b
         ctx.fillRect(snapX - 4, MAGNIFIER_HEIGHT - 3, 8, 3)
       }
     }
-  }, [peaks, duration, cursorTime, windowSec, bpm, firstBeatSec])
+  }, [peaks, duration, cursorTime, windowSec, bpm, firstBeatSec, showBeatgrid])
 
   // Position the popover via fixed coords on the viewport. Place it just
   // above the cursor; flip to below when the cursor is near the top of the

@@ -35,7 +35,8 @@ import { WorkspaceNavigation, NavigationToggle } from '../../components/ui/Works
 import type { MixPlanTrack, Track } from '../../api/types'
 import { confirmDialog, promptDialog } from '../../components/dialog'
 import { usePlayer } from '../../state/player'
-import { formatBpm } from '../library/format'
+import { formatBpm, trackDisplayTitle } from '../library/format'
+import { RecommendationsList } from '../library/RecommendationPanel'
 import { PreviewDialog } from '../preview/PreviewDialog'
 import { ChainStats } from './ChainStats'
 import { PlanHeader } from './PlanHeader'
@@ -77,6 +78,11 @@ export function MixPlansPage() {
   const [isDropTarget, setIsDropTarget] = useState(false)
   const [view, setView] = useState<'list' | 'chain'>('list')
   const [transitionId, setTransitionId] = useState<string | null>(null)
+  const [recommendPlanId, setRecommendPlanId] = useState<string | null>(null)
+  const [recommendSeedId, setRecommendSeedId] = useState('')
+  const recommendationsOpen = !!plan && recommendPlanId === plan.id
+  const seed =
+    plan?.tracks.find((t) => t.id === recommendSeedId)?.track ?? plan?.tracks.at(-1)?.track
   const [planSearch, setPlanSearch] = useState('')
   const [dropError, setDropError] = useState<string | null>(null)
 
@@ -286,6 +292,12 @@ export function MixPlansPage() {
                 plan={plan}
                 onRename={(name) => rename.mutate({ id: plan.id, name })}
                 onScopeChange={(playlistId) => setScope.mutate(playlistId)}
+                recommendationsOpen={recommendationsOpen}
+                onRecommend={() => {
+                  setRecommendPlanId(recommendationsOpen ? null : plan.id)
+                  setRecommendSeedId('')
+                  setTransitionId(null)
+                }}
               />
               <PlanRecordingLinks planId={plan.id} />
               {plan.tracks.length > 0 && (
@@ -372,7 +384,10 @@ export function MixPlansPage() {
                                       variant="quiet"
                                       aria-pressed={transitionId === mpt.id}
                                       data-transition-track={mpt.id}
-                                      onClick={() => setTransitionId(mpt.id)}
+                                      onClick={() => {
+                                        setTransitionId(mpt.id)
+                                        setRecommendPlanId(null)
+                                      }}
                                     >
                                       <ArrowRight /> Transition {i + 1} → {i + 2}
                                       {(warningsByTransition.get(
@@ -390,7 +405,61 @@ export function MixPlansPage() {
                     </DndContext>
                   )}
                 </div>
-                {from && to && (
+                {recommendationsOpen && seed && (
+                  <aside
+                    id="plan-recommendations"
+                    className="plan-recommendations"
+                    aria-label="Next track recommendations"
+                  >
+                    <header className="workspace-inspector-heading">
+                      <h2>Find your next track</h2>
+                      <IconButton
+                        small
+                        variant="quiet"
+                        label="Close recommendations"
+                        onClick={() => {
+                          setRecommendPlanId(null)
+                          document
+                            .querySelector<HTMLButtonElement>(
+                              '[aria-controls="plan-recommendations"]',
+                            )
+                            ?.focus()
+                        }}
+                      >
+                        <X />
+                      </IconButton>
+                    </header>
+                    <label className="flex flex-col gap-2 p-4 text-xs">
+                      Match after
+                      <select
+                        aria-label="Recommendation seed"
+                        value={
+                          plan.tracks.some((t) => t.id === recommendSeedId) ? recommendSeedId : ''
+                        }
+                        onChange={(e) => setRecommendSeedId(e.target.value)}
+                      >
+                        <option value="">Last track in plan</option>
+                        {plan.tracks.map((t, i) => (
+                          <option key={t.id} value={t.id}>
+                            {i + 1}. {trackDisplayTitle(t.track)}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-[var(--color-muted)]">
+                        {trackDisplayTitle(seed)} · additions go at the end of the plan.
+                      </span>
+                    </label>
+                    <RecommendationsList
+                      seed={seed}
+                      existingTrackIds={new Set(plan.tracks.map((t) => t.track.id))}
+                      adding={addTrack.isPending}
+                      onAddToChain={(trackId) =>
+                        addTrack.mutate({ trackId, after: plan.tracks.at(-1)?.id ?? null })
+                      }
+                    />
+                  </aside>
+                )}
+                {!recommendationsOpen && from && to && (
                   <aside className="plan-transition-inspector" aria-label="Transition details">
                     <header className="workspace-inspector-heading">
                       <h2>
@@ -415,14 +484,14 @@ export function MixPlansPage() {
                     <div className="p-4 space-y-4">
                       <div>
                         <p className="workspace-eyebrow">From</p>
-                        <p>{from.track.title ?? from.track.fileName}</p>
+                        <p>{trackDisplayTitle(from.track)}</p>
                         <p className="text-xs text-[var(--color-muted)]">
                           {formatBpm(from.track.bpm)} BPM · {from.track.musicalKey ?? 'Unknown key'}
                         </p>
                       </div>
                       <div>
                         <p className="workspace-eyebrow">Into</p>
-                        <p>{to.track.title ?? to.track.fileName}</p>
+                        <p>{trackDisplayTitle(to.track)}</p>
                         <p className="text-xs text-[var(--color-muted)]">
                           {formatBpm(to.track.bpm)} BPM · {to.track.musicalKey ?? 'Unknown key'}
                         </p>
@@ -543,8 +612,8 @@ function BigCard({
           <GripVertical />
         </IconButton>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium" title={mpt.track.title ?? ''}>
-            {mpt.track.title ?? mpt.track.fileName}
+          <p className="truncate text-sm font-medium" title={trackDisplayTitle(mpt.track)}>
+            {trackDisplayTitle(mpt.track)}
           </p>
           <p className="truncate text-xs text-[var(--color-muted)]" title={mpt.track.artist ?? ''}>
             {mpt.track.artist ?? 'Unknown'}
@@ -588,7 +657,7 @@ function BigCard({
       <details className="plan-track-notes" open={view === 'chain' ? true : undefined}>
         <summary>Notes{notes ? ' · added' : ''}</summary>
         <textarea
-          aria-label={`Transition notes for ${mpt.track.title ?? mpt.track.fileName}`}
+          aria-label={`Transition notes for ${trackDisplayTitle(mpt.track)}`}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           onBlur={() => {

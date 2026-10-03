@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { validateManifest } from "./production.mjs";
 import { mediaFiles } from "./media.mjs";
+import { waitForDeployment } from "./deployment-readiness.mjs";
 
 const expected = validateManifest(
   JSON.parse(await readFile(process.argv[2], "utf8")),
@@ -18,44 +19,15 @@ const request = async (url) => {
   return response;
 };
 if (siteUrl) {
-  const site = new URL(siteUrl);
-  if (
-    site.protocol !== "https:" ||
-    !site.hostname.endsWith(".azurestaticapps.net") ||
-    site.username ||
-    site.password
-  )
-    throw new Error(
-      "Expected the configured HTTPS Azure Static Web Apps hostname.",
-    );
-  // Azure edge propagation can take a little time. Never accept an older page.
-  let ready = false;
-  for (let attempt = 0; attempt < 60; attempt++) {
-    try {
-      const response = await request(
-        new URL(`/release.json?verify=${expected.commit}`, site),
-      );
-      const actual = validateManifest(await response.json());
-      for (const [key, value] of Object.entries(expected))
-        assert.equal(actual[key], value);
-      assert.match(response.headers.get("cache-control"), /no-store/);
-      ready = true;
-      break;
-    } catch (error) {
-      if (attempt === 59) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-    }
-  }
-  assert.ok(ready);
-  const response = await request(new URL("/", site));
-  const html = await response.text();
-  assert.ok(html.includes(`data-release-version="${expected.version}"`));
-  assert.ok(html.includes(expected.installerUrl));
-  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
-  assert.match(
-    response.headers.get("content-security-policy"),
-    /object-src 'none'/,
-  );
+  const site = await waitForDeployment({
+    manifest: expected,
+    siteUrl,
+    request,
+    onRetry: ({ attempt, attempts, intervalMs, error }) =>
+      console.log(
+        `Deployment not ready (${attempt}/${attempts}): ${error.message}. Retrying in ${intervalMs / 1000}s.`,
+      ),
+  });
   for (const [path, mime] of [
     ["/site.css", "text/css"],
     ["/site.mjs", "javascript"],

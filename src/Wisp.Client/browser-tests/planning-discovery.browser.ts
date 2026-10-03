@@ -9,6 +9,7 @@ async function setup(page: Page) {
   const tracks = Array.from({ length: 24 }, (_, i) => ({
     id: `phase3-${i}`,
     title: i ? `Late Night Selection ${i}` : 'Moving Through',
+    version: i === 9 ? 'Extended Mix' : null,
     artist: i ? 'Warehouse Sessions' : 'Sunday Club',
     fileName: `Fixture ${i}.wav`,
     filePath: `D:/Fictional Music/Fixture ${i}.wav`,
@@ -198,10 +199,25 @@ async function setup(page: Page) {
     if (path === '/api/mix-plans/plan') {
       if (method === 'PATCH') {
         plan = { ...plan, ...body }
+        if (body.clearRecommendationScope) plan.recommendationScopePlaylistId = null
         plans[0].name = plan.name
       }
       result = plan
     }
+    if (path === '/api/playlists')
+      result = [{ id: 'vinyl', name: 'Vinyl selections', trackCount: 4 }]
+    if (path.endsWith('/recommendations'))
+      result = [tracks[0], tracks[9], tracks[10]].map((track) => ({
+        track,
+        total: 90,
+        bpmScore: 90,
+        keyScore: 90,
+        energyScore: 90,
+        genreScore: 90,
+        penalties: 0,
+        reasons: ['Compatible BPM'],
+        previousRating: null,
+      }))
     if (path === '/api/mix-plans/empty' || path === '/api/mix-plans/created')
       result = {
         ...plan,
@@ -384,6 +400,111 @@ async function playing(page: Page) {
     .click()
   await expect(page.getByLabel('Playback overview')).toBeVisible()
 }
+
+for (const width of [1024, 1920])
+  test(`plan recommendations are discoverable, scoped and addable at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await setup(page)
+    await navigate(page, 'Mix Plans')
+    await page.getByRole('button', { name: 'Find next tracks', exact: true }).click()
+    const panel = page.getByRole('complementary', {
+      name: 'Next track recommendations',
+      exact: true,
+    })
+    await expect(panel).toBeVisible()
+    await expect(
+      panel.getByRole('button', { name: 'Moving Through already in plan' }),
+    ).toBeDisabled()
+    await page.getByLabel('Recommendation playlist').selectOption('vinyl')
+    await expect
+      .poll(() =>
+        state.reads
+          .filter((u) => u.pathname.endsWith('/recommendations'))
+          .at(-1)
+          ?.searchParams.get('scopePlaylistId'),
+      )
+      .toBe('vinyl')
+    await panel.getByRole('button', { name: 'Energy ↑', exact: true }).click()
+    await expect
+      .poll(() =>
+        state.reads
+          .filter((u) => u.pathname.endsWith('/recommendations'))
+          .at(-1)
+          ?.searchParams.get('mode'),
+      )
+      .toBe('EnergyUp')
+    await panel.getByLabel('Recommendation seed').selectOption('mpt-1')
+    await expect
+      .poll(
+        () => state.reads.filter((u) => u.pathname.endsWith('/recommendations')).at(-1)?.pathname,
+      )
+      .toBe('/api/tracks/phase3-1/recommendations')
+    state.fail('POST', '/api/mix-plans/plan/tracks')
+    const add = panel.getByRole('button', {
+      name: 'Add Late Night Selection 9 (Extended Mix) to plan',
+      exact: true,
+    })
+    await add.click()
+    await expect(page.getByRole('alert')).toContainText('Fixture offline')
+    state.fail('POST', '/api/mix-plans/plan/tracks', false)
+    await add.click()
+    await expect(
+      panel.getByRole('button', { name: 'Late Night Selection 9 (Extended Mix) already in plan' }),
+    ).toBeDisabled()
+    await expect(page.getByLabel('Plan tracks').locator('.plan-track').last()).toContainText(
+      'Late Night Selection 9 (Extended Mix)',
+    )
+    expect(
+      state.calls.filter((c) => c.body.trackId === 'phase3-9').at(-1)?.body.afterMixPlanTrackId,
+    ).toBe('mpt-7')
+    await page.getByLabel('Recommendation playlist').selectOption('')
+    await expect
+      .poll(() =>
+        state.reads
+          .filter((u) => u.pathname.endsWith('/recommendations'))
+          .at(-1)
+          ?.searchParams.get('scopePlaylistId'),
+      )
+      .toBe(null)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    )
+    await mkdir('../../artifacts/library-mixplan-fixes', { recursive: true })
+    await page.screenshot({
+      path: `../../artifacts/library-mixplan-fixes/recommendations-${width}.png`,
+    })
+    await panel.getByRole('button', { name: 'Close recommendations', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Find next tracks', exact: true })).toBeFocused()
+    expect(state.errors).toEqual([])
+  })
+
+test('recommendation failure retries, empty scope explains itself and an empty plan cannot search', async ({
+  page,
+}) => {
+  const state = await setup(page)
+  state.fail('GET', '/api/tracks/phase3-7/recommendations')
+  await navigate(page, 'Mix Plans')
+  await page.getByRole('button', { name: 'Find next tracks', exact: true }).click()
+  const panel = page.getByRole('complementary', { name: 'Next track recommendations', exact: true })
+  await expect(panel.getByRole('alert')).toContainText('Could not load recommendations')
+  state.fail('GET', '/api/tracks/phase3-7/recommendations', false)
+  await panel.getByRole('button', { name: 'Retry recommendations', exact: true }).click()
+  await expect(
+    panel.getByRole('button', {
+      name: 'Add Late Night Selection 9 (Extended Mix) to plan',
+      exact: true,
+    }),
+  ).toBeVisible()
+  await page.route('**/api/tracks/*/recommendations?*', (route) => route.fulfill({ json: [] }))
+  await page.getByLabel('Recommendation playlist').selectOption('vinyl')
+  await expect(panel).toContainText('No compatible tracks found')
+  await page.getByRole('button', { name: /^After-hours selections for the long weekend/ }).click()
+  await expect(page.getByRole('button', { name: 'Find next tracks', exact: true })).toBeDisabled()
+  await expect(panel).toHaveCount(0)
+  expect(state.errors).toEqual([])
+})
 
 for (const width of [1024, 1366, 1920])
   test(`phase 3 visual workspaces and live playback at ${width}`, async ({ page }) => {
@@ -770,21 +891,35 @@ test('UI4 Soulseek modal cannot dismiss while its search request is starting', a
   await setup(page)
   await navigate(page, 'Wanted')
   let release!: () => void
-  const pending = new Promise<void>(resolve => { release = resolve })
-  await page.route('**/api/soulseek/searches', async route => {
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/soulseek/searches', async (route) => {
     await pending
     await route.fulfill({ json: { id: 'pending-search' } })
   })
-  await page.route('**/api/soulseek/searches/pending-search', route => route.fulfill({ json: { hits: [], responseCount: 0, isComplete: true } }))
-  await page.getByLabel('Wanted tracks').getByRole('button', { name: 'Soulseek', exact: true }).first().click()
+  await page.route('**/api/soulseek/searches/pending-search', (route) =>
+    route.fulfill({ json: { hits: [], responseCount: 0, isComplete: true } }),
+  )
+  await page
+    .getByLabel('Wanted tracks')
+    .getByRole('button', { name: 'Soulseek', exact: true })
+    .first()
+    .click()
   const dialog = page.getByRole('dialog', { name: 'Search Soulseek', exact: true })
-  await dialog.getByRole('textbox', { name: 'Soulseek search query' }).fill('Fictional practice track')
+  await dialog
+    .getByRole('textbox', { name: 'Soulseek search query' })
+    .fill('Fictional practice track')
   await dialog.getByRole('button', { name: 'Search Soulseek', exact: true }).click()
-  await expect(dialog.getByRole('button', { name: 'Close Soulseek search', exact: true })).toBeDisabled()
+  await expect(
+    dialog.getByRole('button', { name: 'Close Soulseek search', exact: true }),
+  ).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(dialog).toBeVisible()
   release()
-  await expect(dialog.getByRole('button', { name: 'Close Soulseek search', exact: true })).toBeEnabled()
+  await expect(
+    dialog.getByRole('button', { name: 'Close Soulseek search', exact: true }),
+  ).toBeEnabled()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
 })

@@ -8,6 +8,9 @@ using Wisp.Infrastructure.Persistence;
 
 namespace Wisp.Infrastructure.Tests;
 
+// This hosted-service integration test shares runner resources with CPU-heavy
+// audio tests. Keep its scheduling independent without serialising the suite.
+[Collection("File-date backfill")]
 public sealed class TrackFileDateBackfillTests
 {
     [Fact]
@@ -36,7 +39,20 @@ public sealed class TrackFileDateBackfillTests
             }
             using var worker = new TrackFileDateBackfill(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<ILogger<TrackFileDateBackfill>>());
             await worker.StartAsync(CancellationToken.None);
-            await worker.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+            try
+            {
+                // A bounded completion guard, not a ten-second performance SLA.
+                // Still fail on a hang; never retry or skip the assertions.
+                await worker.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(60));
+            }
+            finally
+            {
+                // Stop and join the worker before disposing its provider/database,
+                // including when the completion guard fails.
+                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await worker.StopAsync(cleanup.Token);
+                await worker.ExecuteTask!.WaitAsync(cleanup.Token);
+            }
             await using var verify = provider.CreateAsyncScope();
             var tracks = await verify.ServiceProvider.GetRequiredService<WispDbContext>().Tracks.ToListAsync();
             Assert.Equal(File.GetLastWriteTimeUtc(path), tracks.Single(t => t.FileName == "track.mp3").FileModifiedAt);
@@ -48,3 +64,6 @@ public sealed class TrackFileDateBackfillTests
         finally { Directory.Delete(root, true); }
     }
 }
+
+[CollectionDefinition("File-date backfill", DisableParallelization = true)]
+public sealed class FileDateBackfillCollection;
