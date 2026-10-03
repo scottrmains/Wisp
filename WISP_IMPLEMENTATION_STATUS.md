@@ -2,6 +2,30 @@
 
 Last reviewed: 2026-10-03
 
+## 2026-10-03: Accounts community and premium roadmap
+
+- **Planning completed, feature not implemented:** the tracked
+  [accounts, community and premium implementation plan](WISP_ACCOUNTS_COMMUNITY_IMPLEMENTATION_PLAN.md)
+  defines the final experience and ten incremental phases with dependencies,
+  implementation/acceptance checklists and explicit release gates. It covers
+  optional native sign-in, profiles/privacy, external-link mix sharing and
+  timestamp feedback, discussion/social/moderation, hosted audio, opt-in metadata
+  backup/sync, future billing/entitlements and final cross-feature verification.
+- **Local-first boundary:** the existing SQLite workspace and track/cue identities
+  remain independent of accounts. Guest use and existing local functionality
+  are unchanged; signing in must not automatically upload music, publish private
+  notes or enable sync. Account switching and queued cloud work require isolation.
+- **Proposed, not provisioned:** Entra External ID/native MSAL, a separate WISP
+  cloud API, PostgreSQL and private Azure media storage. Provider proof, Azure
+  costs/credit eligibility, public-content rights/moderation, pricing/retention and
+  production enablement have owner-review gates. Making source private and moving
+  installers remain governed by the separate private-release plan.
+- **Verification:** documentation-only change. Roadmap checked against the current
+  desktop/local persistence and recording models, existing release workflow and
+  official native-auth/Azure/billing guidance. No application code, user database,
+  audio, credentials, Azure resources, subscriptions or release configuration
+  changed; no new runtime or hardware compatibility evidence is claimed.
+
 ## 2026-10-03: Independently benchmarked spectral key detector
 
 - **Implemented:** `wisp-multiband-dsk-v3` replaces peak-only primary key
