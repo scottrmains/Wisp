@@ -2,6 +2,44 @@
 
 Last reviewed: 2026-10-03
 
+## 2026-10-03: Phase 2 cloud account code and templates
+
+- **Implemented for review:** independent `Wisp.Cloud.slnx`, ASP.NET Core cloud
+  API and PostgreSQL migrations for account UUIDs, private profiles, trusted
+  identities, lifecycle states and atomic audit records. Desktop SQLite,
+  startup, installer workflow and Guest capabilities are unchanged.
+- **Protected contracts:** delegated account/me and retry-safe provisioning use
+  exact issuer/audience, RSA signature, lifetime, tenant/object identity, allowed
+  native/web clients and API scope. Email and pairwise client subjects do not
+  become account keys. Sixteen simultaneous provisions create one account.
+  Disabled/deleting/deleted accounts cannot be resurrected by another callback.
+- **Operational code:** disabled-by-default host, health/readiness, bounded
+  requests/pools/timeouts, conservative per-replica rate limits, safe request IDs,
+  redacted logs and no startup migrations. Internal conditional state transitions
+  are audited, but full account erasure/admin authorization belongs to Phase 4.
+- **Templates only:** isolated dev/staging/prod Bicep, private-network PostgreSQL,
+  dedicated managed identity, scoped secret-read/registry-pull access, Key Vault,
+  registry, capped Container Apps/logging and budget alerts. Bootstrap defaults
+  to no app; image publication and app enablement are separate steps. No Azure
+  resources, real users, container images or installers were created. Subscription
+  access was checked read-only; credit coverage and costs are not established.
+- **Verified locally:** 28 cloud tests against fresh owned PostgreSQL 17 clusters;
+  real restricted-runtime permission checks, RSA rejection/ownership/state tests,
+  redacted logs, EF migration failure rollback and real dump/restore into a new
+  synthetic database. Existing 613 desktop backend tests pass with pinned FFmpeg.
+  Actual compiled cloud-host smoke returns live 200, disabled-ready 503 and
+  anonymous account 401 without PostgreSQL/provider configuration.
+  Bicep compiles without errors/warnings; cloud packages have no known advisory
+  vulnerabilities at review time. Owner library/cues/audio and the existing
+  PostgreSQL service were not used or altered; fixtures/backups stay ignored.
+- **Remaining gates:** Phase 2 is partially delivered, not fully accepted. The
+  owner chose code/templates before provisioning. Cost/credit approval, actual
+  Entra sign-up/token/native redirect proof, Azure what-if/network/RBAC validation,
+  managed restore and real secret/signing-key rotation remain pending. Desktop
+  sign-in is still unimplemented and disabled; do not start enabling Phase 3 yet.
+  See the [cloud runbook](docs/accounts-cloud-foundation.md) and updated
+  [Phase 2 checklist](WISP_ACCOUNTS_COMMUNITY_IMPLEMENTATION_PLAN.md).
+
 ## 2026-10-03: Phase 1 optional account groundwork
 
 - **Implemented for review:** provider-independent account/session, cloud-client,

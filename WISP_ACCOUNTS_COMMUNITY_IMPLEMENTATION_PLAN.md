@@ -2,10 +2,12 @@
 
 Created and reviewed: 2026-10-03
 
-Status: Phase 1 local groundwork implemented for review on 2026-10-03. Its
-checklists record the delivered interfaces and isolated verification; Phases 2–10
-remain unchecked. This is the authoritative roadmap, not a claim that real
-sign-in, cloud storage, payments or community already exist.
+Status: Phase 1 local groundwork is merged. Phase 2 cloud code, migrations,
+isolated tests and draft infrastructure templates are implemented for review on
+2026-10-03. The owner chose code/templates first; cost approval, real provider
+proof and Azure development deployment remain pending. Phase 2 is not fully
+accepted, and Phases 3–10 remain unchecked. This is the authoritative roadmap,
+not a claim that real sign-in, cloud storage, payments or community already exist.
 
 WISP should remain a complete local DJ application that works as a guest. An
 optional account will add a connected experience: a DJ profile, mix sharing,
@@ -323,7 +325,7 @@ Implementation checklist:
   from untrusted websites. CORS alone is not local API authentication. Keep the
   future cloud API separate; do not require cloud login on all local endpoints.
 - [x] Record intended package boundaries, contract versioning, threat model and
-  environment configuration. Proposed cloud project names are not created yet.
+  environment configuration. The cloud projects were subsequently added in Phase 2.
 
 Acceptance checklist:
 
@@ -343,6 +345,11 @@ be added without making the local application depend on a cloud service.
 Purpose: build and test a minimal protected cloud service before wiring desktop
 login into production.
 
+Current scope: code and templates first, explicitly chosen by the owner on
+2026-10-03. No Azure provisioning, container publication or real identity flow
+is approved by this slice. See the
+[cloud service and development runbook](docs/accounts-cloud-foundation.md).
+
 Implementation checklist:
 
 - [ ] Confirm Azure subscription credit eligibility, allowed resources, region,
@@ -351,33 +358,47 @@ Implementation checklist:
   alerts are not a guaranteed spending cap.
 - [ ] Approve development infrastructure separately. Use WISP-specific resources
   and least-privilege identities; do not modify Pulse/Physiqo application resources.
-- [ ] Create reviewed infrastructure-as-code with separate dev/staging/production
-  configuration and data boundaries. Keep secrets out of source and CI logs.
+- [x] Draft and compile infrastructure-as-code with separate dev/staging/production
+  resource/configuration boundaries and secure secret inputs. Infrastructure
+  bootstrap defaults to no Container App; app deployment requires a published image.
+- [ ] Review Azure what-if, policy, regional quotas, private networking, managed
+  identity/secret references and runtime-role bootstrap before deploying the draft.
 - [ ] Prove Entra External ID customer sign-up/sign-in, verified identity claims,
   API access-token audience/scopes and native redirect compatibility on a dev tenant.
-- [ ] Add a separate cloud API and PostgreSQL migrations for users, auth identities,
-  private profiles, account state and audited creation/deletion lifecycle.
-- [ ] Implement minimal protected account endpoints such as current user and
+- [x] Add a separate cloud API and PostgreSQL migrations for users, auth identities,
+  private profiles, account state and audited creation/state transitions. This is
+  an internal lifecycle primitive, not completed account/provider erasure.
+- [x] Implement minimal protected account endpoints such as current user and
   retry-safe first-sign-in provisioning. Resolve identity from validated tokens.
-- [ ] Handle parallel first sign-ins without duplicate users and define disabled,
+- [x] Handle parallel first sign-ins without duplicate users and define disabled,
   deleting and deleted-account behaviour independently of provider token validity.
-- [ ] Add readiness/health checks, structured redacted logs, request IDs, bounded
-  requests, rate limits, secret rotation and database connection limits.
-- [ ] Establish backup/restore, migration rollback and a minimum service runbook
-  before any production account data is stored.
+- [x] Add readiness/health checks, structured redacted logs, request IDs, bounded
+  requests, fixed per-replica rate limits and database connection limits.
+- [x] Document credential rotation, backup/restore, migration failure/recovery
+  and a minimum service runbook; verify recovery on owned local synthetic data.
+- [ ] Exercise real signing-key/secret rotation and managed PostgreSQL restore
+  under the approved Azure development identities before production account data.
 
 Acceptance checklist:
 
-- [ ] Invalid/expired/wrong-audience/wrong-issuer tokens fail; anonymous private
+- [x] Invalid/expired/wrong-audience/wrong-issuer tokens fail; anonymous private
   reads fail; users cannot read or change another user's private records.
-- [ ] Email changes and repeated callbacks preserve the same WispUserId.
-- [ ] A development restore and migration failure exercise succeeds with synthetic
-  data. No production tenant/data is used for automated tests.
+  Verified with real RSA validation and synthetic metadata, not live Entra tokens.
+- [x] Email changes and repeated callbacks preserve the same WispUserId in
+  synthetic native/web token and parallel callback tests.
+- [x] Local development pg_dump/pg_restore and a failed EF migration exercise
+  succeed with synthetic data. No production tenant/data is used for tests.
+- [x] A restricted synthetic runtime role can provision/read, but cannot update
+  account state, delete users or create schema tables.
+- [ ] Confirm these contracts with actual Entra development users, both approved
+  clients, native redirects and the deployed private-network runtime role.
 - [ ] Owner reviews resource scope/costs and identity-provider limitations before
   approving production provisioning.
 
-Exit: synthetic users can securely call the development cloud service. Desktop
-users still use Guest until Phase 3 is delivered and enabled.
+Exit (not reached): development users can securely call the approved deployed
+cloud service through the proven identity provider. Local synthetic verification
+alone does not satisfy this gate. Desktop users still use Guest until Phase 3 is
+delivered and enabled.
 
 ## Phase 3 Optional desktop accounts
 

@@ -1,0 +1,8 @@
+**
+!src/
+!src/Wisp.Cloud.Api/
+!src/Wisp.Cloud.Api/**
+!src/Wisp.Cloud.Persistence/
+!src/Wisp.Cloud.Persistence/**
+**/bin/**
+**/obj/**

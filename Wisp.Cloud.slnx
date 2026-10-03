@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/cloud/">
+    <Project Path="src/Wisp.Cloud.Api/Wisp.Cloud.Api.csproj" />
+    <Project Path="src/Wisp.Cloud.Persistence/Wisp.Cloud.Persistence.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Wisp.Cloud.Tests/Wisp.Cloud.Tests.csproj" />
+  </Folder>
+</Solution>
