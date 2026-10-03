@@ -116,6 +116,64 @@ public sealed class MusicAnalyzerTests : IDisposable
         Assert.Null(features.Finish().Key);
     }
 
+    public static IEnumerable<object[]> AllKeys() => new[] {
+        "8B", "3B", "10B", "5B", "12B", "7B", "2B", "9B", "4B", "11B", "6B", "1B",
+        "5A", "12A", "7A", "2A", "9A", "4A", "11A", "6A", "1A", "8A", "3A", "10A"
+    }.Select((code, index) => new object[] { 48 + index % 12, index >= 12, code });
+
+    [Theory]
+    [MemberData(nameof(AllKeys))]
+    public void Spectral_detector_maps_all_24_keys_without_external_tags(int rootNote, bool minor, string expected)
+    {
+        var features = new MusicFeatures(false, true);
+        for (var i = 0; i < MusicFeatures.SampleRate * 12; i++)
+            features.Add(Signal((double)i / MusicFeatures.SampleRate, 125, rootNote, minor, false));
+        var result = features.Finish();
+        Assert.Equal(expected, result.Key);
+        Assert.Equal(MusicFeatures.Engine, result.Engine);
+        Assert.NotEqual("wisp-multiband-tonal-v2", result.Engine);
+        Assert.Equal(result, features.Finish()); // final partial hop is incorporated exactly once
+    }
+
+    [Fact]
+    public void Quiet_tonal_body_after_a_long_percussive_intro_is_not_skipped()
+    {
+        var features = new MusicFeatures(false, true);
+        for (var i = 0; i < MusicFeatures.SampleRate * 95; i++)
+        {
+            var time = (double)i / MusicFeatures.SampleRate;
+            var phase = time % 0.48;
+            var drum = phase < 0.06 ? 0.8 * Math.Exp(-phase * 100) * Math.Sin(2 * Math.PI * 80 * phase) : 0;
+            features.Add((float)(time < 35 ? drum : Signal(time, 125, 69, true, false) * 0.2));
+        }
+        Assert.Equal("8A", features.Finish().Key);
+    }
+
+    [Fact]
+    public void Broadband_noise_does_not_invent_a_tonal_key()
+    {
+        var random = new Random(20261003);
+        var features = new MusicFeatures(false, true);
+        for (var i = 0; i < MusicFeatures.SampleRate * 60; i++) features.Add((float)(random.NextDouble() * 0.2 - 0.1));
+        Assert.Null(features.Finish().Key);
+    }
+
+    [Fact]
+    public void Enabling_key_detection_does_not_change_the_tempo_estimate()
+    {
+        var bpmOnly = new MusicFeatures(true, false);
+        var combined = new MusicFeatures(true, true);
+        for (var i = 0; i < MusicFeatures.SampleRate * 40; i++)
+        {
+            var sample = Signal((double)i / MusicFeatures.SampleRate, 125, 69, true);
+            bpmOnly.Add(sample); combined.Add(sample);
+        }
+        var first = bpmOnly.Finish(); var second = combined.Finish();
+        Assert.Equal(first.Bpm, second.Bpm);
+        Assert.Equal(first.TempoStrength, second.TempoStrength);
+        Assert.Equal(first.TempoUncertain, second.TempoUncertain);
+    }
+
     [Theory]
     [InlineData(".wav")] [InlineData(".aiff")] [InlineData(".flac")] [InlineData(".mp3")]
     public async Task Real_FFmpeg_streams_formats_read_only(string extension)

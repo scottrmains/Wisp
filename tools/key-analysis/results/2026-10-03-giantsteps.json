@@ -1,0 +1,1170 @@
+{
+  "formatVersion": 1,
+  "dataset": "GiantSteps key",
+  "datasetCommit": "6bcd492c825ac9b8597bc650a5f6fd18b6c43d2b",
+  "seed": 20261003,
+  "baselineCommit": "9cde4e7",
+  "engine": "wisp-multiband-dsk-v3",
+  "scoring": "MIREX since 2017, both fifth directions; failures/abstentions count as zero",
+  "developmentUsedForSelection": true,
+  "holdoutUsedForSelection": false,
+  "summaries": {
+    "wisp-v2": [
+      {
+        "split": "development",
+        "samples": 48,
+        "relations": {
+          "exact": 19,
+          "fifth": 3,
+          "missing": 1,
+          "other": 19,
+          "parallel": 4,
+          "relative": 2
+        },
+        "exactAccuracy": 0.3958333333333333,
+        "mirexWeightedScore": 0.45625,
+        "errors": 0,
+        "meanSeconds": 0.12382541458333333
+      },
+      {
+        "split": "holdout",
+        "samples": 48,
+        "relations": {
+          "exact": 21,
+          "fifth": 4,
+          "other": 16,
+          "parallel": 4,
+          "relative": 3
+        },
+        "exactAccuracy": 0.4375,
+        "mirexWeightedScore": 0.5145833333333334,
+        "errors": 0,
+        "meanSeconds": 0.12033004583333333
+      }
+    ],
+    "wisp-v3": [
+      {
+        "split": "development",
+        "samples": 48,
+        "relations": {
+          "exact": 29,
+          "fifth": 7,
+          "other": 7,
+          "parallel": 1,
+          "relative": 4
+        },
+        "exactAccuracy": 0.6041666666666666,
+        "mirexWeightedScore": 0.7062500000000002,
+        "errors": 0,
+        "meanSeconds": 0.39541679375
+      },
+      {
+        "split": "holdout",
+        "samples": 48,
+        "relations": {
+          "exact": 31,
+          "fifth": 6,
+          "other": 7,
+          "parallel": 2,
+          "relative": 2
+        },
+        "exactAccuracy": 0.6458333333333334,
+        "mirexWeightedScore": 0.7291666666666665,
+        "errors": 0,
+        "meanSeconds": 0.44801633958333337
+      }
+    ],
+    "skey": [
+      {
+        "split": "development",
+        "samples": 48,
+        "relations": {
+          "exact": 32,
+          "fifth": 5,
+          "other": 8,
+          "parallel": 1,
+          "relative": 2
+        },
+        "exactAccuracy": 0.6666666666666666,
+        "mirexWeightedScore": 0.7354166666666666,
+        "errors": 0,
+        "meanSeconds": 1.2378346166624397
+      },
+      {
+        "split": "holdout",
+        "samples": 48,
+        "relations": {
+          "exact": 34,
+          "fifth": 2,
+          "other": 8,
+          "parallel": 2,
+          "relative": 2
+        },
+        "exactAccuracy": 0.7083333333333334,
+        "mirexWeightedScore": 0.75,
+        "errors": 0,
+        "meanSeconds": 1.303228100000221
+      }
+    ]
+  },
+  "samples": [
+    {
+      "id": "4297635.LOFI",
+      "split": "development",
+      "sha256": "DE9F7EBEA823A63ADA9121B61CB781D16D04BF3AFD813C1FA2FC1DA311D965B4",
+      "referenceKey": "B minor",
+      "predictions": {
+        "wisp-v2": "12B",
+        "wisp-v3": "9A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "4399289.LOFI",
+      "split": "development",
+      "sha256": "F043C8B0E172340956F1C66CE1BC1CF702B60172CFF194B1D8EE67817CF21825",
+      "referenceKey": "C major",
+      "predictions": {
+        "wisp-v2": "9A",
+        "wisp-v3": "8A",
+        "skey": "C Major"
+      }
+    },
+    {
+      "id": "2052966.LOFI",
+      "split": "development",
+      "sha256": "3EEAE655C45745226B0F50F20DB3579B74DE6312A4047135021C18316F81243E",
+      "referenceKey": "Bb minor",
+      "predictions": {
+        "wisp-v2": "3B",
+        "wisp-v3": "3A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "4917941.LOFI",
+      "split": "development",
+      "sha256": "05FE0F3EB244CF7C0E5B329F9730E7362F5CD345E0DBE1A6E85C56E822940C64",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "3642409.LOFI",
+      "split": "development",
+      "sha256": "2DF37BEF2E0A98F738AE2C9B3B9EDFE6CDFF8F1A3D8205FCAC2283067CBD85CB",
+      "referenceKey": "Ab minor",
+      "predictions": {
+        "wisp-v2": "1A",
+        "wisp-v3": "1A",
+        "skey": "G# minor"
+      }
+    },
+    {
+      "id": "4955940.LOFI",
+      "split": "development",
+      "sha256": "6C9AD4024515A99BE22FA3B89CCAB57221AF3AF10EF82F1162A5548448EF0F89",
+      "referenceKey": "Ab minor",
+      "predictions": {
+        "wisp-v2": "1A",
+        "wisp-v3": "1A",
+        "skey": "G# minor"
+      }
+    },
+    {
+      "id": "4779657.LOFI",
+      "split": "development",
+      "sha256": "F9635DA5F8C3CB2BAC7D1D568B54595DEBC441141CFCCEEB642DAEFC70BCFFEE",
+      "referenceKey": "Bb major",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "7A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "3533956.LOFI",
+      "split": "development",
+      "sha256": "DA93F8C2D3AE69C5CBD759CD06D38B0DE9977A845A794A85D17674E89735466A",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "6A",
+        "wisp-v3": "5A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "4996389.LOFI",
+      "split": "development",
+      "sha256": "88D13166B936F30AFCAB0ED5486DA965C5918C598A576C9924132D01B00389B0",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "8A",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "677299.LOFI",
+      "split": "development",
+      "sha256": "3D88C13B9B7C8BB59718BC1AEB6F892CEAC3D7592853845F4EC50AB5FE906E4A",
+      "referenceKey": "Gb major",
+      "predictions": {
+        "wisp-v2": "2B",
+        "wisp-v3": "11A",
+        "skey": "F# minor"
+      }
+    },
+    {
+      "id": "3272873.LOFI",
+      "split": "development",
+      "sha256": "2F8A2C6038B4F5A2F42528D05F338E2FB547FB143BD20932D55EAC73160607F0",
+      "referenceKey": "B minor",
+      "predictions": {
+        "wisp-v2": "1B",
+        "wisp-v3": "10A",
+        "skey": "B minor"
+      }
+    },
+    {
+      "id": "2029598.LOFI",
+      "split": "development",
+      "sha256": "36531C7BCA2E73B4D93AB89A147D4965329CFFE31F997FC60586D672635889F2",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "9A",
+        "wisp-v3": "10A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "4275052.LOFI",
+      "split": "development",
+      "sha256": "D93A36D01EF80AC043BA422C254BD28719D174A33BA3D211D546352C5780D7B9",
+      "referenceKey": "D major",
+      "predictions": {
+        "wisp-v2": "11A",
+        "wisp-v3": "10A",
+        "skey": "D Major"
+      }
+    },
+    {
+      "id": "3005030.LOFI",
+      "split": "development",
+      "sha256": "CF9595D11FE6EBABAD148804EB5CF2A4033CAB3D473F13364C9F87F9A5305DA8",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "12B",
+        "wisp-v3": "9A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "3003894.LOFI",
+      "split": "development",
+      "sha256": "46E24DCCCCF37D18374CE1D6032927F9C75B98EA54C1D704FA9E2E6D5EAC2D38",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "9B",
+        "wisp-v3": "5A",
+        "skey": "C minor"
+      }
+    },
+    {
+      "id": "3298344.LOFI",
+      "split": "development",
+      "sha256": "BBFCE57FED8A2BAE280EB2AFD88B28605E5AB6CFEA59521F637A0D026358D042",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "1986370.LOFI",
+      "split": "development",
+      "sha256": "AD6284E6B9389261664BD21A60F5AA905CDB59768A8C14CF74692ACB30C18CBE",
+      "referenceKey": "Eb minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "12A",
+        "skey": "D# minor"
+      }
+    },
+    {
+      "id": "1041574.LOFI",
+      "split": "development",
+      "sha256": "CC64F7F723498C844C96BA4BE5C2AB50CF4F51026F3B737F7BC27821E6D6F78E",
+      "referenceKey": "Ab major",
+      "predictions": {
+        "wisp-v2": "5A",
+        "wisp-v3": "4A",
+        "skey": "C minor"
+      }
+    },
+    {
+      "id": "4995394.LOFI",
+      "split": "development",
+      "sha256": "227BD27E4999B50CA268FC66D8EB3A3E554B0F409662AC08A70F0D47268E12A4",
+      "referenceKey": "Gb minor",
+      "predictions": {
+        "wisp-v2": "12A",
+        "wisp-v3": "11A",
+        "skey": "F# minor"
+      }
+    },
+    {
+      "id": "5264038.LOFI",
+      "split": "development",
+      "sha256": "CBC5A01CB41BA19FB7714AA8A27284F98DED6D1B6118D3F100CC88B23A1BC846",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "3B",
+        "wisp-v3": "9A",
+        "skey": "D# minor"
+      }
+    },
+    {
+      "id": "1298595.LOFI",
+      "split": "development",
+      "sha256": "AF8EC66AB9CE994ECAB91EB3A73CECAF4DF892F12FFB7B5C49758315747091F3",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "1056896.LOFI",
+      "split": "development",
+      "sha256": "5AB521B207A387E541ACBCE35115C6C923A4BBB380F3839152538A200E837758",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "11B",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "4596347.LOFI",
+      "split": "development",
+      "sha256": "AA9336D2BEDB3285EC699D53E375B0E2AA706FD3BA920F2C1E68F74971F813DE",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "3949799.LOFI",
+      "split": "development",
+      "sha256": "DAA74C484981B0A1B912348EF985D81C7462CC1FFF02A857ECA85C3BA3195C32",
+      "referenceKey": "A major",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "7B",
+        "skey": "F Major"
+      }
+    },
+    {
+      "id": "3568459.LOFI",
+      "split": "development",
+      "sha256": "B664ED00FD470648E38BDD3E055FEA974A5FB5E62C988FDE98CF274ABFEBB51B",
+      "referenceKey": "G major",
+      "predictions": {
+        "wisp-v2": "11A",
+        "wisp-v3": "10A",
+        "skey": "B minor"
+      }
+    },
+    {
+      "id": "873455.LOFI",
+      "split": "development",
+      "sha256": "FAFC5370B097D16CD442D6C96FE5864035EE5D17C138BBCD355BF762E9871314",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "10B",
+        "wisp-v3": "8A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "975138.LOFI",
+      "split": "development",
+      "sha256": "B58397C066CBB683CED11D6290DBC7421B59FAC1CD4C70F7E47ABF4698791BBD",
+      "referenceKey": "D minor",
+      "predictions": {
+        "wisp-v2": "1B",
+        "wisp-v3": "2A",
+        "skey": "D# minor"
+      }
+    },
+    {
+      "id": "2447748.LOFI",
+      "split": "development",
+      "sha256": "F79BB4BB214C22544C6037551A1EFFE193C1D4A0F7D69FA8F4738B81D8552EF8",
+      "referenceKey": "Ab minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "11A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "3625299.LOFI",
+      "split": "development",
+      "sha256": "B0E2A5F2B8971ABB36B29A385AE0809C7C6DBEB42079658FB546C088EA650CC9",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "7B",
+        "wisp-v3": "6A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "4325645.LOFI",
+      "split": "development",
+      "sha256": "B4FC562C4BC332C30F276F506B87DE5B5CC23FBF3550398235F4B26F30868BBD",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "6B",
+        "wisp-v3": "5A",
+        "skey": "Bb Major"
+      }
+    },
+    {
+      "id": "2440193.LOFI",
+      "split": "development",
+      "sha256": "81A547A15E4C855C56246391F0D2CE09FF566CAE3F34992F20C601898FCC71A9",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "8A",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "3334441.LOFI",
+      "split": "development",
+      "sha256": "398A6AF551743BE977A82DA4BFD19511068EC9167478DA54DE1ECB64E5C5958D",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "7B",
+        "wisp-v3": "6A",
+        "skey": "Bb Major"
+      }
+    },
+    {
+      "id": "5120298.LOFI",
+      "split": "development",
+      "sha256": "2534A7B073DDEBB2B7242F436DC4BA150834B9FC3CABD889913A587880BF32A9",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "781373.LOFI",
+      "split": "development",
+      "sha256": "42258985F56244BBAC3F660144B75721D93912C57043DE34444A8EAC11ABAE56",
+      "referenceKey": "E major",
+      "predictions": {
+        "wisp-v2": "12B",
+        "wisp-v3": "11B",
+        "skey": "A Major"
+      }
+    },
+    {
+      "id": "945256.LOFI",
+      "split": "development",
+      "sha256": "8036021EC9EFC6A42A313A99C9E5C678C834A571CBBB9E17AD9937968AB87E9C",
+      "referenceKey": "Eb minor",
+      "predictions": {
+        "wisp-v2": "2A",
+        "wisp-v3": "2A",
+        "skey": "D# minor"
+      }
+    },
+    {
+      "id": "3070298.LOFI",
+      "split": "development",
+      "sha256": "96D71B46263AE9B11FF305296D6537CCD81BD503BD452EFB06CD8619D93BC3A5",
+      "referenceKey": "D minor",
+      "predictions": {
+        "wisp-v2": "10B",
+        "wisp-v3": "7A",
+        "skey": "D minor"
+      }
+    },
+    {
+      "id": "3979989.LOFI",
+      "split": "development",
+      "sha256": "5612BC028BA7507B341E8AC48B251EF64700B2F6483C6C95C659DCFC1A5EAC9C",
+      "referenceKey": "Eb minor",
+      "predictions": {
+        "wisp-v2": "2A",
+        "wisp-v3": "2A",
+        "skey": "D# minor"
+      }
+    },
+    {
+      "id": "3271514.LOFI",
+      "split": "development",
+      "sha256": "518939EA5253D9D9497A20058928AAE58B96A11328AB6F2730B6B02557FEAB19",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "8A",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "4657878.LOFI",
+      "split": "development",
+      "sha256": "889A265E581212893D1497F35E5F553B845D4C30951D6F077F7F31E8149CB522",
+      "referenceKey": "Gb minor",
+      "predictions": {
+        "wisp-v2": "12A",
+        "wisp-v3": "11A",
+        "skey": "C# minor"
+      }
+    },
+    {
+      "id": "2031094.LOFI",
+      "split": "development",
+      "sha256": "1DFC6663ABE19D0EF863DD2CE99B4784C7EA1D3C47D12AA123C4D696D4C00BB5",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "8A",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "3389317.LOFI",
+      "split": "development",
+      "sha256": "42848085DC50E7CD7DF4AE69B23B644BDA12471910FE777191B26601A52DC10D",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "12B",
+        "wisp-v3": "9A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "3535112.LOFI",
+      "split": "development",
+      "sha256": "DE28F9F1F30CC8EF80ECA5180800B3D5A3AA1C09A6C42D305BE1177F5E0E7C8A",
+      "referenceKey": "Bb minor",
+      "predictions": {
+        "wisp-v2": "3A",
+        "wisp-v3": "3A",
+        "skey": "Bb minor"
+      }
+    },
+    {
+      "id": "4014749.LOFI",
+      "split": "development",
+      "sha256": "96083675E1FA47847F69846C87E01327D3DD31F6201B1DABD588384EABAB004B",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": null,
+        "wisp-v3": "6A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "74982.LOFI",
+      "split": "development",
+      "sha256": "F276D820C29832658D54E36A96450FA66CB4635CA8A0FCA409384CBE52DCA51B",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "3B",
+        "wisp-v3": "3A",
+        "skey": "G# Major"
+      }
+    },
+    {
+      "id": "1474122.LOFI",
+      "split": "development",
+      "sha256": "C1EE94027A1DF390101E03B568830A0FAD790824424E91D63B0E09E6AF1DC211",
+      "referenceKey": "Ab major",
+      "predictions": {
+        "wisp-v2": "5B",
+        "wisp-v3": "4A",
+        "skey": "G# Major"
+      }
+    },
+    {
+      "id": "4440292.LOFI",
+      "split": "development",
+      "sha256": "0154BC9D518FFD577D13A55E9A55B266A1449055B9D803FD8DFC31B9A41D66F2",
+      "referenceKey": "Ab minor",
+      "predictions": {
+        "wisp-v2": "3B",
+        "wisp-v3": "1A",
+        "skey": "G# minor"
+      }
+    },
+    {
+      "id": "907837.LOFI",
+      "split": "development",
+      "sha256": "AA60BB26613B48758B4BB1C253B51CBC1547E23AFC2C2C1AA4AAF077024871B4",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "6B",
+        "wisp-v3": "6A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "4320199.LOFI",
+      "split": "development",
+      "sha256": "90072302D3467465720BA547626B01D4F8AFD358C21E9B73C0108E09D43B2955",
+      "referenceKey": "Eb minor",
+      "predictions": {
+        "wisp-v2": "2A",
+        "wisp-v3": "2A",
+        "skey": "D# minor"
+      }
+    },
+    {
+      "id": "4927724.LOFI",
+      "split": "holdout",
+      "sha256": "473D763D43266DB46D2A1024B303A62ED6216348F9A9F94FA58B40A2B0FE9ECB",
+      "referenceKey": "Ab major",
+      "predictions": {
+        "wisp-v2": "4B",
+        "wisp-v3": "4B",
+        "skey": "G# Major"
+      }
+    },
+    {
+      "id": "814505.LOFI",
+      "split": "holdout",
+      "sha256": "D0BCCF58C13C1A024B5424D7F27223C0144535D9FDBA6D2A8942536C8810DF8C",
+      "referenceKey": "A major",
+      "predictions": {
+        "wisp-v2": "11B",
+        "wisp-v3": "8A",
+        "skey": "A Major"
+      }
+    },
+    {
+      "id": "3625787.LOFI",
+      "split": "holdout",
+      "sha256": "5B8D84EF572C67BBEBC589B632EE16B36BCCF971C7735BC2B236FA7767AADE29",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "5A",
+        "wisp-v3": "4A",
+        "skey": "C minor"
+      }
+    },
+    {
+      "id": "1785226.LOFI",
+      "split": "holdout",
+      "sha256": "554F6539E38F168D0DBAB4835079F4D801854A8F4E2B2BE28F904BEA5C96A1EA",
+      "referenceKey": "Gb minor",
+      "predictions": {
+        "wisp-v2": "2B",
+        "wisp-v3": "11A",
+        "skey": "F# minor"
+      }
+    },
+    {
+      "id": "3095708.LOFI",
+      "split": "holdout",
+      "sha256": "A1878B2BD0ECDB78E29133804C329A41A142910F0FD993CD8D405FDD2E8AE8F2",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "10B",
+        "wisp-v3": "6A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "2049680.LOFI",
+      "split": "holdout",
+      "sha256": "BC5E65BC3841F5F7C530283E874BBA53B08F4DD9C940AB7594C51F3B418ECC56",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "4981541.LOFI",
+      "split": "holdout",
+      "sha256": "855C989281AC567F0E6A2B7F835A04AA2E6A1AA3745F8022FE624E8323D9BAE0",
+      "referenceKey": "Bb minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "Bb minor"
+      }
+    },
+    {
+      "id": "1781139.LOFI",
+      "split": "holdout",
+      "sha256": "E09A577382614EBE836BBC36D5C582F62379A0F799E8B70B9F55D4BEA0AA5818",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "5A",
+        "skey": "C minor"
+      }
+    },
+    {
+      "id": "1149778.LOFI",
+      "split": "holdout",
+      "sha256": "06DEA59F37CFE221BD72723D0461EA8C130FF7568F1B769DD7F1199D719CD167",
+      "referenceKey": "Gb minor",
+      "predictions": {
+        "wisp-v2": "11A",
+        "wisp-v3": "11A",
+        "skey": "F# minor"
+      }
+    },
+    {
+      "id": "883724.LOFI",
+      "split": "holdout",
+      "sha256": "5F496352012991A2A845491FFBF5019A1CDEE0F8550EA1DD0CD0BE430EB028CE",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "3914630.LOFI",
+      "split": "holdout",
+      "sha256": "FF2D8E87B39D74862DE48E306EE87BF055E938FE1C6BC7B122C65607117DDE54",
+      "referenceKey": "Gb major",
+      "predictions": {
+        "wisp-v2": "12B",
+        "wisp-v3": "11A",
+        "skey": "F# minor"
+      }
+    },
+    {
+      "id": "4202763.LOFI",
+      "split": "holdout",
+      "sha256": "0ED3D77A6BB738CE5A9E7894CA73296BA0181E14FA3040417F87B1E03AD12C5A",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "9A",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "4863806.LOFI",
+      "split": "holdout",
+      "sha256": "8CBE05E638E84FAC4AFFFAD43C8ABEDE6C94F90CF56A4EF27CAB8B9301C24830",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "3571314.LOFI",
+      "split": "holdout",
+      "sha256": "6B790089B7E2C684EBFC5EB3F80B1C3D1931A67E6CC0D41AEC5FA57FA38D9FC6",
+      "referenceKey": "Db minor",
+      "predictions": {
+        "wisp-v2": "12A",
+        "wisp-v3": "12A",
+        "skey": "C# minor"
+      }
+    },
+    {
+      "id": "5362946.LOFI",
+      "split": "holdout",
+      "sha256": "96972A8056C4F5E6A37CAC0DBE1EBF70FE1539740455C9F0A9B35D266FB030AB",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "11B",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "2046342.LOFI",
+      "split": "holdout",
+      "sha256": "5007B8868B3026438F0695622905D477ABAE2F8C8199BAAE073B38470F3C7F53",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "3A",
+        "skey": "Bb minor"
+      }
+    },
+    {
+      "id": "1822087.LOFI",
+      "split": "holdout",
+      "sha256": "3F43551950900E2F7B68E29816C2DC9581F47E5B82E852B65005E1012932F9C0",
+      "referenceKey": "B minor",
+      "predictions": {
+        "wisp-v2": "3A",
+        "wisp-v3": "6A",
+        "skey": "Bb minor"
+      }
+    },
+    {
+      "id": "4277742.LOFI",
+      "split": "holdout",
+      "sha256": "735B91742744B768DE30CEF9BFD50C82A37654A4A5B91B2E2102B025F401390F",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "1575015.LOFI",
+      "split": "holdout",
+      "sha256": "428C11EF390374DA02F937AAE21DEB82080CCF4EF7D1A87DD3C3BA14740DAC49",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "8A",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "3319589.LOFI",
+      "split": "holdout",
+      "sha256": "8DA08E2A23FDCFD7DD17AE4C47821464347D099DE69AF24514591B33BD7F6FA5",
+      "referenceKey": "Gb minor",
+      "predictions": {
+        "wisp-v2": "9A",
+        "wisp-v3": "9A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "3545728.LOFI",
+      "split": "holdout",
+      "sha256": "5E670E3C191C7AE85DBA193B885636878673B1B9C73D158C2DCFFA92E407E2D4",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "2059625.LOFI",
+      "split": "holdout",
+      "sha256": "9CEA8DAB4EFC0783ED8E5AA53DFADD27D39D4C338FE2558426E7013C44A8C346",
+      "referenceKey": "Gb minor",
+      "predictions": {
+        "wisp-v2": "4A",
+        "wisp-v3": "4A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "3516363.LOFI",
+      "split": "holdout",
+      "sha256": "F4D7C4646E0F4080DAD546D57A439F5DC15455F31D538B7F63620183B5A8AEB5",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "6A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "4048367.LOFI",
+      "split": "holdout",
+      "sha256": "EAE8E40F814A90544DF7767577ED8F3BEA4B6417AFFE473310704EC04B67387E",
+      "referenceKey": "B minor",
+      "predictions": {
+        "wisp-v2": "10B",
+        "wisp-v3": "10A",
+        "skey": "D Major"
+      }
+    },
+    {
+      "id": "3426285.LOFI",
+      "split": "holdout",
+      "sha256": "941B8E21327DE9E2C1AE9D5328C94088D7E5E2A2154E209234E6C6E696B97A65",
+      "referenceKey": "Eb minor",
+      "predictions": {
+        "wisp-v2": "2A",
+        "wisp-v3": "3A",
+        "skey": "D# minor"
+      }
+    },
+    {
+      "id": "3262951.LOFI",
+      "split": "holdout",
+      "sha256": "3B72F6B592978655998D471F79AE5BE986EAC4394B3F9679949AE04637031493",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "5B",
+        "wisp-v3": "5A",
+        "skey": "D# Major"
+      }
+    },
+    {
+      "id": "4926785.LOFI",
+      "split": "holdout",
+      "sha256": "68DD821BD0464582784D518B5E12B563300FF9B0A475ED74F452688667895E2D",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "7A",
+        "wisp-v3": "6A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "3014118.LOFI",
+      "split": "holdout",
+      "sha256": "117B39EDD20BD808716A316B9F6DCF46944F5DEDEE2B7BA17FA9461B335C1656",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "10A",
+        "wisp-v3": "9A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "3270413.LOFI",
+      "split": "holdout",
+      "sha256": "8BA5748C1D2CB231997130F1811ADBF37804F33A3DDEAFB5A9BF096C80D0492B",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "9B",
+        "wisp-v3": "9A",
+        "skey": "G Major"
+      }
+    },
+    {
+      "id": "3165770.LOFI",
+      "split": "holdout",
+      "sha256": "871730804111C9231AE4B7DB597D2842AFD1B7D7ADEC0216A40733DFB82E37CE",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "10B",
+        "wisp-v3": "11A",
+        "skey": "B minor"
+      }
+    },
+    {
+      "id": "5263098.LOFI",
+      "split": "holdout",
+      "sha256": "A999BFBF4E79B71FE8544C8ADFFDF513172ECA411844F8FF53938CA52CFD2860",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "7B",
+        "wisp-v3": "6A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "472626.LOFI",
+      "split": "holdout",
+      "sha256": "E3C269D4E144D19DCB30D304FABB5843E92DD063ECC6506CFC3C9FD906624BAC",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "7A",
+        "skey": "D minor"
+      }
+    },
+    {
+      "id": "3967462.LOFI",
+      "split": "holdout",
+      "sha256": "C2D205AAE30BCD9EF3D063461CF65F4FCBD090C67E581EC933CEE3B62CE0D775",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "10B",
+        "wisp-v3": "9A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "814290.LOFI",
+      "split": "holdout",
+      "sha256": "9EE17AC2AD60871EF75C5ECBBE895BA428849EB3AE063E865A11D8818E4F96A0",
+      "referenceKey": "E major",
+      "predictions": {
+        "wisp-v2": "12B",
+        "wisp-v3": "11A",
+        "skey": "E Major"
+      }
+    },
+    {
+      "id": "3426022.LOFI",
+      "split": "holdout",
+      "sha256": "15291E59F75AF2CFB44A35A4259C3AB03DB4A9DCDA91FA7675A1BDE42BF0AB9D",
+      "referenceKey": "D minor",
+      "predictions": {
+        "wisp-v2": "7A",
+        "wisp-v3": "7A",
+        "skey": "D minor"
+      }
+    },
+    {
+      "id": "796860.LOFI",
+      "split": "holdout",
+      "sha256": "C53AE5219E17423E1CE470564913EF9A1D87D230549260F9B8F4F33B6557BC04",
+      "referenceKey": "Ab minor",
+      "predictions": {
+        "wisp-v2": "3B",
+        "wisp-v3": "1A",
+        "skey": "G# minor"
+      }
+    },
+    {
+      "id": "3938837.LOFI",
+      "split": "holdout",
+      "sha256": "2CC631182B9FFE18741263A084BB3A4FEE46F60ED94C814F10AE419931982F48",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "9A",
+        "wisp-v3": "9A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "973819.LOFI",
+      "split": "holdout",
+      "sha256": "6BFE2873CE1E310924A0F529AED1DE82FE176E3BA74CEFB91694B1236A3D7A6F",
+      "referenceKey": "F minor",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "5A",
+        "skey": "F minor"
+      }
+    },
+    {
+      "id": "2048054.LOFI",
+      "split": "holdout",
+      "sha256": "F337AF7444AD1A5739D2B25488421EB94119C3F1BB02E476A8E8549511D547B2",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "5A",
+        "wisp-v3": "5A",
+        "skey": "C minor"
+      }
+    },
+    {
+      "id": "4566667.LOFI",
+      "split": "holdout",
+      "sha256": "C5BE19EA4A6D2582849EB260E2032073B554AF349A3D51324D31BB04293DE83A",
+      "referenceKey": "Gb minor",
+      "predictions": {
+        "wisp-v2": "11A",
+        "wisp-v3": "11A",
+        "skey": "F# minor"
+      }
+    },
+    {
+      "id": "511348.LOFI",
+      "split": "holdout",
+      "sha256": "D7B074472364A2C24A5CDE74E1D890DC9B62AB9CFE9B5DDD7A74724BA981ED98",
+      "referenceKey": "E minor",
+      "predictions": {
+        "wisp-v2": "9A",
+        "wisp-v3": "9A",
+        "skey": "E minor"
+      }
+    },
+    {
+      "id": "3228297.LOFI",
+      "split": "holdout",
+      "sha256": "153F07DD2808D1F5A6D1F67DEA797D198DF9EE127B62B590C865BD7389CB93F6",
+      "referenceKey": "B minor",
+      "predictions": {
+        "wisp-v2": "11B",
+        "wisp-v3": "10A",
+        "skey": "A Major"
+      }
+    },
+    {
+      "id": "3833050.LOFI",
+      "split": "holdout",
+      "sha256": "62E815F165A5DE408AAE62F64F37423510561383A86D7EDE56CF081604016C58",
+      "referenceKey": "Db major",
+      "predictions": {
+        "wisp-v2": "3B",
+        "wisp-v3": "3B",
+        "skey": "C# Major"
+      }
+    },
+    {
+      "id": "4186982.LOFI",
+      "split": "holdout",
+      "sha256": "69FFA1297B5B9EAD9E76F6E0CDCC67184D1E905993C500675D0169FB997EE7BC",
+      "referenceKey": "G minor",
+      "predictions": {
+        "wisp-v2": "10B",
+        "wisp-v3": "6A",
+        "skey": "G minor"
+      }
+    },
+    {
+      "id": "781995.LOFI",
+      "split": "holdout",
+      "sha256": "6BA4B9E88F4DE31254EABA4471DCD7E028DF4C1568EBE8AA0688F02D593A3E3C",
+      "referenceKey": "C major",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "8A",
+        "skey": "C Major"
+      }
+    },
+    {
+      "id": "5048249.LOFI",
+      "split": "holdout",
+      "sha256": "C2E6512B946F2BB4FBC3E126B8744AFDEF626B8C62ED05A11878799730E9DF19",
+      "referenceKey": "A minor",
+      "predictions": {
+        "wisp-v2": "8A",
+        "wisp-v3": "8A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "2666332.LOFI",
+      "split": "holdout",
+      "sha256": "D90310A98D21169099B0F4A3718EF51D5ADE4FBA34C7F3FA6F5470572C8C28D6",
+      "referenceKey": "A major",
+      "predictions": {
+        "wisp-v2": "11A",
+        "wisp-v3": "11A",
+        "skey": "A minor"
+      }
+    },
+    {
+      "id": "4234612.LOFI",
+      "split": "holdout",
+      "sha256": "557D6CC8D5D441FAAE59C0EAD1E0AA923C9C14A9B3878C50B0B9A3D563B03DF5",
+      "referenceKey": "C minor",
+      "predictions": {
+        "wisp-v2": "8B",
+        "wisp-v3": "8A",
+        "skey": "C minor"
+      }
+    }
+  ],
+  "skeyCommit": "918b83d273568d5041569bb8068843d19a335726",
+  "skeyCheckpointSha256": "78DFD0AD4FA9434BF7CEC70A25934B7C575BDA9C80E994700140770AD3A5EAD4"
+}

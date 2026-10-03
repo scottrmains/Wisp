@@ -14,7 +14,7 @@ public interface IMusicAnalyzer
 }
 
 /// Read-only, streaming PCM analysis. No tags, files, beat markers or cues are written.
-/// Experimental multiband rhythm / tuning-aware tonal analysis, NOT a calibrated
+/// Multiband rhythm / published spectral-kernel tonal analysis, NOT a calibrated
 /// probability model or a claim of parity with commercial DJ analysers.
 public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
 {
@@ -111,18 +111,19 @@ public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
     }
 }
 
-/// Bounded memory: one circular PCM window, onset envelope (maximum 2 hours)
+/// Bounded memory: circular PCM windows, onset envelope (maximum 2 hours)
 /// and aggregate pitch classes. FFT primitives come from the existing NAudio dependency.
 public sealed class MusicFeatures(bool findBpm, bool findKey)
 {
     public const int SampleRate = 11025;
-    public const string Engine = "wisp-multiband-tonal-v2";
+    public const string Engine = "wisp-multiband-dsk-v3";
     private const int Hop = 256, TempoFrame = 2048, KeyFrame = 8192;
     private readonly float[] ring = new float[KeyFrame];
     private readonly Complex[] tempoFft = new Complex[TempoFrame], keyFft = new Complex[KeyFrame];
     private readonly double[] previous = new double[TempoFrame / 2];
     private readonly List<double> onsets = [], bassOnsets = [];
     private readonly KeyEstimator? keyEstimator = findKey ? new() : null;
+    private readonly SpectralKeyEstimator? spectralKey = findKey ? new() : null;
     private long samples;
     private double energy;
 
@@ -131,6 +132,7 @@ public sealed class MusicFeatures(bool findBpm, bool findKey)
         if (++samples > SampleRate * 7200L) throw new IOException("Analysis supports individual tracks up to two hours long.");
         ring[(samples - 1) % KeyFrame] = sample;
         energy += sample * sample;
+        spectralKey?.Add(sample);
         if (findBpm && samples >= TempoFrame && samples % Hop == 0)
         {
             Transform(tempoFft, 11);
@@ -173,8 +175,14 @@ public sealed class MusicFeatures(bool findBpm, bool findKey)
         if (seconds < 8 || energy / Math.Max(samples, 1) < 1e-9)
             throw new IOException("Not enough audible music to analyse. Use a track with at least eight seconds of audio.");
         var tempo = findBpm ? TempoEstimator.Analyze(onsets, bassOnsets, ct) : (null, 0d, true);
-        var key = keyEstimator?.Finish(ct);
+        var diagnostic = keyEstimator?.Finish(ct);
+        var key = spectralKey?.Finish(ct);
+        // The old peak/tuning view is an independent diagnostic, never silently
+        // allowed to overrule the measured spectral detector's primary suggestion.
+        var warning = key?.Warning;
+        if (key?.Key is { } primary && diagnostic?.Key is { } check && primary != check)
+            warning ??= "Spectral and peak-based estimates disagree. Audition the alternatives before applying.";
         return new(tempo.Item1, key?.Key, tempo.Item2, key?.Strength ?? 0, tempo.Item3, true, seconds, Engine,
-            KeyAgreement: key?.Agreement, TuningCents: key?.TuningCents, AlternativeKey: key?.Alternative, KeyWarning: key?.Warning);
+            KeyAgreement: key?.Agreement, TuningCents: diagnostic?.TuningCents, AlternativeKey: key?.Alternative, KeyWarning: warning);
     }
 }

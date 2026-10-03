@@ -19,6 +19,8 @@ artifacts/
 *.db-wal
 
 # Node / Vite
+__pycache__/
+*.pyc
 node_modules/
 dist/
 .vite/
