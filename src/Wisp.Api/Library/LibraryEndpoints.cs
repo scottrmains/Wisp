@@ -340,6 +340,7 @@ public static class LibraryEndpoints
         int? energyMin = null,
         int? energyMax = null,
         bool? missing = null,
+        bool? missingBpm = null,
         string? sort = null,
         int? addedWithinDays = null,
         // Archive controls — default behaviour is "active library only".
@@ -396,6 +397,7 @@ public static class LibraryEndpoints
         if (energyMin.HasValue) q = q.Where(t => t.Energy >= energyMin);
         if (energyMax.HasValue) q = q.Where(t => t.Energy <= energyMax);
         if (missing == true) q = q.Where(t => t.IsMissingMetadata);
+        if (missingBpm == true) q = q.Where(t => t.Bpm == null || t.Bpm <= 0);
         if (addedWithinDays.HasValue)
         {
             if (addedWithinDays is < 1 or > 36500)

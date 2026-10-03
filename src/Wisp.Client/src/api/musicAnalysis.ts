@@ -10,6 +10,10 @@ export interface MusicAnalysis {
   seconds: number
   engine: string
   decodeWarning?: string | null
+  keyAgreement?: number | null
+  tuningCents?: number | null
+  alternativeKey?: string | null
+  keyWarning?: string | null
 }
 export interface AnalysisRow {
   trackId: string

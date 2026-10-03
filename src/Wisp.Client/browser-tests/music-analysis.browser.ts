@@ -2,7 +2,14 @@ import { expect, test, type Page } from '@playwright/test'
 import type { AnalysisJob, AnalysisRow } from '../src/api/musicAnalysis'
 import type { Track } from '../src/api/types'
 
-async function setup(page: Page, count = 3, available = true, recovered = false) {
+async function setup(
+  page: Page,
+  count = 3,
+  available = true,
+  recovered = false,
+  openSelected = true,
+  keyDiagnostics = false,
+) {
   const tracks: Track[] = Array.from({ length: count }, (_, i) => ({
     id: `track-${i}`,
     title: `Garage ${i}`,
@@ -35,7 +42,8 @@ async function setup(page: Page, count = 3, available = true, recovered = false)
   let job: AnalysisJob | null = null,
     running = false,
     failApply = false,
-    failJob = false
+    failJob = false,
+    failMissing = false
   await page.route('**/api/**', async (route) => {
     const req = route.request(),
       url = new URL(req.url())
@@ -57,7 +65,8 @@ async function setup(page: Page, count = 3, available = true, recovered = false)
             existingBpm: t.bpm,
             existingKey: t.musicalKey,
             cached: recovered,
-            bpmRequested: body.bpm === true && (body.compareExisting === true || !t.bpm),
+            bpmRequested:
+              body.bpm === true && (body.compareExisting === true || !(t.bpm && t.bpm > 0)),
             keyRequested: body.key === true,
             result: running
               ? null
@@ -67,11 +76,17 @@ async function setup(page: Page, count = 3, available = true, recovered = false)
                   tempoStrength: 0.85,
                   keyStrength: 0.7,
                   tempoUncertain: id === 'track-2',
-                  keyUncertain: id === 'track-2',
+                  keyUncertain: keyDiagnostics || id === 'track-2',
                   seconds: 240,
                   engine: 'wisp-onset-chroma-v1',
                   decodeWarning: recovered
                     ? 'Decoded with recoverable file warnings. Listen to the track before applying these suggestions.'
+                    : null,
+                  keyAgreement: keyDiagnostics ? 0.42 : null,
+                  tuningCents: keyDiagnostics ? -12.5 : null,
+                  alternativeKey: keyDiagnostics ? '9B' : null,
+                  keyWarning: keyDiagnostics
+                    ? 'Tonal sections disagree. Audition before applying.'
                     : null,
                 },
           } satisfies AnalysisRow
@@ -109,24 +124,47 @@ async function setup(page: Page, count = 3, available = true, recovered = false)
         },
       })
     }
-    if (url.pathname === '/api/tracks')
-      return route.fulfill({ json: { items: tracks, total: tracks.length, page: 1, size: 500 } })
+    if (url.pathname === '/api/tracks') {
+      const missing = url.searchParams.get('missingBpm') === 'true'
+      if (missing) {
+        calls.push({ path: 'collect', body: Object.fromEntries(url.searchParams) })
+        if (failMissing)
+          return route.fulfill({ status: 503, json: { message: 'Tracklist unavailable' } })
+      }
+      const filtered = missing ? tracks.filter((t) => !t.bpm || t.bpm <= 0) : tracks
+      const current = Number(url.searchParams.get('page') ?? 1),
+        size = Number(url.searchParams.get('size') ?? 500)
+      return route.fulfill({
+        json: {
+          items: filtered.slice((current - 1) * size, current * size),
+          total: filtered.length,
+          page: current,
+          size,
+        },
+      })
+    }
     await route.fulfill({ json: [] })
   })
   await page.goto('/')
-  await page.getByText('Garage 0 (Dub)', { exact: true }).click()
-  await page.keyboard.press('Control+a')
-  await page.getByRole('button', { name: 'Library actions', exact: true }).click()
-  await page.getByRole('menuitem', { name: 'Analyse audio (BPM / key)…', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Find the tempo. Find the key.' })
-  await expect(dialog).toBeVisible()
-  await expect(
-    dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }),
-  ).not.toBeChecked()
-  await dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }).check()
+  if (openSelected) {
+    await page.getByText('Garage 0 (Dub)', { exact: true }).click()
+    await page.keyboard.press('Control+a')
+    await page.getByRole('button', { name: 'Library actions', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Analyse audio (BPM / key)…', exact: true }).click()
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }),
+    ).not.toBeChecked()
+    await dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }).check()
+  }
   return {
     dialog,
     calls,
+    tracks,
+    failMissing: (v: boolean) => {
+      failMissing = v
+    },
     setRunning: (v: boolean) => {
       running = v
     },
@@ -138,6 +176,113 @@ async function setup(page: Page, count = 3, available = true, recovered = false)
     },
   }
 }
+
+async function openMissing(page: Page) {
+  await page.getByRole('button', { name: 'Library actions', exact: true }).click()
+  await page
+    .getByRole('menuitem', { name: 'Analyse missing BPMs in this list…', exact: true })
+    .click()
+}
+
+test('missing BPM action collects every filtered page without selecting track rows', async ({
+  page,
+}) => {
+  const { dialog, calls } = await setup(page, 1002, true, false, false)
+  await openMissing(page)
+  await expect(dialog).toBeVisible()
+  await expect(
+    dialog.getByRole('button', { name: 'Analyse 1,001 tracks', exact: true }),
+  ).toBeEnabled()
+  await expect(
+    dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }),
+  ).not.toBeChecked()
+  await expect(dialog.getByLabel('Compare existing values too', { exact: false })).not.toBeChecked()
+  expect(calls.filter((c) => c.path === 'collect').map((c) => c.body.page)).toEqual(['1', '2'])
+  expect(calls.filter((c) => c.path === 'apply')).toHaveLength(0)
+})
+
+test('missing BPM review can explicitly select uncertain suggestions across result pages, preserving existing BPMs and keys', async ({
+  page,
+}, testInfo) => {
+  const { dialog, calls, tracks } = await setup(page, 55, true, false, false)
+  tracks[2].bpm = -5 // Invalid/nonpositive values are missing, not preserved positive BPMs.
+  await openMissing(page)
+  await dialog.getByRole('button', { name: 'Analyse 54 tracks', exact: true }).click()
+  const start = calls.find((c) => c.path === 'start')!
+  expect(start.body).toMatchObject({ bpm: true, key: false, compareExisting: false })
+  expect(start.body.trackIds).not.toContain('track-1')
+  await expect(dialog).not.toContainText('Existing: -5 · preserved')
+  await expect(
+    dialog.getByLabel('Apply BPM for Test artist — Garage 2 (Dub)', { exact: true }),
+  ).not.toBeChecked()
+  await dialog
+    .getByRole('button', { name: 'Select all missing BPM suggestions', exact: true })
+    .click()
+  await dialog.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(dialog).toContainText('Garage 54')
+  await page.screenshot({ path: testInfo.outputPath('missing-bpm-review.png') })
+  await dialog
+    .getByRole('button', { name: 'Apply selected missing values (54)', exact: true })
+    .click()
+  await expect(dialog.getByRole('status')).toContainText('54 tracks updated')
+  const applied = calls.filter((c) => c.path === 'apply')
+  expect(applied).toHaveLength(54)
+  expect(applied.every((c) => c.body.key === null)).toBe(true)
+})
+
+test('missing BPM collection errors can be retried and an empty result explains that nothing changed', async ({
+  page,
+}) => {
+  const state = await setup(page, 3, true, false, false)
+  state.failMissing(true)
+  await openMissing(page)
+  await expect(page.getByRole('alert')).toContainText('Tracklist unavailable')
+  await expect(state.dialog).not.toBeVisible()
+  state.failMissing(false)
+  state.tracks.forEach((t) => {
+    t.bpm = 125
+  })
+  await openMissing(page)
+  await expect(
+    page.getByText(
+      'No playable tracks with missing BPMs in this list. Existing values are unchanged.',
+    ),
+  ).toBeVisible()
+  await expect(state.dialog).not.toBeVisible()
+  expect(state.calls.some((c) => c.path === 'start')).toBe(false)
+})
+
+test('key disagreement, tuning and alternatives remain visible and never auto-select key', async ({
+  page,
+}, testInfo) => {
+  const { dialog } = await setup(page, 1, true, false, true, true)
+  await dialog.getByRole('button', { name: 'Analyse 1 track', exact: true }).click()
+  await expect(
+    dialog.getByLabel('Apply key for Test artist — Garage 0 (Dub)', { exact: true }),
+  ).not.toBeChecked()
+  await expect(dialog).toContainText('Tonal sections disagree')
+  await dialog.getByText('Analysis details', { exact: true }).click()
+  await expect(dialog).toContainText(
+    'Tonal section agreement: 42% (not probability of correctness)',
+  )
+  await expect(dialog).toContainText('Alternative interpretation: 9B')
+  await expect(dialog).toContainText('Tuning offset: -12.5 cents')
+  await page.screenshot({ path: testInfo.outputPath('key-disagreement.png') })
+})
+
+test('missing BPM preset resets previous key/comparison choices on the already mounted dialog', async ({
+  page,
+}) => {
+  const { dialog } = await setup(page)
+  await dialog.getByLabel('Compare existing values too', { exact: false }).check()
+  await dialog.getByRole('button', { name: 'Close audio analysis', exact: true }).click()
+  await openMissing(page)
+  await expect(dialog.getByLabel('Find BPM', { exact: true })).toBeChecked()
+  await expect(
+    dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }),
+  ).not.toBeChecked()
+  await expect(dialog.getByLabel('Compare existing values too', { exact: false })).not.toBeChecked()
+})
 
 test('selected analysis reviews missing fields, uncertain results and half/double corrections', async ({
   page,

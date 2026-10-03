@@ -70,7 +70,9 @@ public sealed class MusicAnalysisJobs(IServiceScopeFactory scopes, IMusicAnalyze
         {
             var stored = json is null ? null : JsonSerializer.Deserialize<StoredMusicAnalysis>(json);
             return stored?.Result is { } result && !string.IsNullOrWhiteSpace(result.Engine) &&
-                double.IsFinite(result.Seconds) && double.IsFinite(result.TempoStrength) && double.IsFinite(result.KeyStrength)
+                double.IsFinite(result.Seconds) && double.IsFinite(result.TempoStrength) && double.IsFinite(result.KeyStrength) &&
+                (result.KeyAgreement is null || double.IsFinite(result.KeyAgreement.Value) && result.KeyAgreement.Value is >= 0 and <= 1) &&
+                (result.TuningCents is null || double.IsFinite(result.TuningCents.Value))
                 ? stored : null;
         }
         catch (JsonException) { return null; }
@@ -165,8 +167,14 @@ public sealed class MusicAnalysisJobs(IServiceScopeFactory scopes, IMusicAnalyze
                         Key = key ? result.Key : stored.Result.Key, TempoStrength = bpm ? result.TempoStrength : stored.Result.TempoStrength,
                         KeyStrength = key ? result.KeyStrength : stored.Result.KeyStrength,
                         TempoUncertain = bpm ? result.TempoUncertain : stored.Result.TempoUncertain,
-                        KeyUncertain = key ? result.KeyUncertain : stored.Result.KeyUncertain };
-                var next = stored?.SourceHash == hash && stored.Result.Engine == result.Engine
+                        KeyUncertain = key ? result.KeyUncertain : stored.Result.KeyUncertain,
+                        KeyAgreement = key ? result.KeyAgreement : stored.Result.KeyAgreement,
+                        TuningCents = key ? result.TuningCents : stored.Result.TuningCents,
+                        AlternativeKey = key ? result.AlternativeKey : stored.Result.AlternativeKey,
+                        KeyWarning = key ? result.KeyWarning : stored.Result.KeyWarning };
+                // A new engine invalidates suggestions, not the history of values accepted
+                // from identical source bytes. Existing library metadata is never overwritten.
+                var next = stored?.SourceHash == hash
                     ? stored with { Result = result, AnalyzedAt = DateTime.UtcNow }
                     : new StoredMusicAnalysis(hash, result, DateTime.UtcNow);
                 track.MusicAnalysisJson = JsonSerializer.Serialize(next);
