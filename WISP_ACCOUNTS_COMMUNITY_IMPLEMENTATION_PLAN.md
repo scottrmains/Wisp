@@ -788,7 +788,7 @@ Those can be separate future proposals. Do not add placeholder integrations or
 mark this plan incomplete because it intentionally excludes unrelated products.
 
 No phase has a guaranteed date or blanket accuracy/security/compliance promise.
-Phase 1 is implemented for review. Phase 2 is the next slice and requires its
-development-infrastructure approval and provider proof; actual desktop sign-in
+Phase 1 is merged. Phase 2 development infrastructure is approved and provisioned;
+real provider and recovery proof remain pending. Actual desktop sign-in
 remains Phase 3. Stop at each paid/public release gate for the owner's decision,
 while continuing safe approved work within the active phase.
