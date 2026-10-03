@@ -37,9 +37,14 @@ jobs:
         env:
           WISP_CLOUD_TEST_PG_CONTAINER_ID: ${{ job.services.postgres.id }}
         run: dotnet test Wisp.Cloud.slnx -c Release
+      - name: Build isolated development operator and identity-proof tools
+        run: |
+          dotnet build tools/Wisp.Cloud.Migrations/Wisp.Cloud.Migrations.csproj -c Release
+          dotnet build tools/Wisp.Cloud.IdentityProof/Wisp.Cloud.IdentityProof.csproj -c Release
       - name: Validate draft Azure template without deployment
         run: |
           az bicep install --version v0.47.16
           az bicep build --file infra/accounts/main.bicep --outfile /tmp/wisp-cloud-template.json
           az bicep build --file infra/accounts/budget.bicep --outfile /tmp/wisp-cloud-budget.json
+          az bicep build --file infra/accounts/development-bootstrap.bicep --outfile /tmp/wisp-cloud-bootstrap.json
       # No Azure login, federated write identity, image publication or deploy.

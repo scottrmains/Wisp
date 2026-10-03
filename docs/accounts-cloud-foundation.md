@@ -143,20 +143,24 @@ Real `pg_dump`/`pg_restore` into a new owned database preserves account IDs,
 profiles, identities and creation audit counts. This is a local recovery proof,
 not a tested Azure point-in-time restore or a production recovery guarantee.
 
-## Draft Azure deployment scope
+## Azure development deployment scope
 
-`infra/accounts/main.bicep` compiles locally without errors. It is a draft, not a
-validated or deployed Azure environment. It creates resources only in the selected
+`infra/accounts/main.bicep` compiles locally without errors. Its development
+bootstrap has been validated and deployed under separate owner approval; staging
+and production remain unapproved. It creates resources only in the selected
 WISP account resource group with explicit dev/staging/prod names and separate
 database/configuration. Use dedicated groups such as `rg-wisp-accounts-dev`; do not
-modify Pulse, Physiqo or the existing WISP marketing group. Proposed UK South
-requires regional availability and quota review before deployment.
+modify Pulse, Physiqo or the existing WISP marketing group. Development is in UK
+South; other regions/environments still require availability and quota review.
 
-The template proposes a VNet-integrated PostgreSQL 17 B1ms server/32-GiB storage,
+The template defines a VNet-integrated PostgreSQL 17 B1ms server/32-GiB storage,
 private database DNS, separate runtime secret in RBAC Key Vault, a dedicated managed
 identity, Basic ACR with admin credentials off, consumption Container Apps with
 HTTPS ingress, redacted Log Analytics with an ingestion cap, health probes and a
-resource-group monthly budget with actual/forecast email alerts. Managed identity
+resource-group monthly budget with actual/forecast email alerts. The approved
+development deployment instead uses `infra/accounts/budget.bicep` at subscription
+scope, filtered by WISP/dev/accounts tags, including managed networking costs.
+Budget alerts are not a cap. Managed identity
 has only secret-read and registry-pull roles at the specific resource scopes;
 database access uses a separately bootstrapped restricted role. Entra registration
 and customer flows are not created by this template.
@@ -167,16 +171,19 @@ to that registry and bootstrapping the runtime database role, redeploy with
 `deployApi=true` and its 64-character SHA-256 image digest. The cloud service itself
 also defaults to disabled. Secret parameters, alert contacts and budget are
 required inputs even for bootstrap. No pipeline builds,
-pushes or deploys images. The Dockerfile is a future deployment template only;
-no cloud image or desktop installer was built during verification. A registry must
+pushes or deploys images. The approved operator built the API and migration images
+remotely in ACR from an explicit cloud-only Git archive. No desktop installer was
+built. A registry must
 exist and contain the approved image before deploying the app. The bootstrap
-switch separates that step from app deployment; neither step has been run or
-approved, and disabled readiness intentionally returns 503.
+switch separates that step from app deployment. Disabled readiness intentionally
+returns 503; enabling the approved development backend does not enable desktop
+accounts or authorize a production release.
 
-Pending deployment checks include Azure what-if/policy validation, resource
-provider registration, Key Vault reference/RBAC propagation, private networking,
-role/bootstrap commands, image readiness, regional B1ms quotas and real resource
-costs. Secrets must be passed as secure parameters or managed references, never
+Azure what-if, provider registration, Key Vault reference/RBAC propagation,
+private-network migration and runtime-role checks succeeded for development.
+Real sign-in, cross-client identity and managed recovery/rotation still need proof;
+actual billing consumption must be monitored. Secrets use secure parameters or
+managed references, never
 saved into Git, shown on a command line or emitted as template outputs. Review
 [Container Apps managed identities](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull)
 and [PostgreSQL resource configuration](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2025-08-01/flexibleservers)
@@ -187,7 +194,8 @@ before approving actual deployment.
 1. Confirm credit eligibility for each service, subscription offer, region, budget
    currency, alerts, compute/storage/backup/logging/registry/network/egress estimates
    and supported quotas. Subscription access is not credit confirmation. Alerts
-   and ingestion caps are not an overall spending cap. No resource is approved yet.
+   and ingestion caps are not an overall spending cap. Development is approved;
+   approval does not extend to staging/production or paid identity add-ons.
 2. Approve only the dedicated development scope. Create a customer External ID
    tenant and API/native/web registrations with delegated `account.access`. Verify
    sign-up/sign-in, access-token issuer/audience/claims/client IDs, native system-
@@ -225,7 +233,8 @@ before approving actual deployment.
 ## Next decision
 
 The code, migrations, synthetic proofs and template can merge independently.
-Phase 2 remains open for cost approval, development provisioning, the actual
-provider/native redirect proof and Azure operating exercises. Phase 3 must not
+Development cost/credit review and infrastructure bootstrap are recorded in the
+linked evidence log. Phase 2 remains open for actual provider/native redirect and
+cross-client proof plus Azure operating exercises. Phase 3 must not
 enable desktop login until those prerequisites are accepted. There is no cost
-estimate or credit-coverage claim based solely on the large available credit balance.
+estimate or credit-coverage claim based solely on the available credit balance.

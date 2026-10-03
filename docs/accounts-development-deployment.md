@@ -12,6 +12,9 @@ sponsorship offer, has active startup credit and a GBP billing profile. Exact
 balances, billing identifiers, account emails and private billing responses are
 not published here. The reported balance is invoice-based, not live usage.
 Spending limit is off; alerts are not a hard cap or assurance against later charges.
+The reviewed credit lot expires in March 2028; review renewal/remaining coverage
+and stop or separately approve resources before expiry. This deployment does not
+install an automatic shutdown or make a later paid bill impossible.
 
 The planned infrastructure uses Microsoft's first-party Azure consumption
 services, not Marketplace purchases, paid support or separate software licences.
@@ -60,15 +63,35 @@ when re-estimating actual deployment usage.
   deployment operator Secrets Officer only on that vault. Random administrator
   and runtime credentials are escrowed there before database creation and are
   never supplied through command-line arguments, files, source or logs.
-- Infrastructure deployment is in progress. Live provisioning caught an incorrect
-  AcrPull GUID; the template now uses the verified Azure role definition. Local
-  compilation alone did not catch that identifier error.
+- Infrastructure bootstrap succeeded: PostgreSQL 17 is Ready with public access
+  disabled, private DNS/VNet integration, Basic ACR, Container Apps hosting and
+  capped logging are provisioned. Live provisioning caught an incorrect AcrPull
+  GUID; the template now uses the verified Azure role definition. Compilation
+  alone did not catch that identifier error.
+- Inspected the managed networking group: its load balancer and public IP inherit
+  all three budget filter tags. The actual initial deployment has one public IP;
+  the two-IP planning estimate above deliberately remains conservative.
+- Built both cloud images remotely in the development registry from a whitelisted
+  tracked Git archive, never the whole checkout. Migration and API builds succeeded
+  and deployment uses immutable SHA-256 digests. No Windows installer was built.
+- Executed the manual private-network bootstrap job successfully. It applied the
+  initial EF migration, connected as `wisp_runtime` and verified INSERT permission
+  plus denial of user UPDATE/DELETE and schema CREATE. No customer data existed.
+- Hardened PostgreSQL logging before role/password setup: terse errors, no error
+  statements, and no parameter logging. This reduces accidental credential leakage
+  from PL/pgSQL error context as well as application logs.
+- Development API deployment succeeded using the pinned API image and runtime
+  connection secret. Actual HTTPS checks returned live 200, ready 200 and
+  anonymous account/me 401; all three responses used no-store and request IDs.
+  The enabled development backend does not enable the desktop Account feature.
 
 ## Deployment safeguards
 
 The API identity reads only its runtime connection secret and pulls only from the
-development registry. A separate bounded operator job will apply the migrations
-and bootstrap the runtime role from private-network hosting. Its tool refuses
+development registry. A separate bounded manual operator job applied migrations
+and bootstrapped the runtime role from private-network hosting. Its identity reads
+only the migration connection and runtime password secrets, not the whole vault.
+Its tool refuses
 production database names, non-Azure hosts, insecure TLS, unbounded connections
 and elevated runtime roles, and withholds exception/secret details from logs.
 It is never called from the desktop or API startup path.
@@ -80,9 +103,10 @@ separate from the production Windows installer workflow.
 
 ## Remaining acceptance gates
 
-- [ ] Infrastructure deployment, private DNS/connectivity and role assignments.
-- [ ] Remote operator migration and reduced-role proof under actual Azure roles.
-- [ ] Deployed liveness/readiness, unauthorized requests and safe logs.
+- [x] Infrastructure deployment, private DNS/connectivity and scoped role assignments.
+- [x] Remote operator migration and reduced-role proof under actual Azure roles.
+- [x] Deployed liveness/readiness and anonymous rejection with safe response headers.
+- [ ] Review actual safe request logs after real provider tests.
 - [ ] Real customer sign-up/sign-in and native browser redirect/token validation.
 - [ ] Same customer identity/account from the native and actual website client.
 - [ ] Real runtime-secret rotation, revision refresh and managed PostgreSQL restore.
@@ -92,3 +116,20 @@ separate from the production Windows installer workflow.
 Current tenant creation, app registration and synthetic tests do not satisfy the
 real sign-in, token, rotation or managed restore checks. Do not mark Phase 2 complete
 or enable accounts in the desktop app based on provisioning progress alone.
+
+## Native provider proof tool
+
+`tools/Wisp.Cloud.IdentityProof` is a standalone diagnostic, not desktop sign-in.
+It uses maintained MSAL.NET with the system browser and localhost PKCE callback,
+keeps tokens in memory only and calls the approved development API to verify
+current-user and retry-safe provisioning. No provider password, verification code,
+token or email belongs in chat, logs or an artifact. Real customer interaction is
+required; a compiled tool or configured tenant is not a successful sign-in proof.
+
+Supply only non-secret development settings through `WISP_PROOF_AUTHORITY`,
+`WISP_PROOF_API`, `WISP_PROOF_NATIVE_CLIENT` and `WISP_PROOF_API_AUDIENCE`, then run
+`dotnet run --project tools/Wisp.Cloud.IdentityProof -c Release -- --approved-development-proof`.
+The guarded API target must be the development Container App's HTTPS root.
+It refuses production endpoints and prints generic results, not token contents.
+Website-client proof, signing-key refresh, secret rotation and managed restore
+remain independent acceptance gates.

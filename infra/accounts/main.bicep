@@ -1,7 +1,7 @@
 targetScope = 'resourceGroup'
 
-// Draft infrastructure only. No pipeline deploys this template. Separate owner
-// approval, credit/cost review, provider proof and role bootstrap are required.
+// No pipeline deploys this template. Development has separate owner approval;
+// staging/production still require their own cost review and provider proof.
 @allowed(['dev', 'staging', 'prod'])
 param environment string
 param location string = resourceGroup().location
@@ -103,6 +103,18 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2025-08-0
   parent: postgres
   name: databaseName
   properties: { charset: 'UTF8', collation: 'en_US.utf8' }
+}
+// Avoid including statements, parameter values or PL/pgSQL error context in
+// server logs, particularly during privileged role/password bootstrap.
+resource safeLogVerbosity 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2025-08-01' = {
+  parent: postgres
+  name: 'log_error_verbosity'
+  properties: { value: 'terse', source: 'user-override' }
+}
+resource safeErrorStatement 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2025-08-01' = {
+  parent: postgres
+  name: 'log_min_error_statement'
+  properties: { value: 'panic', source: 'user-override' }
 }
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${prefix}-api-identity'

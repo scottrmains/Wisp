@@ -4,8 +4,10 @@ Created and reviewed: 2026-10-03
 
 Status: Phase 1 local groundwork is merged. Phase 2 cloud code, migrations,
 isolated tests and draft infrastructure templates are implemented for review on
-2026-10-03. The owner chose code/templates first; cost approval, real provider
-proof and Azure development deployment remain pending. Phase 2 is not fully
+2026-10-03. After the initial code-only choice, the owner approved sponsorship-
+eligible development provisioning. Cost review, infrastructure and private-network
+migration/runtime-role proof are now recorded in the development evidence log.
+Real provider, cross-client and managed recovery proofs remain pending. Phase 2 is not fully
 accepted, and Phases 3–10 remain unchecked. This is the authoritative roadmap,
 not a claim that real sign-in, cloud storage, payments or community already exist.
 
@@ -345,24 +347,27 @@ be added without making the local application depend on a cloud service.
 Purpose: build and test a minimal protected cloud service before wiring desktop
 login into production.
 
-Current scope: code and templates first, explicitly chosen by the owner on
-2026-10-03. No Azure provisioning, container publication or real identity flow
-is approved by this slice. See the
+Current scope: initially code and templates first on 2026-10-03, then separately
+approved development provisioning conditional on sponsorship eligibility.
+Development infrastructure and cloud images now exist; production and desktop
+sign-in remain unapproved. See the [live evidence log](docs/accounts-development-deployment.md) and
 [cloud service and development runbook](docs/accounts-cloud-foundation.md).
 
 Implementation checklist:
 
-- [ ] Confirm Azure subscription credit eligibility, allowed resources, region,
+- [x] Confirm Azure subscription credit eligibility, allowed resources, region,
   budget alerts and expected compute/database/storage/egress costs with the owner.
   Credits are not proof every service or third-party bill is covered; budget
   alerts are not a guaranteed spending cap.
-- [ ] Approve development infrastructure separately. Use WISP-specific resources
+- [x] Approve development infrastructure separately. Use WISP-specific resources
   and least-privilege identities; do not modify Pulse/Physiqo application resources.
 - [x] Draft and compile infrastructure-as-code with separate dev/staging/production
   resource/configuration boundaries and secure secret inputs. Infrastructure
   bootstrap defaults to no Container App; app deployment requires a published image.
-- [ ] Review Azure what-if, policy, regional quotas, private networking, managed
+- [x] Review Azure what-if, policy, regional quotas, private networking, managed
   identity/secret references and runtime-role bootstrap before deploying the draft.
+  Actual approved private-network operator execution succeeded; template compiler
+  verification alone was not treated as proof of runtime/RBAC correctness.
 - [ ] Prove Entra External ID customer sign-up/sign-in, verified identity claims,
   API access-token audience/scopes and native redirect compatibility on a dev tenant.
 - [x] Add a separate cloud API and PostgreSQL migrations for users, auth identities,

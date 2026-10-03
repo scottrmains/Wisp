@@ -2,7 +2,43 @@
 
 Last reviewed: 2026-10-03
 
+## 2026-10-03: Approved account development infrastructure
+
+- **Approval and cost:** the owner subsequently approved development provisioning
+  conditional on sponsorship coverage. Confirmed the selected sponsorship offer
+  and active credit; used only first-party Azure consumption and External ID's
+  base MAU tier, with no SMS/premium/Go-Local add-ons. Planning estimate GBP 40–60
+  monthly before tax, not guaranteed. A GBP 60 tag-filtered monthly alert budget
+  includes managed networking; alerts are not a spending cap. Private billing
+  balances/identifiers and contact emails are not committed.
+- **Provisioned development only:** dedicated UK South group, customer identity
+  tenant, separate API/native/website registrations and sign-up/sign-in flow;
+  private PostgreSQL 17 B1ms/32 GiB, private DNS/VNet, RBAC vault, Basic registry,
+  Container Apps environment and capped logs. Existing application resources and
+  the owner's music/library/USBs remain untouched. No production release or merge.
+- **Actual deployment evidence:** remote API and migration images built from a
+  cloud-only tracked Git archive, pinned by digest. Manual private-network job
+  migrated the database and verified the separate runtime role's INSERT/read
+  access while denying user UPDATE/DELETE and schema CREATE. API secret access
+  is separate from the operator's narrowly scoped migration secret access.
+  PostgreSQL error/statement logging is hardened before role/password setup.
+  Development API deployment succeeded; actual HTTPS live/ready return 200 and
+  anonymous account/me returns 401, with no-store and request IDs.
+- **Diagnostic only:** a maintained MSAL.NET system-browser/PKCE proof tool is
+  separate from desktop startup, keeps tokens in memory and targets only the
+  development API. Compiling/configuring it does not prove real sign-in.
+- **Verification:** the 28 cloud integration tests still pass; operator and
+  identity-proof builds have zero warnings/errors. MSAL dependency check reports
+  no known advisory vulnerabilities. No Windows installer was generated.
+- **Still open:** real customer/native and website identity proof, managed restore,
+  actual secret/revision rotation and signing-key refresh/rotation limitations.
+  Phase 2 is not fully accepted; desktop WISP remains Guest and Phase 3 is not
+  enabled. See [deployment evidence](docs/accounts-development-deployment.md).
+
 ## 2026-10-03: Phase 2 cloud account code and templates
+
+Historical code-only slice below; the subsequent development approval and live
+provisioning above supersede its no-provisioning/cost-pending statements.
 
 - **Implemented for review:** independent `Wisp.Cloud.slnx`, ASP.NET Core cloud
   API and PostgreSQL migrations for account UUIDs, private profiles, trusted
