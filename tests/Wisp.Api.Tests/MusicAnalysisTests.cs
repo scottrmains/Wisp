@@ -157,13 +157,15 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
         Assert.Null((await Track()).Bpm); Assert.Null((await Track()).MusicalKey);
     }
 
-    [Fact]
-    public async Task New_engine_invalidates_suggestions_but_keeps_accepted_value_provenance()
+    [Theory]
+    [InlineData("wisp-onset-chroma-v1")]
+    [InlineData("wisp-multiband-tonal-v2")]
+    public async Task New_engine_invalidates_suggestions_but_keeps_accepted_value_provenance(string previousEngine)
     {
         var first = await Wait((await Start()).Id);
         (await Apply(first.Id)).EnsureSuccessStatusCode();
         var stored = MusicAnalysisJobs.Read((await Track()).MusicAnalysisJson)!;
-        await Edit(t => t.MusicAnalysisJson = System.Text.Json.JsonSerializer.Serialize(stored with { Result = stored.Result with { Engine = "wisp-onset-chroma-v1" } }));
+        await Edit(t => t.MusicAnalysisJson = System.Text.Json.JsonSerializer.Serialize(stored with { Result = stored.Result with { Engine = previousEngine } }));
         var next = await Wait((await Start(compare: true)).Id);
         Assert.False(next.Rows[0].Cached); Assert.Equal(2, analyzer.Calls.Count);
         var current = MusicAnalysisJobs.Read((await Track()).MusicAnalysisJson)!;

@@ -2,7 +2,8 @@ using NAudio.Dsp;
 
 namespace Wisp.Infrastructure.Audio;
 
-/// Sub-semitone pitch observations, shared tuning correction and section agreement.
+/// Independent peak/tuning diagnostic. The published spectral detector supplies
+/// the primary suggestion; this view only warns about disagreement and reports tuning.
 /// Uses no external tags, proprietary analyser, trained model or third-party DSP code.
 internal sealed class KeyEstimator
 {
@@ -40,8 +41,8 @@ internal sealed class KeyEstimator
             var midi = 69 + 12 * Math.Log2((k + offset) * MusicFeatures.SampleRate / fft.Length / 440);
             peaks.Add((midi, value)); peakEnergy += value * value;
         }
-        // Retain the measured baseline as the primary view. Tuning/section views
-        // expose disagreement rather than silently promoting a less accurate experiment.
+        // Retain the previous baseline within this independent diagnostic view.
+        // It does not overrule the production spectral detector.
         var referenceFrame = new double[12];
         foreach (var peak in peaks)
         {

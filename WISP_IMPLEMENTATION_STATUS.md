@@ -2,6 +2,67 @@
 
 Last reviewed: 2026-10-03
 
+## 2026-10-03: Independently benchmarked spectral key detector
+
+- **Implemented:** `wisp-multiband-dsk-v3` replaces peak-only primary key
+  decisions with an independent implementation of the published direct spectral
+  kernel from [Sha'ath's KeyFinder report](https://www.ibrahimshaath.co.uk/keyfinder/KeyFinder.pdf).
+  Six octaves (C1–B6), long overlapping Blackman FFT windows, published empirical
+  major/minor tone profiles, square-root note compression, per-frame level
+  normalisation and whole-track aggregation capture low notes and quieter tonal
+  content. Processing is streaming/bounded-memory, using existing NAudio; no new
+  runtime dependency, model, Python installation or online service is needed.
+  The previous peak/tuning view remains a disagreement diagnostic, not the primary
+  decision. Spectral section agreement, second-best key and review warnings are
+  preserved; ALL keys still require explicit review. Similarity is not confidence.
+- **Independent benchmark implemented:** pinned, checksum-verified GiantSteps
+  annotations/audio; deterministic 96-preview sample (`20261003`), 48 development
+  and 48 untouched holdout. The candidate was fixed before evaluating holdout.
+  Labels do not come from the owner's tags or Mixed In Key. Official S-KEY
+  code/checkpoint, upstream decoder and whole-song inference serve as a proven
+  reference, with an upstream known-key sanity fixture, restricted checkpoint
+  loading and pinned SHA-256. Reference code/audio/weights stay in ignored artifacts.
+  No GPL KeyFinder/AGPL Essentia implementation is incorporated; no S-KEY weights
+  are redistributed while their proprietary-app redistribution question remains
+  unanswered upstream. The app ships the independently implemented DSP detector.
+
+  | Sample | Previous WISP exact | New WISP exact | Official S-KEY exact |
+  | --- | --- | --- | --- |
+  | Development, 48 | 19 (39.6%) | 29 (60.4%) | 32 (66.7%) |
+  | Unseen holdout, 48 | 21 (43.8%) | 31 (64.6%) | 34 (70.8%) |
+
+  Held-out post-2017 MIREX weighted scores: **0.5146 → 0.7292**, S-KEY **0.7500**.
+  Related-key partial credit is NOT exact accuracy. Failed/null/missing predictions
+  count as zero; no decoding failures occurred, with one baseline development
+  abstention. Key-only mean held-out times were 0.120s / 0.448s / 1.303s on this
+  machine. This establishes improvement on this small EDM-preview sample, NOT
+  commercial parity or general accuracy on full vinyl rips/other genres.
+  See [reproduction instructions and individual predictions](tools/key-analysis/README.md).
+  Both splits are now regression samples; future tuning requires a new holdout.
+- **Reported files, read-only:** Take Me Away changes 9B → **11A**, alternative
+  **8A**, 21% section agreement; S-KEY returns **8A**, matching the owner's reference.
+  WISP's primary discrepancy is NOT claimed solved. Keep On changes 9A → **1A**;
+  S-KEY gives **10A**, versus the owner's 9A. That disagreement is also unresolved,
+  not proof the owner's metadata is wrong. Pasion remains **4A** (also S-KEY 4A).
+  Keep On remains **125.00 BPM**; Pasion remains **128.00** with its existing
+  recoverable-decoder warning. SHA-256s on all three source files are unchanged;
+  no database, file tags, cues or library links were changed during evaluation.
+- **Safe integration:** BPM algorithm and decoder safeguards are unchanged.
+  Versioned cache invalidation prevents stale key suggestions; previously accepted
+  metadata/provenance remain intact. Missing-only analysis still skips existing
+  values. To compare an existing key, explicitly enable comparison in the analysis
+  review; it will not overwrite a populated key automatically.
+- **Verification:** new regressions cover all 24 Camelot mappings, long percussion
+  intros, broadband-noise/single-pitch abstention, idempotent final-window handling,
+  unchanged BPM with key enabled, v1/v2 cache upgrades, and independent score
+  weights/alignment/missing-result accounting. Existing detuning, modulation,
+  formats, cancellation and source-preservation tests pass. Final Release suite:
+  **573 backend cases** (115 Core / 239 Infrastructure / 219 API), **73 client unit
+  cases**, **158 browser cases**, client TypeScript/Vite build, lint (zero errors,
+  12 pre-existing warnings), benchmark build and **6 scoring/report tests**.
+  CI builds the benchmark and runs only dependency-free scoring tests, not
+  third-party dataset/model downloads. No installer/release is produced by this PR.
+
 ## 2026-10-03: Multiband BPM, missing-BPM tracklist action and key diagnostics
 
 - **BPM implemented:** `wisp-multiband-tonal-v2` measures bass and full-spectrum

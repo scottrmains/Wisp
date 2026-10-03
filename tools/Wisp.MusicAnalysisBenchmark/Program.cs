@@ -2,6 +2,20 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wisp.Infrastructure.Audio;
 
+if (args.FirstOrDefault() == "--manifest") return await ReferenceBenchmark.Run(args);
+if (args.FirstOrDefault() == "--file")
+{
+    if (args.Length != 4 || args[2] != "--ffmpeg" || !File.Exists(args[1]) || !File.Exists(args[3]))
+    { Console.Error.WriteLine("Usage: --file <audio file> --ffmpeg <exe>. Read-only audio analysis, no reference label inferred."); return 1; }
+    var single = new MusicAnalyzer(new Mp3Transcoder(NullLogger<Mp3Transcoder>.Instance, () => args[3]));
+    var before = await FileHash(args[1]);
+    var analysis = await single.AnalyzeAsync(args[1], true, true, default);
+    var after = await FileHash(args[1]);
+    if (before != after) throw new IOException("Source checksum changed");
+    Console.WriteLine(JsonSerializer.Serialize(new { file = Path.GetFileName(args[1]), sha256 = before, result = analysis }));
+    return 0;
+}
+
 // Read-only benchmark: no database, profile, tag writes, source copies or downloads.
 // Existing tags are a comparison reference, NOT independently verified ground truth.
 var seed = 0; var skip = 0;
@@ -60,3 +74,9 @@ Console.WriteLine(JsonSerializer.Serialize(new { summary = true, examined = coun
     tempoMatchesIncludingHalfDouble = octaveMatches, camelotKeysCompared = keysCompared, exactKeyMatches = keyMatches,
     caution = "Agreement with tags/filename references is not independently verified accuracy or parity with commercial analysers." }));
 return 0;
+
+static async Task<string> FileHash(string path)
+{
+    await using var stream = File.OpenRead(path);
+    return Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(stream));
+}
