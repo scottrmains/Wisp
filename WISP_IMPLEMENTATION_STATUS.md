@@ -118,6 +118,26 @@ Last reviewed: 2026-10-03
   warnings remain. No installer, production deployment or user database repair
   was performed; the installed release needs updating after owner promotion.
 
+## 2026-10-03: Deferred private repository and Azure releases
+
+- Added `WISP_PRIVATE_RELEASE_HOSTING_PLAN.md` and a README backlog link for
+  future private-source/public-installer distribution, Azure publication,
+  individual release-note pages, migration, verification and recovery.
+- Status is explicitly **deferred and not implemented**. No Azure storage,
+  identity permissions, public downloads, website, application, licence or
+  repository-visibility settings changed. Existing production-only releases
+  remain in use; implementation/cutover require future owner approval.
+- The plan follows the repository's established checklist format and separates
+  proposed decisions from current behaviour, including private GitHub plan/cost
+  checks and bundled dependency licensing obligations.
+- Removed 41 stale remote feature branches after verifying each tip was already
+  in `develop` or belonged to an exactly matched merged PR whose merge is in
+  `develop`. Saved and verified an ignored recovery bundle under
+  `artifacts/branch-cleanup/` before deletion, including the two superseded tips.
+  Deletion checked expected remote SHAs atomically to avoid removing concurrent
+  work. `main` and `develop` were retained; this unmerged documentation PR branch
+  is retained until owner review/merge. No local worktree files were removed.
+
 ## 2026-10-02: File-date backfill CI test reliability
 
 - Develop run `36956377808` failed in the existing file-date backfill integration
