@@ -127,7 +127,7 @@ The built-in **Settings** dialog (gear icon top-right) shows these paths and let
 
 - [Accounts, community and premium plan](WISP_ACCOUNTS_COMMUNITY_IMPLEMENTATION_PLAN.md)
   — optional accounts, mix sharing, discussion, cloud backup and future billing
-  in ten gated phases; planning only, existing guest features remain unchanged
+  in ten gated phases; Phase 1 Guest groundwork implemented, real sign-in still deferred
 - [Private repository and Azure release hosting plan](WISP_PRIVATE_RELEASE_HOSTING_PLAN.md)
   — deferred migration of public downloads and versioned release notes
 - [Application UI redesign plan](WISP_UI_REDESIGN_IMPLEMENTATION_PLAN.md) — phased

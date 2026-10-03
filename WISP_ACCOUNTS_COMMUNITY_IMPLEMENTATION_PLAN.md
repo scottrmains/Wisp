@@ -2,9 +2,10 @@
 
 Created and reviewed: 2026-10-03
 
-Status: planning complete; implementation has not started. All delivery checklists
-below are deliberately unchecked. This is the authoritative roadmap for this
-feature, not a claim that accounts, cloud storage, payments or community exist.
+Status: Phase 1 local groundwork implemented for review on 2026-10-03. Its
+checklists record the delivered interfaces and isolated verification; Phases 2–10
+remain unchecked. This is the authoritative roadmap, not a claim that real
+sign-in, cloud storage, payments or community already exist.
 
 WISP should remain a complete local DJ application that works as a guest. An
 optional account will add a connected experience: a DJ profile, mix sharing,
@@ -218,8 +219,10 @@ media container public simply because release installers are public.
 
 ### Intended code boundaries
 
-These are proposed implementation locations, not projects added by this plan.
-Confirm names during Phase 1; preserve the separation even if names change.
+Phase 1 implements the local contracts, disabled adapters and account-status UI
+within the existing projects. The cloud projects and provider adapters below
+remain proposed. See [the implemented foundation](docs/accounts-foundation.md)
+for exact boundaries, contract versioning, configuration and the threat model.
 
 | Area | Intended location and change |
 | --- | --- |
@@ -245,7 +248,7 @@ flow; it must not receive the desktop's protected token cache.
 | --- | --- |
 | Local TrackId and recording/plan IDs | Preserve existing local identities; signing in does not regenerate them |
 | WispUserId | Stable server-generated UUID for the cloud user |
-| AuthIdentity | Unique trusted provider issuer plus subject linked to WispUserId; email is not the identity key |
+| AuthIdentity | Validated provider identity linked to WispUserId; prove cross-client mapping in Phase 2 because subjects can differ between app registrations; email is never the identity key |
 | InstallationId and device record | Random installation association and user-visible device label; not proof of identity or authority |
 | Local workspace cloud binding | Explicit account/workspace association for backup/publishing queues; not automatic ownership of the whole library |
 | Profile and preferences | Private account settings plus separately approved public profile fields |
@@ -301,32 +304,35 @@ scope, record that decision here instead of marking it complete.
 Purpose: add safe seams for later accounts without requiring an identity provider,
 database server, login screen, subscription or network access.
 
+Implemented for review: 2026-10-03. [Delivery notes and verified limits](docs/accounts-foundation.md).
+No local database migration, account network call or Azure resource was added.
+
 Implementation checklist:
 
-- [ ] Define account/session states, a safe UI status contract and native account,
+- [x] Define account/session states, a safe UI status contract and native account,
   cloud-client, protected-token-store and entitlement interfaces.
-- [ ] Supply a Guest/no-cloud implementation and explicit disabled-by-default
+- [x] Supply a Guest/no-cloud implementation and explicit disabled-by-default
   cloud feature configuration. Missing configuration must fail safely to Guest.
-- [ ] Separate account UI state from local library, playback, recording and
+- [x] Separate account UI state from local library, playback, recording and
   Soulseek settings. Do not reuse Soulseek credentials for WISP authentication.
-- [ ] Define installation identity and future workspace association semantics
+- [x] Define installation identity and future workspace association semantics
   without claiming existing library records for a cloud user.
-- [ ] Add Settings entry/status only where useful; do not ship inert login or
+- [x] Add Settings entry/status only where useful; do not ship inert login or
   premium buttons or a fake signed-in state.
-- [ ] Audit loopback binding, Host/Origin checks and protection of local commands
+- [x] Audit loopback binding, Host/Origin checks and protection of local commands
   from untrusted websites. CORS alone is not local API authentication. Keep the
   future cloud API separate; do not require cloud login on all local endpoints.
-- [ ] Record intended package boundaries, contract versioning, threat model and
+- [x] Record intended package boundaries, contract versioning, threat model and
   environment configuration. Proposed cloud project names are not created yet.
 
 Acceptance checklist:
 
-- [ ] Isolated-profile tests prove startup, local browsing, playback, recording,
+- [x] Isolated-profile tests prove startup, local browsing, playback, recording,
   cues, analysis and export entry points work with cloud disabled and offline.
-- [ ] Existing IDs/data remain unchanged; migrations, if any, are additive and
+- [x] Existing IDs/data remain unchanged; migrations, if any, are additive and
   tested against a fixture, never the owner's working library.
-- [ ] No cloud credentials, token cache, music or personal database enter Git.
-- [ ] Document the delivered interfaces and remaining absence of real accounts
+- [x] No cloud credentials, token cache, music or personal database enter Git.
+- [x] Document the delivered interfaces and remaining absence of real accounts
   in WISP_IMPLEMENTATION_STATUS.md.
 
 Exit: a normal user sees no loss of existing behaviour. Later account code can
@@ -756,6 +762,7 @@ Those can be separate future proposals. Do not add placeholder integrations or
 mark this plan incomplete because it intentionally excludes unrelated products.
 
 No phase has a guaranteed date or blanket accuracy/security/compliance promise.
-Phase 1 is the recommended next implementation slice: interfaces, Guest behaviour,
-configuration and tests only. Stop at each paid/public release gate for the owner's
-decision, while continuing safe approved work within the active phase.
+Phase 1 is implemented for review. Phase 2 is the next slice and requires its
+development-infrastructure approval and provider proof; actual desktop sign-in
+remains Phase 3. Stop at each paid/public release gate for the owner's decision,
+while continuing safe approved work within the active phase.

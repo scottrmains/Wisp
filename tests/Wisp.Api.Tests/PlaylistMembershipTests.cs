@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Wisp.Api.Library;
+using Wisp.Api.Accounts;
+using Wisp.Api.Cues;
 using Wisp.Api.Playlists;
 using Wisp.Core.Cues;
 using Wisp.Core.MixPlans;
@@ -24,6 +26,19 @@ namespace Wisp.Api.Tests;
 
 public sealed class PlaylistMembershipTests : IAsyncLifetime
 {
+    [Fact]
+    public async Task Guest_status_and_cue_editing_preserve_existing_workspace_identity()
+    {
+        var status = (await _client.GetFromJsonAsync<Wisp.Api.Accounts.AccountStatusDto>("/api/account/status"))!;
+        Assert.Equal("Guest", status.State); Assert.False(status.CanSignIn); Assert.False(status.CloudAvailable);
+        var response = await _client.PostAsJsonAsync($"/api/tracks/{_first}/cues", new { timeSeconds = 30, type = 0, label = "Guest cue" });
+        response.EnsureSuccessStatusCode();
+        using var scope = _app.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
+        Assert.Equal(_first, (await db.Tracks.SingleAsync(t => t.FilePath == Audio)).Id);
+        Assert.Contains(await db.CuePoints.ToArrayAsync(), c => c.TrackId == _first && c.TimeSeconds == 30 && c.Label == "Guest cue");
+        Assert.Contains(await db.CuePoints.ToArrayAsync(), c => c.Label == "Keep cue");
+        Assert.False(File.Exists(Path.Combine(_root, "account-installation.id")));
+    }
     private readonly string _root = Path.Combine(Path.GetTempPath(), "wisp-playlist-" + Guid.NewGuid().ToString("N"));
     private readonly Guid _a = Guid.NewGuid(), _b = Guid.NewGuid(), _first = Guid.NewGuid(), _second = Guid.NewGuid();
     private readonly Guid _entryA = Guid.NewGuid(), _entryB = Guid.NewGuid();
@@ -37,6 +52,7 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         await File.WriteAllBytesAsync(Audio, [1, 2, 3, 4]);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        builder.Services.AddWispAccountGroundwork(builder.Configuration, _root);
         builder.Services.AddDbContext<WispDbContext>(o => o.UseSqlite($"Data Source={Path.Combine(_root, "test.db")};Pooling=False;Default Timeout=10"));
         builder.Services.AddSingleton<ScanQueue>(); builder.Services.AddSingleton<ScanProgressBus>();
         builder.Services.AddSingleton<RecommendationService>(); builder.Services.AddSingleton<AiffTranscoder>();
@@ -44,7 +60,8 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         builder.Services.AddSingleton<Wisp.Infrastructure.FileSystem.IFileFingerprint, Wisp.Infrastructure.FileSystem.FileFingerprint>();
         builder.Services.AddSingleton<Wisp.Infrastructure.Tagging.IMetadataReader, Wisp.Infrastructure.Tagging.MetadataReader>();
         builder.Services.AddScoped<Wisp.Infrastructure.Library.TrackRenameRecoveryService>();
-        _app = builder.Build(); _app.MapLibrary(); _app.MapPlaylists();
+        _app = builder.Build(); _app.UseLocalGuestGroundwork(); _app.MapLibrary(); _app.MapPlaylists();
+        _app.MapCues();
         await using var scope = _app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
         // Upgrade an existing pre-feature playlist, not only a fresh empty database.
@@ -65,7 +82,7 @@ public sealed class PlaylistMembershipTests : IAsyncLifetime
         db = scope.ServiceProvider.GetRequiredService<WispDbContext>();
         await db.Database.MigrateAsync();
         Assert.Equal(2, await db.PlaylistTracks.CountAsync());
-        await _app.StartAsync(); _client = _app.GetTestClient();
+        await _app.StartAsync(); _client = _app.GetLocalTestClient();
     }
 
     private Task<HttpResponseMessage> Add(Guid[] ids, string handling = "ask") =>

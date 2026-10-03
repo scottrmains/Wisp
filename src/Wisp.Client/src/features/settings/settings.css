@@ -8,6 +8,17 @@
 .settings-content {
   scroll-padding: 16px;
 }
+.settings-account-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0 24px;
+  line-height: 1.6;
+}
+.settings-account-status > svg {
+  flex-shrink: 0;
+  color: var(--color-muted);
+}
 .settings-content [hidden] {
   display: none !important;
 }

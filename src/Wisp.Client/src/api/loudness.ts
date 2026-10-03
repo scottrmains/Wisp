@@ -1,4 +1,4 @@
-import { apiGet, apiPut, ApiError } from './client'
+import { apiGet, apiPut, ApiError, localCommandHeaders } from './client'
 import type { Track } from './types'
 
 export interface LoudnessMeasurement { integratedLufs: number; truePeakDb: number; loudnessRange: number; durationSeconds: number }
@@ -14,7 +14,7 @@ export interface LoudnessState {
 }
 
 async function post<T>(path: string, body: unknown, signal: AbortSignal): Promise<T> {
-  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
+  const res = await fetch(path, { method: 'POST', headers: { ...localCommandHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
   if (!res.ok) {
     const error = await res.json().catch(() => ({})) as { message?: string; code?: string }
     throw new ApiError(error.message ?? `Request failed (HTTP ${res.status}).`, res.status, error.code)

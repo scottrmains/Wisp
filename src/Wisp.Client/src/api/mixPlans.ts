@@ -1,10 +1,10 @@
-import { apiGet, apiPost } from './client'
+import { apiGet, apiPost, localCommandHeaders } from './client'
 import type { MixPlan, MixPlanSummary, MixPlanTrack, SuggestedRoute } from './types'
 
 async function apiSend<T>(method: 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: body === undefined ? localCommandHeaders : { ...localCommandHeaders, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!res.ok) {

@@ -10,6 +10,10 @@ export class ApiError extends Error {
   }
 }
 
+// Non-secret CSRF marker; Origin/Host are also checked by the desktop host.
+// This is neither a cloud credential nor authentication against local processes.
+export const localCommandHeaders = { 'X-Wisp-Client': 'desktop-v1' } as const
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let code: string | undefined
@@ -27,7 +31,11 @@ async function handle<T>(res: Response): Promise<T> {
   return (await res.json()) as T
 }
 
-export async function apiGet<T>(path: string, params?: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+export async function apiGet<T>(
+  path: string,
+  params?: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
   const url = new URL(path, window.location.origin)
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -42,7 +50,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return handle<T>(
     await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...localCommandHeaders, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   )
@@ -52,21 +60,21 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return handle<T>(
     await fetch(path, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...localCommandHeaders, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   )
 }
 
 export async function apiDelete<T = void>(path: string): Promise<T> {
-  return handle<T>(await fetch(path, { method: 'DELETE' }))
+  return handle<T>(await fetch(path, { method: 'DELETE', headers: localCommandHeaders }))
 }
 
 export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
   return handle<T>(
     await fetch(path, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...localCommandHeaders, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   )
