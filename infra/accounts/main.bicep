@@ -9,6 +9,9 @@ param location string = resourceGroup().location
 param monthlyBudget int
 @minLength(1)
 param budgetEmails array
+@description('Disable when an approved subscription-level tag-filtered budget covers this group and its managed networking group.')
+param includeGroupBudget bool = true
+param approvalReference string = 'separate-owner-approval-required'
 @secure()
 param migrationAdminPassword string
 @secure()
@@ -33,7 +36,7 @@ var tags = {
   application: 'WISP'
   environment: environment
   purpose: 'accounts'
-  approval: 'separate-owner-approval-required'
+  approval: approvalReference
 }
 var clientEnvironment = [
   for (client, index) in allowedClientIds: { name: 'Cloud__AllowedClientIds__${index}', value: client }
@@ -153,7 +156,7 @@ resource imagePull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
-      '7f951ddb-4ed3-4680-a7ca-43fe172d538d'
+      '7f951dda-4ed3-4680-a7ca-43fe172d538d'
     )
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -248,7 +251,7 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = if (deployApi) {
   }
   dependsOn: [secretAccess, imagePull, database]
 }
-resource budget 'Microsoft.Consumption/budgets@2024-08-01' = {
+resource budget 'Microsoft.Consumption/budgets@2024-08-01' = if (includeGroupBudget) {
   name: '${prefix}-monthly'
   properties: {
     category: 'Cost'

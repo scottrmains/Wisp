@@ -1,11 +1,13 @@
 # WISP cloud account service and development runbook
 
-Phase 2 code and templates are implemented for review. The owner chose code and
-templates first on 2026-10-03: **do not create Azure resources, build/push a
-container image or enable real identity flows from this change.** Cost/credit
-approval, a live Entra provider proof and Azure restore/rotation exercises remain
-pending. This document explains the local service, its evidence and the steps
-required before a development deployment. Phase 2 is not fully accepted yet.
+Phase 2 code and templates are implemented for review. On 2026-10-03 the owner
+subsequently approved a dedicated development deployment conditional on sponsorship
+coverage, following the initial code-only slice. That supersedes the initial
+no-provisioning decision for development only. Cost/credit checks, deployment
+progress and pending live acceptance tests are recorded in
+[development deployment evidence](accounts-development-deployment.md).
+Production provisioning, paid identity add-ons and desktop sign-in remain
+unapproved. Phase 2 is not fully accepted yet.
 
 ## Service boundaries
 

@@ -41,4 +41,5 @@ jobs:
         run: |
           az bicep install --version v0.47.16
           az bicep build --file infra/accounts/main.bicep --outfile /tmp/wisp-cloud-template.json
+          az bicep build --file infra/accounts/budget.bicep --outfile /tmp/wisp-cloud-budget.json
       # No Azure login, federated write identity, image publication or deploy.

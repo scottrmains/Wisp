@@ -4,5 +4,8 @@
 !src/Wisp.Cloud.Api/**
 !src/Wisp.Cloud.Persistence/
 !src/Wisp.Cloud.Persistence/**
+!tools/
+!tools/Wisp.Cloud.Migrations/
+!tools/Wisp.Cloud.Migrations/**
 **/bin/**
 **/obj/**
