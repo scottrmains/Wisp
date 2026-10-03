@@ -53,4 +53,13 @@ describe('analysis review defaults', () => {
     for (const value of ['completed', 'cancelled', undefined])
       expect(analysisRunning(value)).toBe(false)
   })
+  it('does not preselect suggestions from recovered decoding, including cached results', () => {
+    expect(
+      analysisDraft({
+        ...row,
+        cached: true,
+        result: { ...row.result!, decodeWarning: 'Recovered file warning' },
+      }),
+    ).toMatchObject({ useBpm: false, useKey: false })
+  })
 })

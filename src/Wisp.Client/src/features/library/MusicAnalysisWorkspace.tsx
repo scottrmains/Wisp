@@ -326,6 +326,9 @@ export function MusicAnalysisWorkspace() {
                                 : 'Ready for review'
                               : (row.message ?? row.status))}
                         </span>
+                        {result?.decodeWarning && (
+                          <p className="music-analysis-help">{result.decodeWarning}</p>
+                        )}
                       </div>
                       {result && (
                         <div className="music-analysis-fields">

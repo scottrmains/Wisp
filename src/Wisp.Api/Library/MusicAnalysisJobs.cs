@@ -173,7 +173,7 @@ public sealed class MusicAnalysisJobs(IServiceScopeFactory scopes, IMusicAnalyze
                 await db.SaveChangesAsync(ct);
             }
             return row with { Status = "review", Result = result, SourceHash = hash, SourcePath = track.FilePath, Cached = cached,
-                Message = "Experimental suggestion — review before applying." };
+                Message = result.DecodeWarning ?? "Experimental suggestion — review before applying." };
         }
         finally { LibraryFileGate.Instance.Release(); }
     }

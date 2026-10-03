@@ -4,7 +4,7 @@ using NAudio.Dsp;
 namespace Wisp.Infrastructure.Audio;
 
 public sealed record MusicAnalysis(decimal? Bpm, string? Key, double TempoStrength, double KeyStrength,
-    bool TempoUncertain, bool KeyUncertain, double Seconds, string Engine);
+    bool TempoUncertain, bool KeyUncertain, double Seconds, string Engine, string? DecodeWarning = null);
 
 public interface IMusicAnalyzer
 {
@@ -27,7 +27,10 @@ public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
         using var process = new Process { StartInfo = new(executable) {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
         } };
-        foreach (var arg in new[] { "-nostdin", "-v", "error", "-xerror", "-threads", "1", "-i", path,
+        // Recover isolated bad packets. Also apply our own bounded packet-error guard below:
+        // the bundled FFmpeg does not consistently enforce max_error_rate for audio packets.
+        // -xerror aborts even on one recoverable packet at the end of an otherwise usable track.
+        foreach (var arg in new[] { "-nostdin", "-v", "repeat+error", "-max_error_rate", "0.01", "-threads", "1", "-i", path,
             "-map", "0:a:0", "-vn", "-ac", "1", "-ar", MusicFeatures.SampleRate.ToString(), "-f", "f32le", "pipe:1" })
             process.StartInfo.ArgumentList.Add(arg);
         process.Start();
@@ -57,8 +60,15 @@ public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
             await process.WaitForExitAsync(timeout.Token);
             if (process.ExitCode != 0 || pending != 0)
                 throw new IOException("The audio could not be decoded. Check that it plays and is not corrupted.");
-            await errors;
-            return features.Finish(timeout.Token);
+            var diagnostics = await errors;
+            if (diagnostics.PacketErrors > MaxRecoverablePacketErrors)
+                throw new IOException("The audio has too many decoding errors to analyse reliably. Try another copy of the track.");
+            var result = features.Finish(timeout.Token);
+            return diagnostics.HasWarnings ? result with {
+                TempoUncertain = bpm || result.TempoUncertain,
+                KeyUncertain = key || result.KeyUncertain,
+                DecodeWarning = "Decoded with recoverable file warnings. Listen to the track and check these suggestions before applying them. The original file has not been changed.",
+            } : result;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new IOException("Audio analysis timed out. Try a shorter track."); }
@@ -70,10 +80,33 @@ public sealed class MusicAnalyzer(Mp3Transcoder ffmpeg) : IMusicAnalyzer
             await errors;
         }
     }
-    private static async Task DrainErrors(StreamReader reader)
+    private const int MaxRecoverablePacketErrors = 8;
+    private sealed record DecodeDiagnostics(bool HasWarnings, int PacketErrors);
+    private static async Task<DecodeDiagnostics> DrainErrors(StreamReader reader)
     {
         var buffer = new char[2048];
-        while (await reader.ReadAsync(buffer) != 0) { } // constant memory, no raw file paths/tags in UI diagnostics
+        var line = new System.Text.StringBuilder(1024);
+        var hasWarnings = false;
+        var packetErrors = 0;
+        void CountLine()
+        {
+            var text = line.ToString();
+            // Count packet-level diagnostics once; codec details often accompany the same failure.
+            if (text.Contains("Error submitting packet to decoder", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Error decoding a frame", StringComparison.OrdinalIgnoreCase))
+                packetErrors = Math.Min(packetErrors + 1, MaxRecoverablePacketErrors + 1);
+            line.Clear();
+        }
+        int read;
+        while ((read = await reader.ReadAsync(buffer)) != 0)
+        {
+            hasWarnings = true;
+            for (var i = 0; i < read; i++)
+                if (buffer[i] is '\r' or '\n') CountLine();
+                else if (line.Length < 1024) line.Append(buffer[i]);
+        }
+        CountLine();
+        return new(hasWarnings, packetErrors); // bounded memory, no raw file paths/tags in UI diagnostics
     }
 }
 

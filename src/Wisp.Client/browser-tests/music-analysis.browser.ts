@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import type { AnalysisJob, AnalysisRow } from '../src/api/musicAnalysis'
 import type { Track } from '../src/api/types'
 
-async function setup(page: Page, count = 3, available = true) {
+async function setup(page: Page, count = 3, available = true, recovered = false) {
   const tracks: Track[] = Array.from({ length: count }, (_, i) => ({
     id: `track-${i}`,
     title: `Garage ${i}`,
@@ -56,7 +56,7 @@ async function setup(page: Page, count = 3, available = true) {
             message: null,
             existingBpm: t.bpm,
             existingKey: t.musicalKey,
-            cached: false,
+            cached: recovered,
             bpmRequested: body.bpm === true && (body.compareExisting === true || !t.bpm),
             keyRequested: body.key === true,
             result: running
@@ -70,6 +70,9 @@ async function setup(page: Page, count = 3, available = true) {
                   keyUncertain: id === 'track-2',
                   seconds: 240,
                   engine: 'wisp-onset-chroma-v1',
+                  decodeWarning: recovered
+                    ? 'Decoded with recoverable file warnings. Listen to the track before applying these suggestions.'
+                    : null,
                 },
           } satisfies AnalysisRow
         }),
@@ -117,7 +120,9 @@ async function setup(page: Page, count = 3, available = true) {
   await page.getByRole('menuitem', { name: 'Analyse audio (BPM / key)…', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Find the tempo. Find the key.' })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByLabel('Find key (Camelot · experimental)', { exact: true })).not.toBeChecked()
+  await expect(
+    dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }),
+  ).not.toBeChecked()
   await dialog.getByLabel('Find key (Camelot · experimental)', { exact: true }).check()
   return {
     dialog,
@@ -165,6 +170,31 @@ test('selected analysis reviews missing fields, uncertain results and half/doubl
   expect(calls.filter((c) => c.path === 'apply').map((c) => c.body)).toEqual([
     { bpm: 64.19, key: '8A' },
     { bpm: null, key: '8A' },
+  ])
+})
+
+test('recovered decoding warning stays visible on cached results and requires explicit selection', async ({
+  page,
+}, testInfo) => {
+  const { dialog, calls } = await setup(page, 1, true, true)
+  await dialog.getByRole('button', { name: 'Analyse 1 track', exact: true }).click()
+  await expect(dialog).toContainText('Cached suggestion')
+  await expect(dialog).toContainText('Decoded with recoverable file warnings')
+  const bpm = dialog.getByLabel('Apply BPM for Test artist — Garage 0 (Dub)', { exact: true })
+  await expect(bpm).not.toBeChecked()
+  await expect(
+    dialog.getByLabel('Apply key for Test artist — Garage 0 (Dub)', { exact: true }),
+  ).not.toBeChecked()
+  await expect(
+    dialog.getByRole('button', { name: 'Apply selected missing values (0)', exact: true }),
+  ).toBeDisabled()
+  await page.screenshot({ path: testInfo.outputPath('music-analysis-recovered.png') })
+  await bpm.check()
+  await dialog
+    .getByRole('button', { name: 'Apply selected missing values (1)', exact: true })
+    .click()
+  expect(calls.filter((c) => c.path === 'apply').map((c) => c.body)).toEqual([
+    { bpm: 128.37, key: null },
   ])
 })
 

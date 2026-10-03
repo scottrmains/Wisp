@@ -143,6 +143,21 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Recovered_decode_warning_survives_saved_suggestion_cache()
+    {
+        analyzer.DecodeWarning = "Recovered file warning — review by ear.";
+        var first = await Wait((await Start()).Id);
+        var second = await Wait((await Start()).Id);
+        Assert.Equal("review", first.Rows[0].Status);
+        Assert.Equal(analyzer.DecodeWarning, first.Rows[0].Message);
+        Assert.True(second.Rows[0].Cached);
+        Assert.Equal(analyzer.DecodeWarning, second.Rows[0].Result!.DecodeWarning);
+        Assert.Equal(analyzer.DecodeWarning, second.Rows[0].Message);
+        Assert.Single(analyzer.Calls);
+        Assert.Null((await Track()).Bpm); Assert.Null((await Track()).MusicalKey);
+    }
+
+    [Fact]
     public async Task Cancel_stops_current_track_and_does_not_start_remaining_tracks_or_save_results()
     {
         analyzer.Hold = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -204,12 +219,13 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
         public TaskCompletionSource? Hold;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Fail;
+        public string? DecodeWarning;
         public async Task<MusicAnalysis> AnalyzeAsync(string path, bool bpm, bool key, CancellationToken ct)
         {
             Calls.Add((bpm, key)); Started.TrySetResult();
             if (Hold is not null) await Hold.Task.WaitAsync(ct);
             if (Fail) throw new IOException("Test decoder failure");
-            return new(bpm ? 128.37m : null, key ? "8A" : null, .9, .8, false, false, 30, MusicFeatures.Engine);
+            return new(bpm ? 128.37m : null, key ? "8A" : null, .9, .8, false, false, 30, MusicFeatures.Engine, DecodeWarning);
         }
     }
     public async Task DisposeAsync()

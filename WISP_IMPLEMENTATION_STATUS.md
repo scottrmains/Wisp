@@ -1,6 +1,43 @@
 # Wisp implementation status
 
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-03
+
+## 2026-10-03: BPM/key analysis recovers isolated decoder errors
+
+- Reproduced the reported Pianoman "Pasion (Alex Kassian's Mandarine Dance
+  Mix)" failure with the installed FFmpeg 8.0.1. `-xerror` aborted on an
+  invalid MP3 packet after decoding approximately 465 seconds; tag-reader
+  BOM/GEOB diagnostics were also present. This does not establish which
+  application introduced the invalid data, or mean the source file is pristine.
+- Removed fatal-on-first-error **only from music analysis**. Decoding remains
+  read-only and streaming; cancellation, timeouts, invalid samples, incomplete
+  PCM, nonzero exit codes and short/silent input still reject analysis.
+- Added a conservative maximum of eight reported packet/frame decoding
+  failures per track, with repeat-suppression disabled and bounded stderr
+  parsing. A generated 100-failed-packet sample demonstrated that bundled
+  FFmpeg returned success despite `-max_error_rate 0.01`; WISP therefore
+  enforces its own guard rather than relying solely on that option. This is
+  a safety policy for tested decoder diagnostics, not audio repair or a
+  guarantee that every damaged format can be detected.
+- Successful decoding with error-level diagnostics now carries a persistent
+  review warning, including when suggestions are loaded from the cache.
+  Requested BPM/key suggestions start unchecked and are marked uncertain.
+  File paths/raw decoder output are not exposed in the review screen. Existing
+  BPM/key values, source tags, music files, library links and cues are preserved.
+- Read-only verification on the reported track completed at **128.11 BPM**,
+  **4A**, with 465.032 seconds decoded and a review warning. The source's
+  SHA-256 remained identical. The neighbouring Trip remix also completed;
+  its estimated key disagreed with its existing tag, reinforcing that key
+  detection remains experimental and must not replace existing values.
+- Verification: 535 Release backend cases (115 Core, 205 Infrastructure,
+  215 API); 70 client unit tests; all eight audio-analysis browser cases;
+  client TypeScript/Vite build; lint with zero errors and 12 existing warnings.
+  Decoder regressions cover clean WAV/AIFF/FLAC/MP3, isolated bad trailing
+  data, eight/nine/100 failed-packet boundaries, unreadable input and unchanged
+  source hashes. API/browser regressions verify cached warnings and explicit
+  selection before applying a recovered suggestion. Existing build chunk-size
+  warnings remain. No installer, production deployment or user database repair
+  was performed; the installed release needs updating after owner promotion.
 
 ## 2026-10-02: File-date backfill CI test reliability
 
