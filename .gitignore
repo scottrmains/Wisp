@@ -41,6 +41,8 @@ yarn-error.log*
 Thumbs.db
 
 # App data (in case the user runs it from the repo dir)
+account-installation.id
+account-installation.id.*.tmp
 recording-input-tests/
 WISP Recordings/
 WISP Mix Exports/

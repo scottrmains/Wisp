@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, X, FolderOpen, Link, AudioLines, Info } from 'lucide-react'
+import { AlertTriangle, Check, X, FolderOpen, Link, AudioLines, Info, UserRound } from 'lucide-react'
 import { apiDelete, apiGet, apiPost } from '../../api/client'
 import { cleanup } from '../../api/cleanup'
 import { transcoder } from '../../api/transcoder'
@@ -8,6 +8,7 @@ import type { SystemInfo } from '../../api/types'
 import { bridge, bridgeAvailable } from '../../bridge'
 import { WispLogo } from '../../components/WispLogo'
 import { SoulseekDownloadFolderSettings } from './SoulseekDownloadFolderSettings'
+import { AccountSettings } from './AccountSettings'
 import { Modal } from '../../components/ui/Modal'
 import { Button, IconButton } from '../../components/ui/Button'
 import { SectionTabs } from '../../components/ui/SectionTabs'
@@ -21,7 +22,7 @@ interface Props {
 }
 
 export function SettingsPanel({ onClose }: Props) {
-  const [section, setSection] = useState<'library' | 'connections' | 'audio' | 'about'>('library')
+  const [section, setSection] = useState<'library' | 'connections' | 'audio' | 'account' | 'about'>('library')
   const sys = useQuery({
     queryKey: ['system'],
     queryFn: () => apiGet<SystemInfo>('/api/system'),
@@ -57,12 +58,16 @@ export function SettingsPanel({ onClose }: Props) {
             { id: 'library', label: 'Library', icon: <FolderOpen /> },
             { id: 'connections', label: 'Connections', icon: <Link /> },
             { id: 'audio', label: 'Audio tools', icon: <AudioLines /> },
+            { id: 'account', label: 'Account', icon: <UserRound /> },
             { id: 'about', label: 'About & diagnostics', icon: <Info /> },
           ]}
         />
       </div>
       <div className="settings-content min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {/* Keep forms mounted so category changes never discard credential drafts. */}
+        <div hidden={section !== 'account'}>
+          <AccountSettings active={section === 'account'} />
+        </div>
         <div hidden={section !== 'about'}>
           <SettingsRequestStatus
             pending={sys.isPending}

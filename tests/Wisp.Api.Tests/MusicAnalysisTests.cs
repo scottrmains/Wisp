@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NAudio.Wave;
 using Wisp.Api.Library;
+using Wisp.Api.Accounts;
 using Wisp.Core.Cues;
 using Wisp.Core.Playlists;
 using Wisp.Core.Tracks;
@@ -24,7 +25,7 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
     private WebApplication app = null!;
     private readonly Guid id = Guid.NewGuid();
     private string Source => Path.Combine(root, "track.wav");
-    private HttpClient Client => app.GetTestClient();
+    private HttpClient Client => app.GetLocalTestClient();
     public async Task InitializeAsync()
     {
         Directory.CreateDirectory(root);
@@ -32,11 +33,12 @@ public sealed class MusicAnalysisTests : IAsyncLifetime
             for (var i = 0; i < 44100; i++) writer.WriteSample(0.1f);
         await connection.OpenAsync();
         var builder = WebApplication.CreateBuilder(); builder.WebHost.UseTestServer();
+        builder.Services.AddWispAccountGroundwork(builder.Configuration, root);
         builder.Services.AddDbContext<WispDbContext>(o => o.UseSqlite(connection));
         builder.Services.AddSingleton<IMusicAnalyzer>(analyzer);
         builder.Services.AddSingleton<MusicAnalysisJobs>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MusicAnalysisJobs>());
-        app = builder.Build(); app.MapMusicAnalysis();
+        app = builder.Build(); app.UseLocalGuestGroundwork(); app.MapMusicAnalysis();
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<WispDbContext>(); await db.Database.MigrateAsync();

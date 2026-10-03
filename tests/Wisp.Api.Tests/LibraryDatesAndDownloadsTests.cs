@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Wisp.Api.Accounts;
 using Wisp.Api.Library;
 using Wisp.Api.Settings;
 using Wisp.Api.Soulseek;
@@ -45,6 +46,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
         await _connection.OpenAsync();
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        builder.Services.AddWispAccountGroundwork(builder.Configuration, _root);
         builder.Services.AddDbContext<WispDbContext>(o => o.UseSqlite(_connection));
         builder.Services.AddSingleton(_store);
         builder.Services.AddSingleton(new SoulseekOptions { Url = "http://test-slskd", ApiKey = "fake-key", DownloadFolder = Music });
@@ -58,6 +60,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
         builder.Services.AddSingleton<Wisp.Infrastructure.Tagging.IMetadataReader, Wisp.Infrastructure.Tagging.MetadataReader>();
         builder.Services.AddScoped<TrackRenameRecoveryService>();
         _app = builder.Build();
+        _app.UseLocalGuestGroundwork();
         _app.MapLibrary();
         _app.MapSoulseek();
         _app.MapSoulseekDownloadSettings();
@@ -98,7 +101,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
     [InlineData("modified", "New,Old,Unknown")]
     public async Task Dates_sort_independently_with_unknown_dates_last(string sort, string expected)
     {
-        var page = await _app.GetTestClient().GetFromJsonAsync<TrackPageDto>($"/api/tracks?sort={sort}");
+        var page = await _app.GetLocalTestClient().GetFromJsonAsync<TrackPageDto>($"/api/tracks?sort={sort}");
         Assert.Equal(expected.Split(','), page!.Items.Select(t => t.Title));
         Assert.All(page.Items, t => Assert.Equal(DateTimeKind.Utc, t.AddedAt.Kind));
         Assert.All(page.Items.Where(t => t.FileModifiedAt.HasValue), t => Assert.Equal(DateTimeKind.Utc, t.FileModifiedAt!.Value.Kind));
@@ -121,9 +124,21 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
             await db.SaveChangesAsync();
         }
         File.Move(oldPath, newPath);
-        var response = await _app.GetTestClient().GetAsync($"/api/tracks/{id}/{endpoint}");
+        var response = await _app.GetLocalTestClient().GetAsync($"/api/tracks/{id}/{endpoint}");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(new byte[] { 1, 2, 3, 4 }, await response.Content.ReadAsByteArrayAsync());
+        if (endpoint == "audio")
+        {
+            // A media element does not attach the command header. Seeking still
+            // works as Guest with the request guard and a recovered track ID.
+            using var media = _app.GetTestClient();
+            using var range = new HttpRequestMessage(HttpMethod.Get, $"/api/tracks/{id}/audio");
+            range.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(1, 2);
+            range.Headers.Add("Sec-Fetch-Site", "same-origin");
+            var partial = await media.SendAsync(range);
+            Assert.Equal(HttpStatusCode.PartialContent, partial.StatusCode);
+            Assert.Equal(new byte[] { 2, 3 }, await partial.Content.ReadAsByteArrayAsync());
+        }
         using var verifyScope = _app.Services.CreateScope();
         var verify = verifyScope.ServiceProvider.GetRequiredService<WispDbContext>();
         var track = await verify.Tracks.SingleAsync(t => t.Id == id);
@@ -134,7 +149,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
     [Fact]
     public async Task Date_filter_composes_with_playlist_scope_and_pagination()
     {
-        var client = _app.GetTestClient();
+        var client = _app.GetLocalTestClient();
         var recent = await client.GetFromJsonAsync<TrackPageDto>($"/api/tracks?playlistId={_playlistId}&addedWithinDays=7&sort=-added");
         Assert.Equal("New", Assert.Single(recent!.Items).Title);
         var page = await client.GetFromJsonAsync<TrackPageDto>($"/api/tracks?playlistId={_playlistId}&sort=-added&size=1&page=2");
@@ -148,7 +163,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
     [Fact]
     public async Task Saving_folder_preserves_credentials_and_distinguishes_running_from_next_destination()
     {
-        var client = _app.GetTestClient();
+        var client = _app.GetLocalTestClient();
         (await client.PutAsJsonAsync("/api/settings/soulseek/download-folder", new { downloadFolder = Music })).EnsureSuccessStatusCode();
         var persisted = new WispSettingsStore(Path.Combine(_root, "config.json")).Current;
         Assert.Equal(Music, persisted.Catalog!.Soulseek!.DownloadFolder);
@@ -175,7 +190,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
             db.Tracks.Add(MakeTrack("Null BPM", DateTime.UtcNow, null));
             await db.SaveChangesAsync();
         }
-        var client = _app.GetTestClient();
+        var client = _app.GetLocalTestClient();
         var playlist = await client.GetFromJsonAsync<TrackPageDto>($"/api/tracks?playlistId={_playlistId}&missingBpm=true&size=1");
         Assert.Equal(1, playlist!.Total);
         Assert.Equal("New", Assert.Single(playlist.Items).Title);
@@ -190,7 +205,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
     [Fact]
     public async Task Invalid_or_external_destinations_are_rejected_and_default_can_be_restored()
     {
-        var client = _app.GetTestClient();
+        var client = _app.GetLocalTestClient();
         foreach (var path in new[] { "relative/music", Path.Combine(_root, "does-not-exist") })
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync("/api/settings/soulseek/download-folder", new { downloadFolder = path })).StatusCode);
         Assert.Equal(Downloads, _store.Current.Catalog!.Soulseek!.DownloadFolder);
@@ -208,7 +223,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
         var unrelated = Path.Combine(Music, "Track.mp3");
         await File.WriteAllTextAsync(path, "download");
         await File.WriteAllTextAsync(unrelated, "keep me");
-        var client = _app.GetTestClient();
+        var client = _app.GetLocalTestClient();
         var transfers = await client.GetFromJsonAsync<TransferDto[]>("/api/soulseek/downloads");
         var scanId = Assert.Single(transfers!).ImportScanId;
         Assert.NotNull(scanId);
@@ -226,7 +241,7 @@ public sealed class LibraryDatesAndDownloadsTests : IAsyncLifetime
     public async Task Unknown_active_folder_retries_instead_of_marking_transfer_imported()
     {
         _daemon.Folder = null;
-        var client = _app.GetTestClient();
+        var client = _app.GetLocalTestClient();
         var first = await client.GetFromJsonAsync<TransferDto[]>("/api/soulseek/downloads");
         Assert.Null(Assert.Single(first!).ImportScanId);
         _daemon.Folder = Downloads;

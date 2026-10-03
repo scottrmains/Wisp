@@ -154,6 +154,17 @@ async function setup(
       }
     if (path === '/api/recordings/settings') response = { folder: 'D:/Demo Mixes' }
     if (path === '/api/system') response = { version: 'Demo', environment: 'Isolated fixture' }
+    if (path === '/api/account/status')
+      response = {
+        contractVersion: 1,
+        state: 'Guest',
+        displayName: 'Guest',
+        canSignIn: false,
+        cloudAvailable: false,
+        cloudState: 'Disabled',
+        localCapabilities: [],
+        user: null,
+      }
     if (['/api/settings/spotify', '/api/settings/discogs', '/api/settings/youtube'].includes(path))
       response = { isConfigured: false }
     if (path === '/api/transcoder/status') response = { available: false }
@@ -175,6 +186,99 @@ async function setup(
     },
   }
 }
+
+test('account groundwork is opt-in settings only with no login, premium or background status calls', async ({
+  page,
+}) => {
+  let statusCalls = 0
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/account/status') statusCalls++
+  })
+  const fixture = await setup(page, { configured: false })
+  expect(statusCalls).toBe(0)
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'WISP settings' })
+  expect(statusCalls).toBe(0)
+  const account = dialog.getByRole('button', { name: 'Account', exact: true })
+  await account.focus()
+  await account.press('Enter')
+  await expect(account).toHaveAttribute('aria-current', 'page')
+  await expect(dialog.getByText('Using WISP as Guest')).toBeVisible()
+  await expect(dialog.getByText(/No sign-in or subscription is needed/)).toBeVisible()
+  await expect(
+    dialog.getByRole('button', { name: /sign in|create account|upgrade|subscribe/i }),
+  ).toHaveCount(0)
+  expect(statusCalls).toBe(1)
+  await mkdir('../../artifacts/accounts-phase-one', { recursive: true })
+  await dialog.screenshot({ path: '../../artifacts/accounts-phase-one/account-settings.png' })
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText('Moving Through', { exact: true }).first()).toBeVisible()
+  expect(fixture.errors).toEqual([])
+  expect(fixture.mutations).toEqual([])
+})
+
+test('failed account status retries without exposing server errors or discarding connection drafts', async ({
+  page,
+}) => {
+  const fixture = await setup(page)
+  let attempts = 0
+  await page.route('**/api/account/status', (route) =>
+    route.fulfill(
+      ++attempts === 1
+        ? { status: 503, json: { message: 'private-native-error-do-not-display' } }
+        : {
+            json: {
+              contractVersion: 1,
+              state: 'Guest',
+              cloudAvailable: false,
+              canSignIn: false,
+              user: null,
+            },
+          },
+    ),
+  )
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'WISP settings' })
+  await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  await dialog.getByLabel('Spotify Client ID').fill('keep-account-draft')
+  await dialog.getByRole('button', { name: 'Account', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Your local library and music tools are still available',
+  )
+  await expect(dialog.getByText('private-native-error-do-not-display')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Retry account status' }).click()
+  await expect(dialog.getByText('Using WISP as Guest')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  await expect(dialog.getByLabel('Spotify Client ID')).toHaveValue('keep-account-draft')
+  expect(attempts).toBe(2)
+  expect(fixture.errors).toEqual([])
+  expect(fixture.mutations).toEqual([])
+})
+
+test('account settings handle incompatible contracts without pretending sign-in works', async ({
+  page,
+}) => {
+  await setup(page)
+  await page.route('**/api/account/status', (route) =>
+    route.fulfill({
+      json: {
+        contractVersion: 2,
+        state: 'SignedIn',
+        canSignIn: true,
+        user: { displayName: 'Not supported' },
+      },
+    }),
+  )
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'WISP settings' })
+  await dialog.getByRole('button', { name: 'Account', exact: true }).click()
+  await expect(dialog.getByText(/Account support needs a compatible WISP update/)).toBeVisible()
+  await expect(dialog.getByText('Not supported')).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: /sign in|upgrade/i })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+})
 
 for (const width of [1024, 1366, 1920])
   test(`shell visual layout, separate playlist scroll and all destinations at ${width}`, async ({
@@ -447,7 +551,13 @@ test('UI4 failed credential saves retain drafts and compact categories remain ke
   for (const scale of [1.25, 1.5]) {
     await page.setViewportSize({ width: Math.floor(1366 / scale), height: Math.floor(768 / scale) })
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    for (const name of ['Library', 'Connections', 'Audio tools', 'About & diagnostics']) {
+    for (const name of [
+      'Library',
+      'Connections',
+      'Audio tools',
+      'Account',
+      'About & diagnostics',
+    ]) {
       const button = dialog
         .getByRole('navigation', { name: 'Settings sections' })
         .getByRole('button', { name, exact: true })
@@ -494,7 +604,9 @@ test('compact playlist drawer keeps Library usable for internal drops and restor
   expect(fixture.errors).toEqual([])
 })
 
-test('compact sidebar tooltips remain hoverable without blocking adjacent navigation', async ({ page }) => {
+test('compact sidebar tooltips remain hoverable without blocking adjacent navigation', async ({
+  page,
+}) => {
   const fixture = await setup(page)
   await page.setViewportSize({ width: 910, height: 600 })
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
@@ -595,6 +707,14 @@ test('navigation, sidebar collapse and Settings do not replace or stop the libra
   await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
   await expect.poll(audioState).toMatchObject({ count: 1, paused: false })
   await page.keyboard.press('Escape')
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: 'WISP settings' })
+    .getByRole('button', { name: 'Account', exact: true })
+    .click()
+  await expect(page.getByText('Using WISP as Guest')).toBeVisible()
+  await expect.poll(audioState).toMatchObject({ count: 1, paused: false })
+  await page.keyboard.press('Escape')
   expect(fixture.errors).toEqual([])
 })
 
@@ -613,6 +733,15 @@ test('active capture remains visible across navigation and Settings without send
   }
   await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
   await page.keyboard.press('Escape')
+  expect(fixture.mutations).toEqual([])
+  await page.locator('.app-header').getByRole('button', { name: 'Settings', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: 'WISP settings' })
+    .getByRole('button', { name: 'Account', exact: true })
+    .click()
+  await expect(page.getByText('Using WISP as Guest')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: /Recording.*View/ })).toBeVisible()
   expect(fixture.mutations).toEqual([])
   expect(fixture.errors).toEqual([])
 })
