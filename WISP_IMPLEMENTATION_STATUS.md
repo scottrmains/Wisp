@@ -2,6 +2,28 @@
 
 Last reviewed: 2026-10-02
 
+## 2026-10-02: File-date backfill CI test reliability
+
+- Develop run `36956377808` failed in the existing file-date backfill integration
+  test at its ten-second completion guard, before data assertions. The other
+  529 backend cases and marketing validation passed. This was not an Azure
+  deployment failure; no production release ran.
+- Isolated that test in an xUnit nonparallel collection so it does not compete
+  with parallel audio-analysis/FFmpeg tests. The rest of the suite remains
+  parallel. The guard is now a bounded 60 seconds rather than a performance
+  assertion; actual file-date, notes and import-date assertions are unchanged.
+- Added bounded worker stop/join in `finally` before the test disposes the
+  isolated provider/database. No production service, library data, workflow,
+  installer or website behaviour changed; no automatic test retries or skipped
+  assertions were added.
+- Verification: the targeted test passed five consecutive Release runs. The
+  first full-suite attempt encountered a separate transient temporary-directory
+  access error in the waveform USB-export test, which passed when rerun alone.
+  The second full Release solution run passed all 530 backend cases (115 Core,
+  201 Infrastructure, 214 API), including the previously failing backfill test
+  and waveform-export test. `git diff --check` passed. Original develop
+  validation was rerun; the fix PR also runs normal GitHub validation.
+
 ## 2026-10-02: Marketing site custom domain
 
 - The owner added the `wisp` CNAME under `physiqo.app` in Porkbun, pointing to
